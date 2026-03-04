@@ -101,9 +101,33 @@ docker sandbox create \
   "$GIT_DIR"
 
 # Install tmux for interactive session management
-docker sandbox exec "$SANDBOX_NAME" \
-  sh -c "command -v tmux >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq tmux)" 1>&2 \
-  || warn "Could not install tmux — interactive attach will use direct exec"
+# First try direct apt-get install (works if sandbox has unrestricted apt access)
+if ! docker sandbox exec "$SANDBOX_NAME" \
+  sh -c "command -v tmux >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq tmux)" 1>&2; then
+  # Fallback: sandbox apt repo is blocked — get package URLs from the sandbox's cached apt lists
+  # (apt-get download --print-uris reads local cache, no network needed), download on the host
+  # (which has unrestricted internet), then install inside the sandbox via dpkg.
+  TMUX_DEBS="$(mktemp -d)"
+  LIBEVENT_URL="$(docker sandbox exec "$SANDBOX_NAME" \
+    sh -c "apt-get download --print-uris libevent-core-2.1-7t64 2>/dev/null | grep -o \"'http[^']*'\" | tr -d \"'\" | head -1" 2>/dev/null || true)"
+  TMUX_DEB_URL="$(docker sandbox exec "$SANDBOX_NAME" \
+    sh -c "apt-get download --print-uris tmux 2>/dev/null | grep -o \"'http[^']*'\" | tr -d \"'\" | head -1" 2>/dev/null || true)"
+  TMUX_INSTALLED=false
+  if [ -n "$LIBEVENT_URL" ] && [ -n "$TMUX_DEB_URL" ] && \
+     curl -fsSL --max-time 30 "$LIBEVENT_URL" -o "$TMUX_DEBS/libevent.deb" 2>/dev/null && \
+     curl -fsSL --max-time 30 "$TMUX_DEB_URL" -o "$TMUX_DEBS/tmux.deb" 2>/dev/null; then
+    cp "$TMUX_DEBS"/*.deb "$WORKTREE_DIR/"
+    docker sandbox exec "$SANDBOX_NAME" \
+      sh -c "dpkg -i $WORKTREE_DIR/libevent.deb $WORKTREE_DIR/tmux.deb && rm -f $WORKTREE_DIR/libevent.deb $WORKTREE_DIR/tmux.deb" 1>&2 \
+      && TMUX_INSTALLED=true
+  fi
+  rm -rf "$TMUX_DEBS"
+  if $TMUX_INSTALLED; then
+    ok "tmux installed via host-side download"
+  else
+    warn "Could not install tmux — interactive attach will use direct exec"
+  fi
+fi
 
 # Configure git inside the sandbox
 docker sandbox exec "$SANDBOX_NAME" \
