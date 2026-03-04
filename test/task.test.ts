@@ -1,5 +1,5 @@
 import { test, expect, describe, afterEach } from "bun:test";
-import { generateTaskId, dataDir, historyPath, loadHistory, appendToHistory, removeFromHistory } from "../src/task";
+import { generateTaskId, dataDir, historyPath, loadHistory, appendToHistory, removeFromHistory, upsertHistory } from "../src/task";
 import type { PersistedTask } from "../src/task";
 import { rm, mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
@@ -200,5 +200,82 @@ describe("history persistence", () => {
     await removeFromHistory(repoPath, "deer_whatever");
     const loaded = await loadHistory(repoPath);
     expect(loaded).toEqual([]);
+  });
+
+  test("upsertHistory appends when task does not exist", async () => {
+    const repoPath = makeFakeDataDir();
+    const task = makeTask({ prompt: "new task" });
+
+    await upsertHistory(repoPath, task);
+    const loaded = await loadHistory(repoPath);
+
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0].taskId).toBe(task.taskId);
+    expect(loaded[0].prompt).toBe("new task");
+  });
+
+  test("upsertHistory replaces existing task by taskId", async () => {
+    const repoPath = makeFakeDataDir();
+    const taskId = generateTaskId();
+
+    // Write initial "running" state
+    await upsertHistory(repoPath, makeTask({
+      taskId,
+      prompt: "fix the bug",
+      status: "running",
+      completedAt: null,
+      elapsed: 0,
+    }));
+
+    // Simulate completion — upsert should replace the running entry
+    await upsertHistory(repoPath, makeTask({
+      taskId,
+      prompt: "fix the bug",
+      status: "completed",
+      completedAt: new Date().toISOString(),
+      elapsed: 120,
+    }));
+
+    const loaded = await loadHistory(repoPath);
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0].status).toBe("completed");
+    expect(loaded[0].elapsed).toBe(120);
+  });
+
+  test("upsertHistory preserves other tasks when replacing", async () => {
+    const repoPath = makeFakeDataDir();
+    const taskId = generateTaskId();
+
+    await appendToHistory(repoPath, makeTask({ prompt: "task before" }));
+    await upsertHistory(repoPath, makeTask({ taskId, prompt: "the task", status: "running", completedAt: null, elapsed: 0 }));
+    await appendToHistory(repoPath, makeTask({ prompt: "task after" }));
+
+    // Now update the running task to completed
+    await upsertHistory(repoPath, makeTask({ taskId, prompt: "the task", status: "completed" }));
+
+    const loaded = await loadHistory(repoPath);
+    expect(loaded).toHaveLength(3);
+    expect(loaded[0].prompt).toBe("task before");
+    expect(loaded[1].prompt).toBe("the task");
+    expect(loaded[1].status).toBe("completed");
+    expect(loaded[2].prompt).toBe("task after");
+  });
+
+  test("running tasks can be persisted and loaded", async () => {
+    const repoPath = makeFakeDataDir();
+    const task = makeTask({
+      status: "running",
+      completedAt: null,
+      elapsed: 0,
+      prUrl: null,
+      lastActivity: "",
+    });
+
+    await upsertHistory(repoPath, task);
+    const loaded = await loadHistory(repoPath);
+
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0].status).toBe("running");
+    expect(loaded[0].completedAt).toBeNull();
   });
 });

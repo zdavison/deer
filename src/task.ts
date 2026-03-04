@@ -73,11 +73,11 @@ export interface PersistedTask {
   /** @example "deer_01jm8k3nxa7f" */
   taskId: string;
   prompt: string;
-  status: "completed" | "failed" | "cancelled";
+  status: "completed" | "failed" | "cancelled" | "running";
   /** ISO 8601 timestamp */
   createdAt: string;
-  /** ISO 8601 timestamp */
-  completedAt: string;
+  /** ISO 8601 timestamp — null if task was never completed */
+  completedAt: string | null;
   /** Elapsed seconds */
   elapsed: number;
   /** @example "https://github.com/org/repo/pull/42" */
@@ -154,4 +154,38 @@ export async function appendToHistory(repoPath: string, task: PersistedTask): Pr
   const file = Bun.file(path);
   const existing = (await file.exists()) ? await file.text() : "";
   await Bun.write(path, existing + JSON.stringify(task) + "\n");
+}
+
+/**
+ * Insert or replace a task in the repo's history file by taskId.
+ * If a task with the same taskId already exists, it is replaced in-place.
+ * Otherwise the task is appended. Use this instead of appendToHistory when
+ * a task may have been previously written (e.g. to persist the running state
+ * and later update it with the final outcome).
+ */
+export async function upsertHistory(repoPath: string, task: PersistedTask): Promise<void> {
+  const path = historyPath(repoPath);
+  const dir = `${dataDir()}/history`;
+  await mkdir(dir, { recursive: true });
+
+  const file = Bun.file(path);
+  const existing = (await file.exists()) ? await file.text() : "";
+
+  let replaced = false;
+  const lines = existing.split("\n").flatMap((line) => {
+    if (!line.trim()) return [];
+    try {
+      const t: PersistedTask = JSON.parse(line);
+      if (t.taskId === task.taskId) {
+        replaced = true;
+        return [JSON.stringify(task)];
+      }
+    } catch {
+      // keep malformed lines as-is
+    }
+    return [line];
+  });
+
+  if (!replaced) lines.push(JSON.stringify(task));
+  await Bun.write(path, lines.join("\n") + "\n");
 }
