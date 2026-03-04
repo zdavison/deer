@@ -2,7 +2,7 @@ import { Box, Text, useInput, useApp, useStdout } from "ink";
 import { TextInput, Spinner } from "@inkjs/ui";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { join } from "node:path";
-import { mkdir } from "node:fs/promises";
+import { mkdir, access } from "node:fs/promises";
 import { generateTaskId, transcriptsDir, loadHistory, upsertHistory, removeFromHistory } from "./task";
 import type { PersistedTask } from "./task";
 import { loadConfig } from "./config";
@@ -942,7 +942,15 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   // ── Continue Q&A conversation interactively ──────────────────────
 
   const continueConversation = useCallback(async (agent: AgentState) => {
-    const dir = agent.meta?.worktreePath ?? cwd;
+    let dir = cwd;
+    if (agent.meta?.worktreePath) {
+      try {
+        await access(agent.meta.worktreePath);
+        dir = agent.meta.worktreePath;
+      } catch {
+        // Worktree was removed during teardown — fall back to main repo dir
+      }
+    }
 
     setSuspended(true);
 
@@ -1141,6 +1149,10 @@ export default function Dashboard({ cwd }: { cwd: string }) {
         const agent = visible[clampedIdx];
         if (agent?.meta) shellIntoAgent(agent);
       }
+      if (input === "c") {
+        const agent = visible[clampedIdx];
+        if (agent && !isActive(agent)) continueConversation(agent);
+      }
       if (input === "x") {
         const agent = visible[clampedIdx];
         if (agent) killAgent(agent);
@@ -1313,6 +1325,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
             <Text dimColor>Tab focus</Text>
             <Text dimColor>j/k nav</Text>
             <Text dimColor>⏎ attach/open</Text>
+            <Text dimColor>c continue</Text>
             <Text dimColor>s shell</Text>
             <Text dimColor>x kill</Text>
             <Text dimColor>⌫ delete</Text>
