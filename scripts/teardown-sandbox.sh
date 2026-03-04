@@ -4,7 +4,7 @@ set -euo pipefail
 # Post-session teardown: commit changes, push branch, create PR.
 # Outputs JSON result to stdout on success.
 #
-# Usage: teardown-sandbox.sh <repo_root> <worktree_path> <sandbox_name> <temp_branch> <base_branch> [model]
+# Usage: teardown-sandbox.sh <repo_root> <worktree_path> <sandbox_name> <temp_branch> <base_branch> [model] [deer_tmp_dir]
 # Env:   GH_TOKEN (optional, falls back to gh auth token)
 
 REPO_ROOT="$1"
@@ -13,6 +13,9 @@ SANDBOX_NAME="$3"
 TEMP_BRANCH="$4"
 BASE_BRANCH="$5"
 MODEL="${6:-sonnet}"
+# Temp dir for deer artifacts (outside the worktree, inside GIT_DIR).
+# Falls back to WORKTREE_DIR for backward compatibility.
+DEER_TMP_DIR="${7:-$WORKTREE_DIR}"
 
 COMMIT_MSG_FILE=".agent-commit-message"
 BRANCH_NAME_FILE=".agent-branch-name"
@@ -33,31 +36,34 @@ ok "Sandbox stopped"
 
 # ── Clean up agent artifacts ─────────────────────────────────────────
 
-rm -f "$WORKTREE_DIR/.agent-prompt" "$WORKTREE_DIR/.agent-metadata-prompt"
+rm -f "$DEER_TMP_DIR/.agent-prompt" "$DEER_TMP_DIR/.agent-metadata-prompt"
 
 # ── Read agent-written metadata files ────────────────────────────────
 
-if [ -f "$WORKTREE_DIR/$COMMIT_MSG_FILE" ]; then
-  COMMIT_MSG=$(cat "$WORKTREE_DIR/$COMMIT_MSG_FILE")
-  rm -f "$WORKTREE_DIR/$COMMIT_MSG_FILE"
+if [ -f "$DEER_TMP_DIR/$COMMIT_MSG_FILE" ]; then
+  COMMIT_MSG=$(cat "$DEER_TMP_DIR/$COMMIT_MSG_FILE")
+  rm -f "$DEER_TMP_DIR/$COMMIT_MSG_FILE"
 else
   COMMIT_MSG="chore: changes from sandboxed Claude session"
 fi
 
 AGENT_BRANCH_SLUG=""
-if [ -f "$WORKTREE_DIR/$BRANCH_NAME_FILE" ]; then
-  AGENT_BRANCH_SLUG=$(cat "$WORKTREE_DIR/$BRANCH_NAME_FILE" | tr -d '\n' \
+if [ -f "$DEER_TMP_DIR/$BRANCH_NAME_FILE" ]; then
+  AGENT_BRANCH_SLUG=$(cat "$DEER_TMP_DIR/$BRANCH_NAME_FILE" | tr -d '\n' \
     | tr '[:upper:]' '[:lower:]' \
     | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//' \
     | cut -c1-50)
-  rm -f "$WORKTREE_DIR/$BRANCH_NAME_FILE"
+  rm -f "$DEER_TMP_DIR/$BRANCH_NAME_FILE"
 fi
 
 PR_BODY=""
-if [ -f "$WORKTREE_DIR/$PR_BODY_FILE" ]; then
-  PR_BODY=$(cat "$WORKTREE_DIR/$PR_BODY_FILE")
-  rm -f "$WORKTREE_DIR/$PR_BODY_FILE"
+if [ -f "$DEER_TMP_DIR/$PR_BODY_FILE" ]; then
+  PR_BODY=$(cat "$DEER_TMP_DIR/$PR_BODY_FILE")
+  rm -f "$DEER_TMP_DIR/$PR_BODY_FILE"
 fi
+
+# Clean up the session temp dir
+rm -rf "$DEER_TMP_DIR"
 
 # ── Clean up stale git locks ────────────────────────────────────────
 # The sandbox may have been killed mid-git-operation, leaving lock files.
@@ -81,7 +87,6 @@ fi
 if [ "$HAS_UNCOMMITTED" = true ]; then
   info "Committing uncommitted changes..."
   git -C "$WORKTREE_DIR" add -A
-  git -C "$WORKTREE_DIR" reset -- "$COMMIT_MSG_FILE" "$BRANCH_NAME_FILE" "$PR_BODY_FILE" .agent-prompt .agent-metadata-prompt 2>/dev/null || true
   # After cleanup, agent artifacts may have been the only changes — check before committing
   if ! git -C "$WORKTREE_DIR" diff --cached --quiet; then
     git -C "$WORKTREE_DIR" commit -m "$COMMIT_MSG"

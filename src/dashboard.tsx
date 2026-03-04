@@ -19,6 +19,8 @@ interface SandboxMeta {
   baseBranch: string;
   sandboxHome: string;
   model: string;
+  /** Temp dir for deer artifacts (inside GIT_DIR, not tracked by git) */
+  deerTmpDir: string;
 }
 
 interface TeardownResult {
@@ -313,8 +315,8 @@ async function applyNetworkPolicy(sandboxName: string, allowlist: string[]): Pro
  * The caller should read stdout for NDJSON events.
  */
 async function startClaude(meta: SandboxMeta, prompt: string): Promise<ReturnType<typeof Bun.spawn>> {
-  // Write prompt to file in worktree to avoid shell escaping
-  const promptPath = join(meta.worktreePath, ".agent-prompt");
+  // Write prompt to temp dir outside worktree to avoid polluting the git working tree
+  const promptPath = join(meta.deerTmpDir, ".agent-prompt");
   await Bun.write(promptPath, prompt);
 
   const proc = Bun.spawn([
@@ -322,7 +324,7 @@ async function startClaude(meta: SandboxMeta, prompt: string): Promise<ReturnTyp
     "env", "-u", "ANTHROPIC_API_KEY",
     `CLAUDE_CODE_OAUTH_TOKEN=${process.env.CLAUDE_CODE_OAUTH_TOKEN}`,
     "sh", "-c",
-    `cd ${meta.worktreePath} && cat .agent-prompt | claude -p --output-format stream-json --verbose --dangerously-skip-permissions --model ${MODEL}`,
+    `cd ${meta.worktreePath} && cat ${meta.deerTmpDir}/.agent-prompt | claude -p --output-format stream-json --verbose --dangerously-skip-permissions --model ${MODEL}`,
   ], {
     stdout: "pipe",
     stderr: "pipe",
@@ -336,7 +338,7 @@ async function startClaude(meta: SandboxMeta, prompt: string): Promise<ReturnTyp
  * Build the follow-up prompt that asks the agent to write metadata files.
  * Includes the repo's PR template if one exists.
  */
-async function buildMetadataPrompt(worktreePath: string): Promise<string> {
+async function buildMetadataPrompt(worktreePath: string, deerTmpDir: string): Promise<string> {
   let prTemplate = "";
 
   const templatePaths = [
@@ -359,17 +361,17 @@ async function buildMetadataPrompt(worktreePath: string): Promise<string> {
     : `A pull request description with a summary of the changes.`;
 
   return [
-    "Your task is complete. Now write these three files in the project root:",
+    "Your task is complete. Now write these three files:",
     "",
-    "1. `.agent-branch-name`",
+    `1. \`${deerTmpDir}/.agent-branch-name\``,
     "   A short kebab-case name for a git branch describing your changes.",
     "   No prefix. Examples: fix-login-validation, add-user-avatar-upload",
     "",
-    "2. `.agent-commit-message`",
+    `2. \`${deerTmpDir}/.agent-commit-message\``,
     "   A conventional git commit message. First line is the subject (<72 chars),",
     "   then a blank line, then an optional body.",
     "",
-    `3. \`.agent-pr-body\``,
+    `3. \`${deerTmpDir}/.agent-pr-body\``,
     `   ${prSection}`,
     "",
     "Write these three files now. Do nothing else.",
@@ -383,8 +385,8 @@ async function buildMetadataPrompt(worktreePath: string): Promise<string> {
  * Non-fatal — if this fails or times out, teardown has fallbacks.
  */
 async function startClaudeMetadata(meta: SandboxMeta, agent: AgentState): Promise<void> {
-  const prompt = await buildMetadataPrompt(meta.worktreePath);
-  const promptPath = join(meta.worktreePath, ".agent-metadata-prompt");
+  const prompt = await buildMetadataPrompt(meta.worktreePath, meta.deerTmpDir);
+  const promptPath = join(meta.deerTmpDir, ".agent-metadata-prompt");
   await Bun.write(promptPath, prompt);
 
   const proc = Bun.spawn([
@@ -392,7 +394,7 @@ async function startClaudeMetadata(meta: SandboxMeta, agent: AgentState): Promis
     "env", "-u", "ANTHROPIC_API_KEY",
     `CLAUDE_CODE_OAUTH_TOKEN=${process.env.CLAUDE_CODE_OAUTH_TOKEN}`,
     "sh", "-c",
-    `cd ${meta.worktreePath} && cat .agent-metadata-prompt | claude -p --continue --output-format stream-json --verbose --dangerously-skip-permissions --model ${MODEL}`,
+    `cd ${meta.worktreePath} && cat ${meta.deerTmpDir}/.agent-metadata-prompt | claude -p --continue --output-format stream-json --verbose --dangerously-skip-permissions --model ${MODEL}`,
   ], {
     stdout: "pipe",
     stderr: "pipe",
@@ -430,7 +432,7 @@ async function startClaudeMetadata(meta: SandboxMeta, agent: AgentState): Promis
 async function teardownAgent(meta: SandboxMeta, cwd: string): Promise<TeardownResult> {
   const proc = Bun.spawn([
     "bash", join(SCRIPTS_DIR, "teardown-sandbox.sh"),
-    cwd, meta.worktreePath, meta.sandboxName, meta.tempBranch, meta.baseBranch, meta.model,
+    cwd, meta.worktreePath, meta.sandboxName, meta.tempBranch, meta.baseBranch, meta.model, meta.deerTmpDir,
   ], {
     cwd,
     stdout: "pipe",

@@ -68,9 +68,11 @@ GIT_DIR="$(cd "$REPO_ROOT" && git rev-parse --absolute-git-dir)"
 
 # Temporary branch name — renamed to something descriptive after the session
 TEMP_BRANCH="deer/session-$(date +%s)-$(head -c4 /dev/urandom | xxd -p)"
-COMMIT_MSG_FILE=".agent-commit-message"
-BRANCH_NAME_FILE=".agent-branch-name"
-PR_BODY_FILE=".agent-pr-body"
+
+# Temp dir for deer artifacts — inside GIT_DIR so git never tracks them,
+# but still accessible inside the sandbox (GIT_DIR is mounted).
+DEER_TMP_DIR="$GIT_DIR/deer/$TEMP_BRANCH"
+mkdir -p "$DEER_TMP_DIR"
 
 # ── Create worktree ──────────────────────────────────────────────────
 
@@ -207,5 +209,5 @@ ok "Sandbox ready"
 # ── Output metadata as JSON to stdout ─────────────────────────────────
 
 cat <<EOF
-{"sandboxName":"$SANDBOX_NAME","worktreePath":"$WORKTREE_DIR","tempBranch":"$TEMP_BRANCH","baseBranch":"$BASE_BRANCH","sandboxHome":"$SANDBOX_HOME","model":"$MODEL"}
+{"sandboxName":"$SANDBOX_NAME","worktreePath":"$WORKTREE_DIR","tempBranch":"$TEMP_BRANCH","baseBranch":"$BASE_BRANCH","sandboxHome":"$SANDBOX_HOME","model":"$MODEL","deerTmpDir":"$DEER_TMP_DIR"}
 EOF
