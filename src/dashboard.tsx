@@ -1385,12 +1385,14 @@ export default function Dashboard({ cwd }: { cwd: string }) {
         ) : (
           <>
             <Text dimColor>Tab focus</Text>
-            <Text dimColor>j/k nav</Text>
-            <Text dimColor>⏎ attach/open</Text>
-            <Text dimColor>c continue</Text>
-            <Text dimColor>s shell</Text>
-            <Text dimColor>x kill</Text>
-            <Text dimColor>⌫ delete</Text>
+            {visibleAgents.length > 0 && <Text dimColor>j/k nav</Text>}
+            {selected && (selected.status === "running" || selected.result?.prUrl || selected.transcriptPath) && (
+              <Text dimColor>⏎ {selected.status === "running" ? "attach" : selected.result?.prUrl ? "open PR" : "open"}</Text>
+            )}
+            {selected && !isActive(selected) && <Text dimColor>c continue</Text>}
+            {selected?.meta && <Text dimColor>s shell</Text>}
+            {selected && <Text dimColor>x kill</Text>}
+            {selected && !isActive(selected) && <Text dimColor>⌫ delete</Text>}
             <Text dimColor>l logs</Text>
             <Text dimColor>q quit</Text>
           </>
