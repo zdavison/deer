@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { generateTaskId, transcriptsDir, loadHistory, appendToHistory } from "./task";
 import type { PersistedTask } from "./task";
+import { loadConfig } from "./config";
+import type { DeerConfig } from "./config";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -282,6 +284,25 @@ async function setupAgent(cwd: string): Promise<SandboxMeta> {
   const jsonLine = lines[lines.length - 1];
   if (!jsonLine) throw new Error("Setup produced no output");
   return JSON.parse(jsonLine) as SandboxMeta;
+}
+
+/**
+ * Apply a deny-by-default network policy to the sandbox, allowing only the
+ * domains in the config allowlist. Called after sandbox creation but before
+ * the agent starts, so tmux/apt installs during setup are unaffected.
+ */
+async function applyNetworkPolicy(sandboxName: string, allowlist: string[]): Promise<void> {
+  const args = [
+    "docker", "sandbox", "network", "proxy", sandboxName,
+    "--policy", "deny",
+    ...allowlist.flatMap((host) => ["--allow-host", host]),
+  ];
+  const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
+  const code = await proc.exited;
+  if (code !== 0) {
+    const stderr = await new Response(proc.stderr).text();
+    throw new Error(`Network policy failed (exit ${code}): ${stderr.trim()}`);
+  }
 }
 
 /**
@@ -631,11 +652,13 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   const nextId = useRef(1);
   const agentsRef = useRef(agents);
   agentsRef.current = agents;
+  const configRef = useRef<DeerConfig | null>(null);
 
   // ── Load history + preflight on mount ─────────────────────────────
 
   useEffect(() => {
     runPreflight().then(setPreflight);
+    loadConfig(cwd).then((cfg) => { configRef.current = cfg; });
     loadHistory(cwd).then((tasks) => {
       if (tasks.length === 0) return;
       const historical = tasks.map((t, i) => historicalAgent(t, i + 1));
@@ -726,6 +749,12 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     try {
       // Phase 1: Setup
       agent.meta = await setupAgent(cwd);
+
+      // Phase 1.5: Lock down network — deny all, allow only the configured list.
+      // Applied after setup (tmux/apt installs are done) but before the agent runs.
+      const allowlist = configRef.current?.network.allowlist ?? [];
+      await applyNetworkPolicy(agent.meta.sandboxName, allowlist);
+
       agent.status = "running";
       setAgents((prev) => [...prev]);
 
