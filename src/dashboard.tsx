@@ -50,8 +50,8 @@ interface AgentState {
   proc: { kill(): void } | null;
   /** Timer handle */
   timer: ReturnType<typeof setInterval> | null;
-  /** Whether the PR has been merged on GitHub */
-  prMerged: boolean;
+  /** PR status on GitHub: null if unchecked, "open", "merged", or "closed" */
+  prStatus: "open" | "merged" | "closed" | null;
   /** User attached interactively — headless process killed, attach handler owns teardown */
   userAttached: boolean;
   /** Agent is waiting for user input (e.g. AskUserQuestion tool) */
@@ -516,19 +516,21 @@ async function finalizeAgent(
   }
 }
 
-/** Check if a PR has been merged via `gh pr view`. */
-async function checkPrMerged(prUrl: string): Promise<boolean> {
+/** Fetch the current PR state via `gh pr view`. Returns null on failure. */
+async function checkPrStatus(prUrl: string): Promise<"open" | "merged" | "closed" | null> {
   try {
     const proc = Bun.spawn(
       ["gh", "pr", "view", prUrl, "--json", "state", "-q", ".state"],
       { stdout: "pipe", stderr: "pipe" },
     );
     const code = await proc.exited;
-    if (code !== 0) return false;
+    if (code !== 0) return null;
     const state = (await new Response(proc.stdout).text()).trim();
-    return state === "MERGED";
+    if (state === "MERGED") return "merged";
+    if (state === "CLOSED") return "closed";
+    return "open";
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -628,7 +630,7 @@ function historicalAgent(task: PersistedTask, id: number): AgentState {
     error: task.error || "",
     proc: null,
     timer: null,
-    prMerged: false,
+    prStatus: null,
     userAttached: false,
     needsAttention: false,
     tmuxWatched: false,
@@ -699,14 +701,15 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   useEffect(() => {
     const check = async () => {
       const toCheck = agentsRef.current.filter(
-        (a) => a.status === "completed" && a.result?.prUrl && !a.prMerged && !a.historical,
+        (a) => a.status === "completed" && a.result?.prUrl && a.prStatus === null,
       );
       if (toCheck.length === 0) return;
 
       let changed = false;
       for (const agent of toCheck) {
-        if (await checkPrMerged(agent.result!.prUrl)) {
-          agent.prMerged = true;
+        const status = await checkPrStatus(agent.result!.prUrl);
+        if (status !== null) {
+          agent.prStatus = status;
           changed = true;
         }
       }
@@ -738,7 +741,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
       error: "",
       proc: null,
       timer: null,
-      prMerged: false,
+      prStatus: null,
       userAttached: false,
       needsAttention: false,
       tmuxWatched: false,
@@ -1065,7 +1068,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   useInput((input, key) => {
     if (suspended) return;
 
-    const visible = agents.filter((a) => !a.prMerged || a.historical);
+    const visible = agents;
     const clampedIdx = Math.min(selectedIdx, Math.max(visible.length - 1, 0));
 
     // Quit handling
@@ -1165,7 +1168,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
 
   // ── Derived state ────────────────────────────────────────────────
 
-  const visibleAgents = agents.filter((a) => !a.prMerged || a.historical);
+  const visibleAgents = agents;
   const clampedIdx = Math.min(selectedIdx, Math.max(visibleAgents.length - 1, 0));
   const activeCount = visibleAgents.filter(isActive).length;
   const selected = visibleAgents[clampedIdx] || null;
@@ -1221,6 +1224,11 @@ export default function Dashboard({ cwd }: { cwd: string }) {
             // Log line: paddingX(2) + indent(3) = 5
             const logWidth = Math.max(termWidth - 5, 5);
 
+            const prEmoji = agent.prStatus === "merged" ? "🟣"
+              : agent.prStatus === "closed" ? "❌"
+              : agent.prStatus === "open" ? "👀"
+              : null;
+
             return (
               <Box key={agent.id} flexDirection="column">
                 {/* Title line */}
@@ -1238,6 +1246,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
                       {truncate(agent.prompt, titleWidth)}
                     </Text>
                   </Box>
+                  {prEmoji && <Text>{prEmoji}</Text>}
                   <Text dimColor>{formatTime(agent.elapsed)}</Text>
                 </Box>
                 {/* Log lines */}
