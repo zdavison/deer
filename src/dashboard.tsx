@@ -1377,6 +1377,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
       </Box>
 
       {/* Footer / keybindings */}
+      <Text>{"─".repeat(termWidth)}</Text>
       <Box paddingX={1} gap={2}>
         {confirmQuit ? (
           <Text color="yellow" bold>
