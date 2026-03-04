@@ -21,7 +21,7 @@ describe("loadConfig", () => {
     expect(config.boilerhouse.url).toBe("http://localhost:3000");
     expect(config.defaults.agent).toBe("claude");
     expect(config.defaults.timeoutMs).toBe(1800000);
-    expect(config.network.allowlist).toBeArrayOfSize(7);
+    expect(config.network.allowlist).toBeArrayOfSize(10);
     expect(config.network.allowlist).toContain("api.anthropic.com");
     expect(config.network.allowlist).toContain("github.com");
     expect(config.network.allowlist).toContain("registry.npmjs.org");
@@ -151,6 +151,9 @@ describe("DEFAULT_CONFIG", () => {
       "pypi.org",
       "github.com",
       "objects.githubusercontent.com",
+      "archive.ubuntu.com",
+      "security.ubuntu.com",
+      "deb.debian.org",
     ]);
     expect(DEFAULT_CONFIG.repos).toEqual({});
   });
