@@ -77,8 +77,14 @@ if [ "$HAS_UNCOMMITTED" = true ]; then
   git -C "$WORKTREE_DIR" reset -- "$COMMIT_MSG_FILE" "$BRANCH_NAME_FILE" "$PR_BODY_FILE" .agent-prompt .agent-metadata-prompt 2>/dev/null || true
   git -C "$WORKTREE_DIR" reset -- CLAUDE.md 2>/dev/null || true
   git -C "$WORKTREE_DIR" checkout -- CLAUDE.md 2>/dev/null || true
-  git -C "$WORKTREE_DIR" commit -m "$COMMIT_MSG"
-  ok "Committed"
+
+  # After cleanup, agent artifacts may have been the only changes — check before committing
+  if ! git -C "$WORKTREE_DIR" diff --cached --quiet; then
+    git -C "$WORKTREE_DIR" commit -m "$COMMIT_MSG"
+    ok "Committed"
+  else
+    info "No real changes after cleanup — skipping commit"
+  fi
 fi
 
 # ── Check if branch has any commits ahead of base ────────────────────

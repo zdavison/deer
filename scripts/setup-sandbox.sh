@@ -59,6 +59,11 @@ BASE_BRANCH="$(cd "$REPO_ROOT" && git remote show origin 2>/dev/null | sed -n 's
 if [ -z "$BASE_BRANCH" ]; then
   BASE_BRANCH="master"
 fi
+
+# The worktree starts from the user's current branch, not the remote default.
+# This lets agents work on top of whatever the user had checked out.
+CURRENT_BRANCH="$(cd "$REPO_ROOT" && git rev-parse --abbrev-ref HEAD)"
+
 GIT_DIR="$(cd "$REPO_ROOT" && git rev-parse --absolute-git-dir)"
 
 # Temporary branch name — renamed to something descriptive after the session
@@ -74,9 +79,16 @@ info "Creating worktree..."
 WORKTREE_DIR="$(mktemp -u)"  # path only, git worktree add creates the dir
 SANDBOX_NAME="deer-$(printf '%s' "$TEMP_BRANCH" | md5sum | cut -c1-8)"
 
-git -C "$REPO_ROOT" worktree add "$WORKTREE_DIR" -b "$TEMP_BRANCH" "$BASE_BRANCH" 2>&1 >&2
+git -C "$REPO_ROOT" worktree add "$WORKTREE_DIR" -b "$TEMP_BRANCH" "$CURRENT_BRANCH" 2>&1 >&2
 
-ok "Worktree ready"
+# Discard any dirty state so the agent starts from a clean HEAD.
+# git worktree add should already produce a clean checkout, but if the
+# user's branch has uncommitted index entries that leak through, this
+# ensures a pristine starting point without touching the main directory.
+git -C "$WORKTREE_DIR" checkout -- . 2>/dev/null || true
+git -C "$WORKTREE_DIR" clean -fd 2>/dev/null || true
+
+ok "Worktree ready (from $CURRENT_BRANCH)"
 
 # ── Create and configure sandbox ─────────────────────────────────────
 

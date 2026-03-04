@@ -2,6 +2,9 @@ import { Box, Text, useInput, useApp, useStdout } from "ink";
 import { TextInput, Spinner } from "@inkjs/ui";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { join } from "node:path";
+import { mkdir } from "node:fs/promises";
+import { generateTaskId, transcriptsDir, loadHistory, appendToHistory } from "./task";
+import type { PersistedTask } from "./task";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -23,6 +26,8 @@ interface TeardownResult {
 
 interface AgentState {
   id: number;
+  /** Persistent task ID (deer_xxx format) for history storage */
+  taskId: string;
   prompt: string;
   status: AgentStatus;
   /** Elapsed seconds */
@@ -51,6 +56,12 @@ interface AgentState {
   needsAttention: boolean;
   /** Background tmux watcher is running for this agent */
   tmuxWatched: boolean;
+  /** Human-readable conversation transcript (markdown blocks) */
+  transcript: string[];
+  /** Path to persisted transcript file (set when completed with no code changes) */
+  transcriptPath: string | null;
+  /** True if this agent was loaded from history (not spawned this session) */
+  historical: boolean;
 }
 
 // ── Constants ────────────────────────────────────────────────────────
@@ -109,6 +120,100 @@ function isActive(a: AgentState): boolean {
 function openUrl(url: string) {
   const cmd = process.platform === "darwin" ? "open" : "xdg-open";
   Bun.spawn([cmd, url], { stdout: "pipe", stderr: "pipe" });
+}
+
+/** Timeout for the needs-input classification invocation */
+const NEEDS_INPUT_TIMEOUT_MS = 15_000;
+
+/**
+ * Use a fast LLM call to determine if the agent's last transcript message
+ * is asking the user for input/clarification/decisions — works across
+ * all languages.
+ *
+ * Returns true if the agent appears to be blocked on human intervention.
+ */
+export async function needsHumanInput(transcript: string[]): Promise<boolean> {
+  if (transcript.length === 0) return false;
+  const last = transcript[transcript.length - 1].trim();
+  if (!last) return false;
+
+  const prompt = [
+    "You are a classifier. The following message is the final output from an AI coding agent.",
+    "Is a response from the user expected after this message?",
+    "For example: the agent asked a question, presented options to choose from,",
+    "requested clarification, asked the user to do something, or is otherwise",
+    "waiting for input before it can continue.",
+    "",
+    "Respond with exactly YES or NO. Nothing else.",
+    "",
+    "<agent-message>",
+    last.length > 2000 ? last.slice(-2000) : last,
+    "</agent-message>",
+  ].join("\n");
+
+  try {
+    const { CLAUDECODE: _, ...env } = process.env;
+    const proc = Bun.spawn([
+      "claude", "-p", "--output-format", "text", "--model", "haiku",
+    ], {
+      stdin: new Response(prompt),
+      stdout: "pipe",
+      stderr: "pipe",
+      env,
+    });
+
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => {
+        proc.kill();
+        reject(new Error("needs-input classification timed out"));
+      }, NEEDS_INPUT_TIMEOUT_MS),
+    );
+
+    const result = await Promise.race([
+      proc.exited.then(async (code) => {
+        if (code !== 0) return false;
+        const text = (await new Response(proc.stdout).text()).trim().toUpperCase();
+        return text === "YES";
+      }),
+      timeout,
+    ]);
+
+    return result;
+  } catch {
+    // On any failure, assume no — don't block the normal flow
+    return false;
+  }
+}
+
+function buildTranscriptMarkdown(agent: AgentState): string {
+  const date = new Date().toISOString().replace("T", " ").slice(0, 16);
+  const heading = agent.prompt.length > 80 ? agent.prompt.slice(0, 80) + "…" : agent.prompt;
+
+  const sections: string[] = [
+    `# deer — ${heading}`,
+    "",
+    `**Date:** ${date}`,
+    "",
+    "---",
+    "",
+    "## User",
+    "",
+    agent.prompt,
+    "",
+    "## Assistant",
+    "",
+    agent.transcript.join("\n\n"),
+  ];
+
+  return sections.join("\n") + "\n";
+}
+
+async function persistTranscript(agent: AgentState): Promise<string> {
+  const dir = transcriptsDir();
+  await mkdir(dir, { recursive: true });
+  const filePath = join(dir, `${agent.taskId}.md`);
+  await Bun.write(filePath, buildTranscriptMarkdown(agent));
+  return filePath;
 }
 
 // ── Preflight ────────────────────────────────────────────────────────
@@ -360,7 +465,15 @@ async function finalizeAgent(
   try {
     agent.result = await teardownAgent(agent.meta, cwd);
     agent.status = "completed";
-    agent.lastActivity = agent.result.prUrl ? "PR ready" : "No changes";
+
+    if (agent.result.prUrl) {
+      agent.lastActivity = "PR ready";
+    } else if (agent.transcript.length > 0) {
+      agent.transcriptPath = await persistTranscript(agent);
+      agent.lastActivity = "Answer ready — Enter to view";
+    } else {
+      agent.lastActivity = "No changes";
+    }
   } catch (err) {
     agent.status = "failed";
     agent.error = err instanceof Error ? err.message : String(err);
@@ -369,6 +482,7 @@ async function finalizeAgent(
     if (agent.timer) clearInterval(agent.timer);
     agent.timer = null;
     agent.proc = null;
+    await saveToHistory(agent, cwd);
     setAgents((prev) => [...prev]);
   }
 }
@@ -404,6 +518,7 @@ function parseNdjsonLine(line: string, agent: AgentState): boolean {
         if (block.type === "text" && block.text) {
           agent.lastActivity = truncate(block.text.replace(/\n/g, " ").trim(), 120);
           appendLog(agent, block.text.trim());
+          agent.transcript.push(block.text);
           changed = true;
         }
         if (block.type === "tool_use") {
@@ -448,6 +563,51 @@ function parseNdjsonLine(line: string, agent: AgentState): boolean {
   return changed;
 }
 
+/** Save a finished agent to the repo's history file. */
+async function saveToHistory(agent: AgentState, repoPath: string): Promise<void> {
+  if (agent.historical) return;
+  const status = agent.status as "completed" | "failed" | "cancelled";
+  const task: PersistedTask = {
+    taskId: agent.taskId,
+    prompt: agent.prompt,
+    status,
+    createdAt: new Date(Date.now() - agent.elapsed * 1000).toISOString(),
+    completedAt: new Date().toISOString(),
+    elapsed: agent.elapsed,
+    prUrl: agent.result?.prUrl ?? null,
+    error: agent.error || null,
+    transcriptPath: agent.transcriptPath,
+    lastActivity: agent.lastActivity,
+  };
+  await appendToHistory(repoPath, task);
+}
+
+/** Convert a persisted task to a read-only AgentState for display. */
+function historicalAgent(task: PersistedTask, id: number): AgentState {
+  return {
+    id,
+    taskId: task.taskId,
+    prompt: task.prompt,
+    status: task.status,
+    elapsed: task.elapsed,
+    lastActivity: task.lastActivity,
+    currentTool: "",
+    logs: [],
+    meta: null,
+    result: task.prUrl ? { finalBranch: "", prUrl: task.prUrl } : null,
+    error: task.error || "",
+    proc: null,
+    timer: null,
+    prMerged: false,
+    userAttached: false,
+    needsAttention: false,
+    tmuxWatched: false,
+    transcript: [],
+    transcriptPath: task.transcriptPath,
+    historical: true,
+  };
+}
+
 // ── Main Component ───────────────────────────────────────────────────
 
 export default function Dashboard({ cwd }: { cwd: string }) {
@@ -472,11 +632,17 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   const agentsRef = useRef(agents);
   agentsRef.current = agents;
 
-  // ── Preflight on mount ───────────────────────────────────────────
+  // ── Load history + preflight on mount ─────────────────────────────
 
   useEffect(() => {
     runPreflight().then(setPreflight);
-  }, []);
+    loadHistory(cwd).then((tasks) => {
+      if (tasks.length === 0) return;
+      const historical = tasks.map((t, i) => historicalAgent(t, i + 1));
+      nextId.current = historical.length + 1;
+      setAgents(historical);
+    });
+  }, [cwd]);
 
   // ── Cleanup on unmount ───────────────────────────────────────────
 
@@ -501,7 +667,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   useEffect(() => {
     const check = async () => {
       const toCheck = agentsRef.current.filter(
-        (a) => a.status === "completed" && a.result?.prUrl && !a.prMerged,
+        (a) => a.status === "completed" && a.result?.prUrl && !a.prMerged && !a.historical,
       );
       if (toCheck.length === 0) return;
 
@@ -528,6 +694,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     const id = nextId.current++;
     const agent: AgentState = {
       id,
+      taskId: generateTaskId(),
       prompt: prompt.trim(),
       status: "setup",
       elapsed: 0,
@@ -543,6 +710,9 @@ export default function Dashboard({ cwd }: { cwd: string }) {
       userAttached: false,
       needsAttention: false,
       tmuxWatched: false,
+      transcript: [],
+      transcriptPath: null,
+      historical: false,
     };
 
     // Start elapsed timer
@@ -604,6 +774,15 @@ export default function Dashboard({ cwd }: { cwd: string }) {
       // User attached interactively — attach handler owns teardown
       if (agent.userAttached) return;
 
+      // Agent exited while waiting for user input — keep alive for attachment
+      if (agent.needsAttention || await needsHumanInput(agent.transcript)) {
+        agent.needsAttention = true;
+        agent.lastActivity = "Needs input — Enter to assist";
+        agent.proc = null;
+        setAgents((prev) => [...prev]);
+        return;
+      }
+
       if (exitCode !== 0) {
         throw new Error(`Claude exited with code ${exitCode}`);
       }
@@ -615,10 +794,11 @@ export default function Dashboard({ cwd }: { cwd: string }) {
         agent.status = "failed";
         agent.error = err instanceof Error ? err.message : String(err);
         agent.lastActivity = truncate(agent.error, 120);
+        await saveToHistory(agent, cwd);
       }
     } finally {
-      // If user attached, keep timer running — attach handler cleans up
-      if (!agent.userAttached) {
+      // If user attached or agent awaiting input, keep timer running — attach handler cleans up
+      if (!agent.userAttached && !agent.needsAttention) {
         if (agent.timer) clearInterval(agent.timer);
         agent.timer = null;
       }
@@ -634,6 +814,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     agent.status = "cancelled";
     agent.lastActivity = "Cancelled by user";
     cleanupAgent(agent, cwd);
+    saveToHistory(agent, cwd);
     setAgents((prev) => [...prev]);
   }, [cwd]);
 
@@ -665,6 +846,31 @@ export default function Dashboard({ cwd }: { cwd: string }) {
       "docker", "sandbox", "exec", "-it", agent.meta.sandboxName,
       "sh", "-c", tmuxScript,
     ], { stdin: "inherit", stdout: "inherit", stderr: "inherit" });
+    await proc.exited;
+
+    // Restore alternate screen and raw mode
+    if (process.stdin.setRawMode) process.stdin.setRawMode(true);
+    process.stdout.write("\x1b[?1049h\x1b[2J\x1b[H");
+
+    setSuspended(false);
+  }, []);
+
+  // ── Open transcript in editor ───────────────────────────────────
+
+  const openInEditor = useCallback(async (filePath: string) => {
+    const editor = process.env.EDITOR || "vim";
+
+    setSuspended(true);
+
+    // Leave alternate screen and release raw mode
+    process.stdout.write("\x1b[?1049l");
+    if (process.stdin.setRawMode) process.stdin.setRawMode(false);
+
+    const proc = Bun.spawn([editor, filePath], {
+      stdin: "inherit",
+      stdout: "inherit",
+      stderr: "inherit",
+    });
     await proc.exited;
 
     // Restore alternate screen and raw mode
@@ -768,7 +974,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   useInput((input, key) => {
     if (suspended) return;
 
-    const visible = agents.filter((a) => !a.prMerged);
+    const visible = agents.filter((a) => !a.prMerged || a.historical);
     const clampedIdx = Math.min(selectedIdx, Math.max(visible.length - 1, 0));
 
     // Quit handling
@@ -835,6 +1041,9 @@ export default function Dashboard({ cwd }: { cwd: string }) {
         } else if (agent?.result?.prUrl) {
           // Open completed PR in browser
           openUrl(agent.result.prUrl);
+        } else if (agent?.transcriptPath) {
+          // Open Q&A transcript in editor
+          openInEditor(agent.transcriptPath);
         }
       }
       if (input === "s") {
@@ -848,6 +1057,13 @@ export default function Dashboard({ cwd }: { cwd: string }) {
       if (input === "l") {
         setLogExpanded((prev) => !prev);
       }
+      if (key.backspace || key.delete) {
+        const agent = visible[clampedIdx];
+        if (agent && !isActive(agent)) {
+          setAgents((prev) => prev.filter((a) => a !== agent));
+          setSelectedIdx((prev) => Math.min(prev, Math.max(visible.length - 2, 0)));
+        }
+      }
     }
   });
 
@@ -857,7 +1073,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
 
   // ── Derived state ────────────────────────────────────────────────
 
-  const visibleAgents = agents.filter((a) => !a.prMerged);
+  const visibleAgents = agents.filter((a) => !a.prMerged || a.historical);
   const clampedIdx = Math.min(selectedIdx, Math.max(visibleAgents.length - 1, 0));
   const activeCount = visibleAgents.filter(isActive).length;
   const selected = visibleAgents[clampedIdx] || null;
@@ -999,6 +1215,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
             <Text dimColor>⏎ attach/open</Text>
             <Text dimColor>s shell</Text>
             <Text dimColor>x kill</Text>
+            <Text dimColor>⌫ delete</Text>
             <Text dimColor>l logs</Text>
             <Text dimColor>q quit</Text>
           </>
