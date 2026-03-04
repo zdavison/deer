@@ -460,10 +460,13 @@ function cleanupAgent(agent: AgentState, repoRoot: string) {
   }
   if (agent.timer) clearInterval(agent.timer);
   if (agent.meta) {
-    // Best-effort cleanup
-    try { Bun.spawnSync(["docker", "sandbox", "rm", agent.meta.sandboxName]); } catch { /* ignore */ }
-    try { Bun.spawnSync(["git", "-C", repoRoot, "worktree", "remove", "--force", agent.meta.worktreePath]); } catch { /* ignore */ }
-    try { Bun.spawnSync(["git", "-C", repoRoot, "branch", "-D", agent.meta.tempBranch]); } catch { /* ignore */ }
+    // Best-effort cleanup — fire-and-forget to avoid blocking the UI
+    const { sandboxName, worktreePath, tempBranch } = agent.meta;
+    (async () => {
+      try { await Bun.spawn(["docker", "sandbox", "rm", sandboxName]).exited; } catch { /* ignore */ }
+      try { await Bun.spawn(["git", "-C", repoRoot, "worktree", "remove", "--force", worktreePath]).exited; } catch { /* ignore */ }
+      try { await Bun.spawn(["git", "-C", repoRoot, "branch", "-D", tempBranch]).exited; } catch { /* ignore */ }
+    })();
   }
 }
 
