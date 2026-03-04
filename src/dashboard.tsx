@@ -3,14 +3,14 @@ import { TextInput, Spinner } from "@inkjs/ui";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
-import { generateTaskId, transcriptsDir, loadHistory, appendToHistory, removeFromHistory } from "./task";
+import { generateTaskId, transcriptsDir, loadHistory, upsertHistory, removeFromHistory } from "./task";
 import type { PersistedTask } from "./task";
 import { loadConfig } from "./config";
 import type { DeerConfig } from "./config";
 
 // ── Types ────────────────────────────────────────────────────────────
 
-type AgentStatus = "setup" | "running" | "teardown" | "completed" | "failed" | "cancelled";
+type AgentStatus = "setup" | "running" | "teardown" | "completed" | "failed" | "cancelled" | "interrupted";
 
 interface SandboxMeta {
   sandboxName: string;
@@ -69,12 +69,13 @@ interface AgentState {
 // ── Constants ────────────────────────────────────────────────────────
 
 const STATUS_DISPLAY: Record<AgentStatus, { icon: string; color: string }> = {
-  setup:     { icon: "⏳", color: "yellow" },
-  running:   { icon: "●",  color: "cyan" },
-  teardown:  { icon: "⬆",  color: "blue" },
-  completed: { icon: "✓",  color: "green" },
-  failed:    { icon: "✗",  color: "red" },
-  cancelled: { icon: "⊘",  color: "gray" },
+  setup:       { icon: "⏳", color: "yellow" },
+  running:     { icon: "●",  color: "cyan" },
+  teardown:    { icon: "⬆",  color: "blue" },
+  completed:   { icon: "✓",  color: "green" },
+  failed:      { icon: "✗",  color: "red" },
+  cancelled:   { icon: "⊘",  color: "gray" },
+  interrupted: { icon: "!",  color: "yellow" },
 };
 
 const MAX_LOG_LINES = 200;
@@ -607,18 +608,19 @@ async function saveToHistory(agent: AgentState, repoPath: string): Promise<void>
     transcriptPath: agent.transcriptPath,
     lastActivity: agent.lastActivity,
   };
-  await appendToHistory(repoPath, task);
+  await upsertHistory(repoPath, task);
 }
 
 /** Convert a persisted task to a read-only AgentState for display. */
 function historicalAgent(task: PersistedTask, id: number): AgentState {
+  const wasInterrupted = task.status === "running";
   return {
     id,
     taskId: task.taskId,
     prompt: task.prompt,
-    status: task.status,
+    status: wasInterrupted ? "interrupted" : task.status,
     elapsed: task.elapsed,
-    lastActivity: task.lastActivity,
+    lastActivity: wasInterrupted ? "Interrupted — deer was closed" : task.lastActivity,
     currentTool: "",
     logs: [],
     meta: null,
@@ -752,6 +754,21 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     }, 1000);
 
     setAgents((prev) => [...prev, agent]);
+
+    // Persist immediately so the task survives if deer closes unexpectedly.
+    // The final state will overwrite this entry via upsertHistory.
+    await upsertHistory(cwd, {
+      taskId: agent.taskId,
+      prompt: agent.prompt,
+      status: "running",
+      createdAt: new Date().toISOString(),
+      completedAt: null,
+      elapsed: 0,
+      prUrl: null,
+      error: null,
+      transcriptPath: null,
+      lastActivity: "",
+    });
 
     try {
       // Phase 1: Setup
