@@ -1196,16 +1196,13 @@ export default function Dashboard({ cwd }: { cwd: string }) {
                   <Text dimColor>{formatTime(agent.elapsed)}</Text>
                 </Box>
                 {/* Log lines */}
-                {Array.from({ length: LOG_LINES_PER_ENTRY }).map((_, j) => {
-                  const line = recentLogs[j];
-                  return (
-                    <Box key={j} paddingLeft={3}>
-                      <Text dimColor wrap="truncate">
-                        {line ? truncate(line, logWidth) : " "}
-                      </Text>
-                    </Box>
-                  );
-                })}
+                {recentLogs.map((line, j) => (
+                  <Box key={j} paddingLeft={3}>
+                    <Text dimColor wrap="truncate">
+                      {truncate(line, logWidth)}
+                    </Text>
+                  </Box>
+                ))}
               </Box>
             );
           })
