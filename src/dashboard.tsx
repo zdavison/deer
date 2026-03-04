@@ -830,16 +830,21 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     if (process.stdin.setRawMode) process.stdin.setRawMode(false);
 
     const tmuxScript = [
-      `if ! tmux has-session -t deer-shell 2>/dev/null; then`,
-      `  tmux new-session -d -s deer-shell -c ${agent.meta.worktreePath}`,
-      `  tmux set -t deer-shell status on`,
-      `  tmux set -t deer-shell status-position bottom`,
-      `  tmux set -t deer-shell status-style 'bg=#1e1e2e,fg=#6c7086'`,
-      `  tmux set -t deer-shell status-left ' 🦌 Ctrl+b d → detach '`,
-      `  tmux set -t deer-shell status-left-length 40`,
-      `  tmux set -t deer-shell status-right ''`,
+      `if command -v tmux >/dev/null 2>&1; then`,
+      `  if ! tmux has-session -t deer-shell 2>/dev/null; then`,
+      `    tmux new-session -d -s deer-shell -c ${agent.meta.worktreePath}`,
+      `    tmux set -t deer-shell status on`,
+      `    tmux set -t deer-shell status-position bottom`,
+      `    tmux set -t deer-shell status-style 'bg=#1e1e2e,fg=#6c7086'`,
+      `    tmux set -t deer-shell status-left ' 🦌 Ctrl+b d → detach '`,
+      `    tmux set -t deer-shell status-left-length 40`,
+      `    tmux set -t deer-shell status-right ''`,
+      `  fi`,
+      `  tmux attach -t deer-shell`,
+      `else`,
+      `  echo "Note: tmux not available — no background detach (exit shell to return)"`,
+      `  cd ${agent.meta.worktreePath} && exec sh`,
       `fi`,
-      `tmux attach -t deer-shell`,
     ].join("\n");
 
     const proc = Bun.spawn([
@@ -902,17 +907,22 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     if (process.stdin.setRawMode) process.stdin.setRawMode(false);
 
     const tmuxScript = [
-      `if ! tmux has-session -t deer 2>/dev/null; then`,
-      `  tmux new-session -d -s deer`,
-      `  tmux set -t deer status on`,
-      `  tmux set -t deer status-position bottom`,
-      `  tmux set -t deer status-style 'bg=#1e1e2e,fg=#6c7086'`,
-      `  tmux set -t deer status-left ' 🦌 Ctrl+b d → detach | Ctrl+b [ → scroll (q exits) '`,
-      `  tmux set -t deer status-left-length 80`,
-      `  tmux set -t deer status-right ''`,
-      `  tmux send-keys -t deer "export CLAUDE_CODE_OAUTH_TOKEN='$CLAUDE_CODE_OAUTH_TOKEN' && cd ${agent.meta.worktreePath} && claude --continue --dangerously-skip-permissions --model ${MODEL}" Enter`,
+      `if command -v tmux >/dev/null 2>&1; then`,
+      `  if ! tmux has-session -t deer 2>/dev/null; then`,
+      `    tmux new-session -d -s deer`,
+      `    tmux set -t deer status on`,
+      `    tmux set -t deer status-position bottom`,
+      `    tmux set -t deer status-style 'bg=#1e1e2e,fg=#6c7086'`,
+      `    tmux set -t deer status-left ' 🦌 Ctrl+b d → detach | Ctrl+b [ → scroll (q exits) '`,
+      `    tmux set -t deer status-left-length 80`,
+      `    tmux set -t deer status-right ''`,
+      `    tmux send-keys -t deer "export CLAUDE_CODE_OAUTH_TOKEN='$CLAUDE_CODE_OAUTH_TOKEN' && cd ${agent.meta.worktreePath} && claude --continue --dangerously-skip-permissions --model ${MODEL}" Enter`,
+      `  fi`,
+      `  tmux attach -t deer`,
+      `else`,
+      `  echo "Note: tmux not available — attached directly (Ctrl+C to exit, agent will finalize)"`,
+      `  cd ${agent.meta.worktreePath} && claude --continue --dangerously-skip-permissions --model ${MODEL}`,
       `fi`,
-      `tmux attach -t deer`,
     ].join("\n");
 
     const attachProc = Bun.spawn([

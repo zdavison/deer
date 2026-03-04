@@ -102,7 +102,7 @@ docker sandbox create \
 
 # Install tmux for interactive session management
 docker sandbox exec "$SANDBOX_NAME" \
-  sh -c "command -v tmux >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq tmux >/dev/null 2>&1)" 2>/dev/null \
+  sh -c "command -v tmux >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq tmux)" 1>&2 \
   || warn "Could not install tmux — interactive attach will use direct exec"
 
 # Configure git inside the sandbox
