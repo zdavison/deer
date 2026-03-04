@@ -18,7 +18,6 @@ describe("loadConfig", () => {
   test("missing config files return sensible defaults", async () => {
     const config = await loadConfig(tmpDir);
 
-    expect(config.boilerhouse.url).toBe("http://localhost:3000");
     expect(config.defaults.agent).toBe("claude");
     expect(config.defaults.timeoutMs).toBe(1800000);
     expect(config.network.allowlist).toBeArrayOfSize(10);
@@ -59,9 +58,6 @@ NODE_ENV = "development"
 agent = "claude"
 timeout_ms = 3600000
 
-[boilerhouse]
-url = "http://remote:3000"
-
 [network]
 allowlist = [
   "api.anthropic.com",
@@ -72,7 +68,6 @@ allowlist = [
 
     const config = await loadConfig(tmpDir, undefined, join(tmpDir, ".config", "deer", "config.toml"));
 
-    expect(config.boilerhouse.url).toBe("http://remote:3000");
     expect(config.defaults.timeoutMs).toBe(3600000);
     expect(config.network.allowlist).toContain("custom.example.com");
   });
@@ -84,9 +79,6 @@ allowlist = [
       `
 [defaults]
 timeout_ms = 3600000
-
-[boilerhouse]
-url = "http://global:3000"
 `
     );
 
@@ -99,14 +91,10 @@ base_branch = "develop"
 
     const config = await loadConfig(
       tmpDir,
-      {
-        boilerhouse: { url: "http://cli-override:3000" },
-      },
+      undefined,
       join(tmpDir, ".config", "deer", "config.toml")
     );
 
-    // CLI override wins over global
-    expect(config.boilerhouse.url).toBe("http://cli-override:3000");
     // Global value preserved when not overridden
     expect(config.defaults.timeoutMs).toBe(3600000);
     // Repo value preserved
@@ -128,7 +116,6 @@ base_branch = "main"
     // Defaults fill in the rest
     expect(config.defaults.agent).toBe("claude");
     expect(config.defaults.timeoutMs).toBe(1800000);
-    expect(config.boilerhouse.url).toBe("http://localhost:3000");
   });
 
   test("invalid TOML throws descriptive error", async () => {
@@ -140,7 +127,6 @@ base_branch = "main"
 
 describe("DEFAULT_CONFIG", () => {
   test("has expected default values", () => {
-    expect(DEFAULT_CONFIG.boilerhouse.url).toBe("http://localhost:3000");
     expect(DEFAULT_CONFIG.defaults.agent).toBe("claude");
     expect(DEFAULT_CONFIG.defaults.timeoutMs).toBe(1800000);
     expect(DEFAULT_CONFIG.network.allowlist).toEqual([

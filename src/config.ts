@@ -11,12 +11,6 @@ export interface DeerConfig {
     timeoutMs?: number;
     setupCommand?: string;
   };
-  boilerhouse: {
-    /**
-     * @default "http://localhost:3000"
-     */
-    url: string;
-  };
   network: {
     allowlist: string[];
   };
@@ -43,9 +37,6 @@ export const DEFAULT_CONFIG: DeerConfig = {
   defaults: {
     agent: "claude",
     timeoutMs: 1800000,
-  },
-  boilerhouse: {
-    url: "http://localhost:3000",
   },
   network: {
     allowlist: [
@@ -196,13 +187,6 @@ function tomlToConfig(toml: Record<string, unknown>): Partial<DeerConfig> {
       ...(defaults.timeout_ms !== undefined && { timeoutMs: defaults.timeout_ms }),
       ...(defaults.base_branch !== undefined && { baseBranch: defaults.base_branch }),
       ...(defaults.setup_command !== undefined && { setupCommand: defaults.setup_command }),
-    };
-  }
-
-  const boilerhouse = toml.boilerhouse as Record<string, unknown> | undefined;
-  if (boilerhouse) {
-    result.boilerhouse = {
-      ...(boilerhouse.url !== undefined && { url: boilerhouse.url }),
     };
   }
 
