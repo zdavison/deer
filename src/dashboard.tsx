@@ -883,6 +883,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     if (process.stdin.setRawMode) process.stdin.setRawMode(false);
 
     const tmuxScript = [
+      `export PATH="$PATH:/usr/bin:/usr/local/bin:/bin"`,
       `if command -v tmux >/dev/null 2>&1; then`,
       `  if ! tmux has-session -t deer-shell 2>/dev/null; then`,
       `    tmux new-session -d -s deer-shell -c ${agent.meta.worktreePath}`,
@@ -960,6 +961,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     if (process.stdin.setRawMode) process.stdin.setRawMode(false);
 
     const tmuxScript = [
+      `export PATH="$PATH:/usr/bin:/usr/local/bin:/bin"`,
       `if command -v tmux >/dev/null 2>&1; then`,
       `  if ! tmux has-session -t deer 2>/dev/null; then`,
       `    tmux new-session -d -s deer`,
