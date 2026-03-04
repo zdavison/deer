@@ -98,6 +98,7 @@ describe("history persistence", () => {
       completedAt: new Date().toISOString(),
       elapsed: 45,
       prUrl: "https://github.com/org/repo/pull/1",
+      finalBranch: null,
       error: null,
       transcriptPath: null,
       lastActivity: "PR ready",

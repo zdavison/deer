@@ -13,6 +13,8 @@ set -euo pipefail
 
 REPO_ROOT="$1"
 MODEL="${2:-sonnet}"
+# Optional: override the branch to base the worktree on (default: current branch)
+BRANCH_OVERRIDE="${3:-}"
 
 GIT_NAME="${DEER_GIT_NAME:-deer-agent}"
 GIT_EMAIL="${DEER_GIT_EMAIL:-deer@noreply}"
@@ -26,6 +28,24 @@ warn()  { echo -e "\033[33m⚠️  $*\033[0m" >&2; }
 err()   { echo -e "\033[31m✗  $*\033[0m" >&2; }
 
 # ── Preflight ────────────────────────────────────────────────────────
+
+# Clean up stale deer sandbox VM directories that can poison all `docker sandbox`
+# commands with "docker daemon not ready" / 500 errors. Only removes VMs whose
+# docker.sock is dead (can't respond to a ping).
+for stale_vm_dir in "$HOME/.docker/sandboxes/vm"/deer-*; do
+  [ -d "$stale_vm_dir" ] || continue
+  sock="$stale_vm_dir/docker.sock"
+  if [ -S "$sock" ]; then
+    # Ping the daemon — if it responds, the sandbox is healthy
+    if curl --unix-socket "$sock" -sf http://localhost/_ping >/dev/null 2>&1; then
+      continue
+    fi
+  fi
+  # Socket missing or daemon unresponsive — sandbox is dead
+  stale_name="$(basename "$stale_vm_dir")"
+  info "Cleaning up stale sandbox $stale_name..."
+  docker sandbox rm "$stale_name" 2>/dev/null || rm -rf "$stale_vm_dir" 2>/dev/null || true
+done
 
 if ! docker sandbox version > /dev/null 2>&1; then
   err "Docker Sandbox not available. Install Docker Desktop 4.58+ and enable Sandbox support."
@@ -62,7 +82,14 @@ fi
 
 # The worktree starts from the user's current branch, not the remote default.
 # This lets agents work on top of whatever the user had checked out.
-CURRENT_BRANCH="$(cd "$REPO_ROOT" && git rev-parse --abbrev-ref HEAD)"
+# If BRANCH_OVERRIDE is set, use that instead (e.g. continuing work on a PR branch).
+if [ -n "$BRANCH_OVERRIDE" ]; then
+  # Fetch the branch from origin so it's available locally
+  (cd "$REPO_ROOT" && git fetch origin "$BRANCH_OVERRIDE" 2>&1 >&2 || true)
+  CURRENT_BRANCH="$BRANCH_OVERRIDE"
+else
+  CURRENT_BRANCH="$(cd "$REPO_ROOT" && git rev-parse --abbrev-ref HEAD)"
+fi
 
 GIT_DIR="$(cd "$REPO_ROOT" && git rev-parse --absolute-git-dir)"
 
@@ -102,33 +129,74 @@ docker sandbox create \
   "$WORKTREE_DIR" \
   "$GIT_DIR"
 
-# Install tmux for interactive session management
-# First try direct apt-get install (works if sandbox has unrestricted apt access)
-if ! docker sandbox exec "$SANDBOX_NAME" \
-  sh -c "command -v tmux >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq tmux)" 1>&2; then
-  # Fallback: sandbox apt repo is blocked — get package URLs from the sandbox's cached apt lists
-  # (apt-get download --print-uris reads local cache, no network needed), download on the host
-  # (which has unrestricted internet), then install inside the sandbox via dpkg.
-  TMUX_DEBS="$(mktemp -d)"
+# ── Install tmux (required for interactive attach/shell) ──────────────
+# Strategy: cache .deb files on the host so they only download once.
+# 1. If cached debs exist, copy them into the sandbox and dpkg -i.
+# 2. Otherwise, query the sandbox's apt metadata for download URLs,
+#    download on the host (unrestricted internet), cache, then install.
+# tmux is required — setup fails if it can't be installed.
+
+TMUX_CACHE="$HOME/.local/share/deer/cache/tmux"
+mkdir -p "$TMUX_CACHE"
+
+install_tmux_from_cache() {
+  if [ -f "$TMUX_CACHE/libevent.deb" ] && [ -f "$TMUX_CACHE/tmux.deb" ]; then
+    cp "$TMUX_CACHE/libevent.deb" "$TMUX_CACHE/tmux.deb" "$WORKTREE_DIR/"
+    if docker sandbox exec "$SANDBOX_NAME" \
+      sh -c "sudo dpkg -i $WORKTREE_DIR/libevent.deb $WORKTREE_DIR/tmux.deb" 1>&2; then
+      rm -f "$WORKTREE_DIR/libevent.deb" "$WORKTREE_DIR/tmux.deb"
+      return 0
+    fi
+    rm -f "$WORKTREE_DIR/libevent.deb" "$WORKTREE_DIR/tmux.deb"
+    # Cached debs are stale (wrong arch/version) — clear and re-download
+    rm -f "$TMUX_CACHE/libevent.deb" "$TMUX_CACHE/tmux.deb"
+  fi
+  return 1
+}
+
+download_tmux_debs() {
+  # Query the sandbox's apt cache for package download URLs (no network needed)
   LIBEVENT_URL="$(docker sandbox exec "$SANDBOX_NAME" \
-    sh -c "apt-get download --print-uris libevent-core-2.1-7t64 2>/dev/null | grep -o \"'http[^']*'\" | tr -d \"'\" | head -1" 2>/dev/null || true)"
+    sh -c "apt-get download --print-uris libevent-core-2.1-7t64 2>/dev/null \
+           | grep -o \"'http[^']*'\" | tr -d \"'\" | head -1" 2>/dev/null || true)"
+
+  # libevent package name varies across distro versions — try alternatives
+  if [ -z "$LIBEVENT_URL" ]; then
+    LIBEVENT_URL="$(docker sandbox exec "$SANDBOX_NAME" \
+      sh -c "apt-cache search --names-only '^libevent-core' 2>/dev/null \
+             | head -1 | awk '{print \$1}' \
+             | xargs -I{} apt-get download --print-uris {} 2>/dev/null \
+             | grep -o \"'http[^']*'\" | tr -d \"'\" | head -1" 2>/dev/null || true)"
+  fi
+
   TMUX_DEB_URL="$(docker sandbox exec "$SANDBOX_NAME" \
-    sh -c "apt-get download --print-uris tmux 2>/dev/null | grep -o \"'http[^']*'\" | tr -d \"'\" | head -1" 2>/dev/null || true)"
-  TMUX_INSTALLED=false
-  if [ -n "$LIBEVENT_URL" ] && [ -n "$TMUX_DEB_URL" ] && \
-     curl -fsSL --max-time 30 "$LIBEVENT_URL" -o "$TMUX_DEBS/libevent.deb" 2>/dev/null && \
-     curl -fsSL --max-time 30 "$TMUX_DEB_URL" -o "$TMUX_DEBS/tmux.deb" 2>/dev/null; then
-    cp "$TMUX_DEBS"/*.deb "$WORKTREE_DIR/"
-    docker sandbox exec "$SANDBOX_NAME" \
-      sh -c "dpkg -i $WORKTREE_DIR/libevent.deb $WORKTREE_DIR/tmux.deb && rm -f $WORKTREE_DIR/libevent.deb $WORKTREE_DIR/tmux.deb" 1>&2 \
-      && TMUX_INSTALLED=true
+    sh -c "apt-get download --print-uris tmux 2>/dev/null \
+           | grep -o \"'http[^']*'\" | tr -d \"'\" | head -1" 2>/dev/null || true)"
+
+  if [ -z "$LIBEVENT_URL" ] || [ -z "$TMUX_DEB_URL" ]; then
+    return 1
   fi
-  rm -rf "$TMUX_DEBS"
-  if $TMUX_INSTALLED; then
-    ok "tmux installed via host-side download"
-  else
-    warn "Could not install tmux — interactive attach will use direct exec"
+
+  if curl -fsSL --max-time 60 "$LIBEVENT_URL" -o "$TMUX_CACHE/libevent.deb" 2>/dev/null && \
+     curl -fsSL --max-time 60 "$TMUX_DEB_URL" -o "$TMUX_CACHE/tmux.deb" 2>/dev/null; then
+    return 0
   fi
+
+  rm -f "$TMUX_CACHE/libevent.deb" "$TMUX_CACHE/tmux.deb"
+  return 1
+}
+
+# Check if tmux is already in the sandbox image
+if docker sandbox exec "$SANDBOX_NAME" sh -c "command -v tmux >/dev/null 2>&1" 2>/dev/null; then
+  ok "tmux already available"
+elif install_tmux_from_cache; then
+  ok "tmux installed (cached)"
+elif download_tmux_debs && install_tmux_from_cache; then
+  ok "tmux installed (downloaded and cached)"
+else
+  err "Failed to install tmux in sandbox. Attach and shell require tmux."
+  err "Try running: docker sandbox exec $SANDBOX_NAME apt-get update && apt-get install -y tmux"
+  exit 1
 fi
 
 # Configure git inside the sandbox

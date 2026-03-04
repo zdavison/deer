@@ -1,0 +1,279 @@
+import { test, expect, describe } from "bun:test";
+import {
+  transition,
+  availableActions,
+  resolveKeypress,
+  ACTION_BINDINGS,
+  type AgentState,
+  type AgentEvent,
+  type AgentAction,
+  type AgentContext,
+} from "../src/state-machine";
+
+// ── Transition tests ─────────────────────────────────────────────────
+
+describe("transition", () => {
+  test("setup → running on SETUP_COMPLETE", () => {
+    expect(transition("setup", "SETUP_COMPLETE")).toBe("running");
+  });
+
+  test("setup → failed on ERROR", () => {
+    expect(transition("setup", "ERROR")).toBe("failed");
+  });
+
+  test("setup → cancelled on USER_KILL", () => {
+    expect(transition("setup", "USER_KILL")).toBe("cancelled");
+  });
+
+  test("running → teardown on TEARDOWN_START", () => {
+    expect(transition("running", "TEARDOWN_START")).toBe("teardown");
+  });
+
+  test("running → failed on ERROR", () => {
+    expect(transition("running", "ERROR")).toBe("failed");
+  });
+
+  test("running → cancelled on USER_KILL", () => {
+    expect(transition("running", "USER_KILL")).toBe("cancelled");
+  });
+
+  test("running → interrupted on SESSION_CLOSE", () => {
+    expect(transition("running", "SESSION_CLOSE")).toBe("interrupted");
+  });
+
+  test("teardown → completed on TEARDOWN_COMPLETE", () => {
+    expect(transition("teardown", "TEARDOWN_COMPLETE")).toBe("completed");
+  });
+
+  test("teardown → failed on ERROR", () => {
+    expect(transition("teardown", "ERROR")).toBe("failed");
+  });
+
+  test("interrupted → running on SETUP_COMPLETE", () => {
+    expect(transition("interrupted", "SETUP_COMPLETE")).toBe("running");
+  });
+
+  test("invalid transition returns null", () => {
+    expect(transition("completed", "SETUP_COMPLETE")).toBeNull();
+    expect(transition("failed", "TEARDOWN_COMPLETE")).toBeNull();
+    expect(transition("cancelled", "ERROR")).toBeNull();
+    expect(transition("setup", "TEARDOWN_COMPLETE")).toBeNull();
+    expect(transition("teardown", "USER_KILL")).toBeNull();
+  });
+
+  test("terminal states have no transitions", () => {
+    const terminalStates: AgentState[] = ["completed", "failed", "cancelled"];
+    const events: AgentEvent[] = [
+      "SETUP_COMPLETE", "TEARDOWN_START", "TEARDOWN_COMPLETE",
+      "ERROR", "USER_KILL", "SESSION_CLOSE",
+    ];
+    for (const state of terminalStates) {
+      for (const event of events) {
+        expect(transition(state, event)).toBeNull();
+      }
+    }
+  });
+});
+
+// ── Available actions tests ──────────────────────────────────────────
+
+describe("availableActions", () => {
+  const baseCtx = (overrides: Partial<AgentContext>): AgentContext => ({
+    status: "running",
+    hasPrUrl: false,
+    hasFinalBranch: false,
+    hasMeta: true,
+    prState: null,
+    ...overrides,
+  });
+
+  test("setup state has kill and toggle_logs", () => {
+    const actions = availableActions(baseCtx({ status: "setup" }));
+    expect(actions).toContain("kill");
+    expect(actions).toContain("toggle_logs");
+    expect(actions).not.toContain("attach");
+    expect(actions).not.toContain("open_pr");
+  });
+
+  test("running state has attach, shell, kill, toggle_logs", () => {
+    const actions = availableActions(baseCtx({ status: "running" }));
+    expect(actions).toContain("attach");
+    expect(actions).toContain("shell");
+    expect(actions).toContain("kill");
+    expect(actions).toContain("toggle_logs");
+  });
+
+  test("running state: shell requires hasMeta", () => {
+    const actions = availableActions(baseCtx({ status: "running", hasMeta: false }));
+    expect(actions).not.toContain("shell");
+  });
+
+  test("teardown state has only toggle_logs", () => {
+    const actions = availableActions(baseCtx({ status: "teardown" }));
+    expect(actions).toEqual(["toggle_logs"]);
+  });
+
+  test("completed state has open_pr, shell, continue_pr, delete, toggle_logs", () => {
+    const actions = availableActions(baseCtx({
+      status: "completed",
+      hasPrUrl: true,
+      hasFinalBranch: true,
+      hasMeta: true,
+    }));
+    expect(actions).toContain("open_pr");
+    expect(actions).toContain("shell");
+    expect(actions).toContain("continue_pr");
+    expect(actions).toContain("delete");
+    expect(actions).toContain("toggle_logs");
+  });
+
+  test("completed state: open_pr requires hasPrUrl", () => {
+    const actions = availableActions(baseCtx({
+      status: "completed",
+      hasPrUrl: false,
+      hasFinalBranch: true,
+    }));
+    expect(actions).not.toContain("open_pr");
+  });
+
+  test("completed state: continue_pr requires hasFinalBranch", () => {
+    const actions = availableActions(baseCtx({
+      status: "completed",
+      hasPrUrl: true,
+      hasFinalBranch: false,
+    }));
+    expect(actions).not.toContain("continue_pr");
+  });
+
+  test("completed state: delete blocked when prState is open", () => {
+    const actions = availableActions(baseCtx({
+      status: "completed",
+      hasPrUrl: true,
+      hasFinalBranch: true,
+      prState: "open",
+    }));
+    expect(actions).not.toContain("delete");
+  });
+
+  test("completed state: delete allowed when prState is merged", () => {
+    const actions = availableActions(baseCtx({
+      status: "completed",
+      hasPrUrl: true,
+      hasFinalBranch: true,
+      prState: "merged",
+    }));
+    expect(actions).toContain("delete");
+  });
+
+  test("completed state: shell requires hasMeta", () => {
+    const actions = availableActions(baseCtx({
+      status: "completed",
+      hasMeta: false,
+    }));
+    expect(actions).not.toContain("shell");
+  });
+
+  test("failed state has retry, shell, delete, toggle_logs", () => {
+    const actions = availableActions(baseCtx({
+      status: "failed",
+      hasMeta: true,
+    }));
+    expect(actions).toContain("retry");
+    expect(actions).toContain("shell");
+    expect(actions).toContain("delete");
+    expect(actions).toContain("toggle_logs");
+  });
+
+  test("retry is not available in non-failed states", () => {
+    for (const status of ["setup", "running", "teardown", "completed", "cancelled", "interrupted"] as const) {
+      const actions = availableActions(baseCtx({ status }));
+      expect(actions).not.toContain("retry");
+    }
+  });
+
+  test("cancelled state has shell, delete, toggle_logs", () => {
+    const actions = availableActions(baseCtx({
+      status: "cancelled",
+      hasMeta: true,
+    }));
+    expect(actions).toContain("shell");
+    expect(actions).toContain("delete");
+    expect(actions).toContain("toggle_logs");
+  });
+
+  test("interrupted state has delete, toggle_logs", () => {
+    const actions = availableActions(baseCtx({ status: "interrupted" }));
+    expect(actions).toContain("delete");
+    expect(actions).toContain("toggle_logs");
+    expect(actions).not.toContain("shell");
+    expect(actions).not.toContain("attach");
+  });
+});
+
+// ── resolveKeypress tests ────────────────────────────────────────────
+
+describe("resolveKeypress", () => {
+  test("resolves 'l' to toggle_logs when available", () => {
+    expect(resolveKeypress("l", {}, ["toggle_logs"])).toBe("toggle_logs");
+  });
+
+  test("resolves 'x' to kill when available", () => {
+    expect(resolveKeypress("x", {}, ["kill", "toggle_logs"])).toBe("kill");
+  });
+
+  test("resolves enter to attach when available", () => {
+    expect(resolveKeypress("", { return: true }, ["attach", "kill"])).toBe("attach");
+  });
+
+  test("resolves enter to open_pr when attach is not available but open_pr is", () => {
+    expect(resolveKeypress("", { return: true }, ["open_pr", "delete"])).toBe("open_pr");
+  });
+
+  test("resolves backspace to delete when available", () => {
+    expect(resolveKeypress("", { backspace: true }, ["delete", "toggle_logs"])).toBe("delete");
+  });
+
+  test("resolves delete key to delete when available", () => {
+    expect(resolveKeypress("", { delete: true }, ["delete", "toggle_logs"])).toBe("delete");
+  });
+
+  test("returns null for unavailable action", () => {
+    expect(resolveKeypress("x", {}, ["toggle_logs"])).toBeNull();
+  });
+
+  test("returns null for unbound key", () => {
+    expect(resolveKeypress("z", {}, ["kill", "toggle_logs"])).toBeNull();
+  });
+
+  test("resolves 's' to shell when available", () => {
+    expect(resolveKeypress("s", {}, ["shell", "kill"])).toBe("shell");
+  });
+
+  test("resolves 'c' to continue_pr when available", () => {
+    expect(resolveKeypress("c", {}, ["continue_pr", "delete"])).toBe("continue_pr");
+  });
+
+  test("resolves 'r' to retry when available", () => {
+    expect(resolveKeypress("r", {}, ["retry", "delete"])).toBe("retry");
+  });
+
+  test("does not resolve 'r' when retry is unavailable", () => {
+    expect(resolveKeypress("r", {}, ["delete", "toggle_logs"])).toBeNull();
+  });
+});
+
+// ── ACTION_BINDINGS tests ────────────────────────────────────────────
+
+describe("ACTION_BINDINGS", () => {
+  test("every action has a keyDisplay and label", () => {
+    const actions: AgentAction[] = [
+      "attach", "open_pr", "shell", "continue_pr", "kill", "delete", "toggle_logs", "retry",
+    ];
+    for (const action of actions) {
+      const binding = ACTION_BINDINGS[action];
+      expect(binding).toBeDefined();
+      expect(binding.keyDisplay).toBeTruthy();
+      expect(binding.label).toBeTruthy();
+    }
+  });
+});

@@ -2,15 +2,15 @@ import { Box, Text, useInput, useApp, useStdout } from "ink";
 import { TextInput, Spinner } from "@inkjs/ui";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { join } from "node:path";
-import { mkdir, access } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { generateTaskId, transcriptsDir, loadHistory, upsertHistory, removeFromHistory } from "./task";
 import type { PersistedTask } from "./task";
 import { loadConfig } from "./config";
 import type { DeerConfig } from "./config";
+import { transition, availableActions, resolveKeypress, ACTION_BINDINGS } from "./state-machine";
+import type { AgentState as AgentStatus } from "./state-machine";
 
 // ── Types ────────────────────────────────────────────────────────────
-
-type AgentStatus = "setup" | "running" | "teardown" | "completed" | "failed" | "cancelled" | "interrupted";
 
 interface SandboxMeta {
   sandboxName: string;
@@ -28,7 +28,8 @@ interface TeardownResult {
   prUrl: string;
 }
 
-interface AgentState {
+/** @internal Exported for testing */
+export interface AgentState {
   id: number;
   /** Persistent task ID (deer_xxx format) for history storage */
   taskId: string;
@@ -58,6 +59,8 @@ interface AgentState {
   userAttached: boolean;
   /** Agent is waiting for user input (e.g. AskUserQuestion tool) */
   needsAttention: boolean;
+  /** Claude Code session ID from the NDJSON stream (for --resume handoff) */
+  sessionId: string | null;
   /** Background tmux watcher is running for this agent */
   tmuxWatched: boolean;
   /** Human-readable conversation transcript (markdown blocks) */
@@ -83,7 +86,9 @@ const STATUS_DISPLAY: Record<AgentStatus, { icon: string; color: string }> = {
 const MAX_LOG_LINES = 200;
 const MAX_VISIBLE_LOGS = 5;
 const LOG_LINES_PER_ENTRY = 2;
-const ENTRY_ROWS = 1 + LOG_LINES_PER_ENTRY;
+/** Base rows per entry: title + log lines. Entries with a PR URL add 1 more row. */
+const ENTRY_ROWS_BASE = 1 + LOG_LINES_PER_ENTRY;
+const ENTRY_ROWS_WITH_PR = ENTRY_ROWS_BASE + 1;
 const MODEL = "sonnet";
 const PR_MERGE_CHECK_INTERVAL_MS = 60_000;
 
@@ -270,8 +275,11 @@ async function runPreflight(): Promise<PreflightResult> {
 
 // ── Agent Lifecycle ──────────────────────────────────────────────────
 
-async function setupAgent(cwd: string): Promise<SandboxMeta> {
-  const proc = Bun.spawn(["bash", join(SCRIPTS_DIR, "setup-sandbox.sh"), cwd, MODEL], {
+async function setupAgent(cwd: string, baseBranch?: string): Promise<SandboxMeta> {
+  const args = ["bash", join(SCRIPTS_DIR, "setup-sandbox.sh"), cwd, MODEL];
+  if (baseBranch) args.push(baseBranch);
+
+  const proc = Bun.spawn(args, {
     cwd,
     stdout: "pipe",
     stderr: "pipe",
@@ -356,15 +364,39 @@ async function buildMetadataPrompt(worktreePath: string, deerTmpDir: string): Pr
     }
   }
 
+  // Collect the diff so the metadata prompt is self-contained (no --continue needed)
+  const diffProc = Bun.spawn(["git", "-C", worktreePath, "diff", "HEAD"], {
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  let diff = await new Response(diffProc.stdout).text();
+  await diffProc.exited;
+
+  // If nothing is unstaged, get the diff against the parent commit instead
+  if (!diff.trim()) {
+    const logProc = Bun.spawn(["git", "-C", worktreePath, "diff", "HEAD~1..HEAD"], {
+      stdout: "pipe",
+      stderr: "ignore",
+    });
+    diff = await new Response(logProc.stdout).text();
+    await logProc.exited;
+  }
+
+  // Truncate very large diffs to avoid blowing up the context window
+  const MAX_DIFF_CHARS = 80_000;
+  if (diff.length > MAX_DIFF_CHARS) {
+    diff = diff.slice(0, MAX_DIFF_CHARS) + "\n\n... (diff truncated)";
+  }
+
   const prSection = prTemplate
     ? `A pull request description following this template:\n\n<pr-template>\n${prTemplate}\n</pr-template>`
     : `A pull request description with a summary of the changes.`;
 
   return [
-    "Your task is complete. Now write these three files:",
+    "Below is the git diff of changes made by an automated agent. Based on this diff, write these three files:",
     "",
     `1. \`${deerTmpDir}/.agent-branch-name\``,
-    "   A short kebab-case name for a git branch describing your changes.",
+    "   A short kebab-case name for a git branch describing the changes.",
     "   No prefix. Examples: fix-login-validation, add-user-avatar-upload",
     "",
     `2. \`${deerTmpDir}/.agent-commit-message\``,
@@ -375,12 +407,17 @@ async function buildMetadataPrompt(worktreePath: string, deerTmpDir: string): Pr
     `   ${prSection}`,
     "",
     "Write these three files now. Do nothing else.",
+    "",
+    "<diff>",
+    diff,
+    "</diff>",
   ].join("\n");
 }
 
 /**
- * Run a follow-up `claude -p --continue` to extract metadata (branch name,
- * commit message, PR body) after the main task finishes.
+ * Run a follow-up `claude -p` to extract metadata (branch name,
+ * commit message, PR body) after the main task finishes. The prompt
+ * includes the git diff so it's self-contained.
  *
  * Non-fatal — if this fails or times out, teardown has fallbacks.
  */
@@ -394,7 +431,7 @@ async function startClaudeMetadata(meta: SandboxMeta, agent: AgentState): Promis
     "env", "-u", "ANTHROPIC_API_KEY",
     `CLAUDE_CODE_OAUTH_TOKEN=${process.env.CLAUDE_CODE_OAUTH_TOKEN}`,
     "sh", "-c",
-    `cd ${meta.worktreePath} && cat ${meta.deerTmpDir}/.agent-metadata-prompt | claude -p --continue --output-format stream-json --verbose --dangerously-skip-permissions --model ${MODEL}`,
+    `cd ${meta.worktreePath} && cat ${meta.deerTmpDir}/.agent-metadata-prompt | claude -p --output-format stream-json --verbose --dangerously-skip-permissions --model ${MODEL}`,
   ], {
     stdout: "pipe",
     stderr: "pipe",
@@ -492,13 +529,13 @@ async function finalizeAgent(
   }
 
   // Teardown
-  agent.status = "teardown";
+  agent.status = transition(agent.status, "TEARDOWN_START") ?? agent.status;
   agent.lastActivity = "Committing and creating PR...";
   setAgents((prev) => [...prev]);
 
   try {
     agent.result = await teardownAgent(agent.meta, cwd);
-    agent.status = "completed";
+    agent.status = transition(agent.status, "TEARDOWN_COMPLETE") ?? agent.status;
 
     if (agent.result.prUrl) {
       agent.lastActivity = "PR ready";
@@ -509,7 +546,7 @@ async function finalizeAgent(
       agent.lastActivity = "No changes";
     }
   } catch (err) {
-    agent.status = "failed";
+    agent.status = transition(agent.status, "ERROR") ?? "failed";
     agent.error = err instanceof Error ? err.message : String(err);
     agent.lastActivity = truncate(agent.error, 120);
   } finally {
@@ -541,12 +578,18 @@ async function checkPrState(prUrl: string): Promise<"open" | "merged" | "closed"
 
 // ── NDJSON Parser ────────────────────────────────────────────────────
 
-function parseNdjsonLine(line: string, agent: AgentState): boolean {
+/** @internal Exported for testing */
+export function parseNdjsonLine(line: string, agent: AgentState): boolean {
   if (!line.trim()) return false;
   let changed = false;
 
   try {
     const event = JSON.parse(line);
+
+    // Capture session_id from the first event that carries one
+    if (!agent.sessionId && event.session_id) {
+      agent.sessionId = event.session_id;
+    }
 
     // Assistant text content
     if (event.type === "assistant" && event.message?.content) {
@@ -611,6 +654,7 @@ async function saveToHistory(agent: AgentState, repoPath: string): Promise<void>
     completedAt: new Date().toISOString(),
     elapsed: agent.elapsed,
     prUrl: agent.result?.prUrl ?? null,
+    finalBranch: agent.result?.finalBranch ?? null,
     error: agent.error || null,
     transcriptPath: agent.transcriptPath,
     lastActivity: agent.lastActivity,
@@ -631,13 +675,14 @@ function historicalAgent(task: PersistedTask, id: number): AgentState {
     currentTool: "",
     logs: [],
     meta: null,
-    result: task.prUrl ? { finalBranch: "", prUrl: task.prUrl } : null,
+    result: task.prUrl ? { finalBranch: task.finalBranch ?? "", prUrl: task.prUrl } : null,
     error: task.error || "",
     proc: null,
     timer: null,
     prState: null,
     userAttached: false,
     needsAttention: false,
+    sessionId: null,
     tmuxWatched: false,
     transcript: [],
     transcriptPath: task.transcriptPath,
@@ -664,6 +709,8 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   const [historyIdx, setHistoryIdx] = useState(-1);
   const [inputDefault, setInputDefault] = useState("");
   const [inputKey, setInputKey] = useState(0);
+  /** When set, the next prompt submission spawns an agent off this branch instead of the current branch. */
+  const [continueBranch, setContinueBranch] = useState<string | null>(null);
 
   const nextId = useRef(1);
   const agentsRef = useRef(agents);
@@ -768,7 +815,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
 
   // ── Spawn agent ──────────────────────────────────────────────────
 
-  const spawnAgent = useCallback(async (prompt: string) => {
+  const spawnAgent = useCallback(async (prompt: string, baseBranch?: string) => {
     if (!prompt.trim()) return;
     if (preflight && !preflight.ok) return;
 
@@ -790,6 +837,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
       prState: null,
       userAttached: false,
       needsAttention: false,
+      sessionId: null,
       tmuxWatched: false,
       transcript: [],
       transcriptPath: null,
@@ -814,6 +862,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
       completedAt: null,
       elapsed: 0,
       prUrl: null,
+      finalBranch: null,
       error: null,
       transcriptPath: null,
       lastActivity: "",
@@ -821,14 +870,14 @@ export default function Dashboard({ cwd }: { cwd: string }) {
 
     try {
       // Phase 1: Setup
-      agent.meta = await setupAgent(cwd);
+      agent.meta = await setupAgent(cwd, baseBranch);
 
       // Phase 1.5: Lock down network — deny all, allow only the configured list.
       // Applied after setup (tmux/apt installs are done) but before the agent runs.
       const allowlist = configRef.current?.network.allowlist ?? [];
       await applyNetworkPolicy(agent.meta.sandboxName, allowlist);
 
-      agent.status = "running";
+      agent.status = transition(agent.status, "SETUP_COMPLETE") ?? agent.status;
       setAgents((prev) => [...prev]);
 
       // Phase 2: Run Claude
@@ -893,7 +942,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
       await finalizeAgent(agent, cwd, setAgents);
     } catch (err) {
       if (agent.status !== "cancelled" && !agent.userAttached) {
-        agent.status = "failed";
+        agent.status = transition(agent.status, "ERROR") ?? "failed";
         agent.error = err instanceof Error ? err.message : String(err);
         agent.lastActivity = truncate(agent.error, 120);
         await saveToHistory(agent, cwd);
@@ -913,7 +962,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
 
   const killAgent = useCallback((agent: AgentState) => {
     if (!isActive(agent)) return;
-    agent.status = "cancelled";
+    agent.status = transition(agent.status, "USER_KILL") ?? "cancelled";
     agent.lastActivity = "Cancelled by user";
     cleanupAgent(agent, cwd);
     saveToHistory(agent, cwd);
@@ -933,22 +982,22 @@ export default function Dashboard({ cwd }: { cwd: string }) {
 
     const tmuxScript = [
       `export PATH="$PATH:/usr/bin:/usr/local/bin:/bin"`,
-      `if command -v tmux >/dev/null 2>&1; then`,
-      `  if ! tmux has-session -t deer-shell 2>/dev/null; then`,
-      `    tmux new-session -d -s deer-shell -c ${agent.meta.worktreePath}`,
-      `  fi`,
-      `  tmux set -t deer-shell status on`,
-      `  tmux set -t deer-shell status-position bottom`,
-      `  tmux set -t deer-shell status-style 'bg=#1e1e2e,fg=#6c7086'`,
-      `  tmux set -t deer-shell status-left ' 🦌 Ctrl+b d → detach (return to deer) '`,
-      `  tmux set -t deer-shell status-left-length 50`,
-      `  tmux set -t deer-shell status-right ''`,
-      `  tmux set -t deer-shell focus-events off`,
-      `  tmux attach -t deer-shell`,
-      `else`,
-      `  echo "Note: tmux not available — no background detach (exit shell to return)"`,
-      `  cd ${agent.meta.worktreePath} && exec sh`,
+      `export TERM=xterm-256color`,
+      `if ! command -v tmux >/dev/null 2>&1; then`,
+      `  echo "ERROR: tmux is not installed in the sandbox. Shell requires tmux." >&2`,
+      `  exit 1`,
       `fi`,
+      `if ! tmux has-session -t deer-shell 2>/dev/null; then`,
+      `  tmux new-session -d -s deer-shell -c ${agent.meta.worktreePath}`,
+      `fi`,
+      `tmux set -t deer-shell status on`,
+      `tmux set -t deer-shell status-position bottom`,
+      `tmux set -t deer-shell status-style 'bg=#313244,fg=#cdd6f4'`,
+      `tmux set -t deer-shell status-left ' 🦌 deer | Ctrl+b d = detach (return to deer) '`,
+      `tmux set -t deer-shell status-left-length 50`,
+      `tmux set -t deer-shell status-right ''`,
+      `tmux set -t deer-shell focus-events off`,
+      `tmux attach -t deer-shell`,
     ].join("\n");
 
     const proc = Bun.spawn([
@@ -989,39 +1038,14 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     setSuspended(false);
   }, []);
 
-  // ── Continue Q&A conversation interactively ──────────────────────
+  // ── Continue: focus input to spawn a new agent off a PR branch ───
 
-  const continueConversation = useCallback(async (agent: AgentState) => {
-    let dir = cwd;
-    if (agent.meta?.worktreePath) {
-      try {
-        await access(agent.meta.worktreePath);
-        dir = agent.meta.worktreePath;
-      } catch {
-        // Worktree was removed during teardown — fall back to main repo dir
-      }
-    }
-
-    setSuspended(true);
-
-    // Leave alternate screen and release raw mode
-    process.stdout.write("\x1b[?1049l");
-    if (process.stdin.setRawMode) process.stdin.setRawMode(false);
-
-    const proc = Bun.spawn(["claude"], {
-      cwd: dir,
-      stdin: "inherit",
-      stdout: "inherit",
-      stderr: "inherit",
-    });
-    await proc.exited;
-
-    // Restore alternate screen and raw mode
-    if (process.stdin.setRawMode) process.stdin.setRawMode(true);
-    process.stdout.write("\x1b[?1049h\x1b[2J\x1b[H");
-
-    setSuspended(false);
-  }, [cwd]);
+  const continuePr = useCallback((agent: AgentState) => {
+    if (!agent.result?.finalBranch) return;
+    setContinueBranch(agent.result.finalBranch);
+    setInputFocused(true);
+    setInputKey((k) => k + 1);
+  }, []);
 
   // ── Attach to running agent (interactive Claude session) ────────
 
@@ -1044,25 +1068,29 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     process.stdout.write("\x1b[?1049l");
     if (process.stdin.setRawMode) process.stdin.setRawMode(false);
 
+    const resumeFlag = agent.sessionId
+      ? `--resume ${agent.sessionId}`
+      : "--continue";
+
     const tmuxScript = [
       `export PATH="$PATH:/usr/bin:/usr/local/bin:/bin"`,
-      `if command -v tmux >/dev/null 2>&1; then`,
-      `  if ! tmux has-session -t deer 2>/dev/null; then`,
-      `    tmux new-session -d -s deer`,
-      `    tmux send-keys -t deer "export CLAUDE_CODE_OAUTH_TOKEN='$CLAUDE_CODE_OAUTH_TOKEN' && cd ${agent.meta.worktreePath} && claude --continue --dangerously-skip-permissions --model ${MODEL}" Enter`,
-      `  fi`,
-      `  tmux set -t deer status on`,
-      `  tmux set -t deer status-position bottom`,
-      `  tmux set -t deer status-style 'bg=#1e1e2e,fg=#6c7086'`,
-      `  tmux set -t deer status-left ' 🦌 Ctrl+b d → detach (return to deer) | Ctrl+b [ → scroll (q exits) '`,
-      `  tmux set -t deer status-left-length 80`,
-      `  tmux set -t deer status-right ''`,
-      `  tmux set -t deer focus-events off`,
-      `  tmux attach -t deer`,
-      `else`,
-      `  echo "Note: tmux not available — attached directly (Ctrl+C to exit, agent will finalize)"`,
-      `  cd ${agent.meta.worktreePath} && claude --continue --dangerously-skip-permissions --model ${MODEL}`,
+      `export TERM=xterm-256color`,
+      `if ! command -v tmux >/dev/null 2>&1; then`,
+      `  echo "ERROR: tmux is not installed in the sandbox. Attach requires tmux." >&2`,
+      `  exit 1`,
       `fi`,
+      `if ! tmux has-session -t deer 2>/dev/null; then`,
+      `  tmux new-session -d -s deer`,
+      `  tmux send-keys -t deer "export CLAUDE_CODE_OAUTH_TOKEN='$CLAUDE_CODE_OAUTH_TOKEN' && cd ${agent.meta.worktreePath} && claude ${resumeFlag} --dangerously-skip-permissions --model ${MODEL}" Enter`,
+      `fi`,
+      `tmux set -t deer status on`,
+      `tmux set -t deer status-position bottom`,
+      `tmux set -t deer status-style 'bg=#313244,fg=#cdd6f4'`,
+      `tmux set -t deer status-left ' 🦌 deer | Ctrl+b d = detach (return to deer) | Ctrl+b [ = scroll (q exits) '`,
+      `tmux set -t deer status-left-length 80`,
+      `tmux set -t deer status-right ''`,
+      `tmux set -t deer focus-events off`,
+      `tmux attach -t deer`,
     ].join("\n");
 
     const attachProc = Bun.spawn([
@@ -1169,8 +1197,15 @@ export default function Dashboard({ cwd }: { cwd: string }) {
       }
     }
 
+    // Escape cancels continue-branch mode
+    if (key.escape && continueBranch) {
+      setContinueBranch(null);
+      return;
+    }
+
     // Tab to toggle focus
     if (key.tab) {
+      if (continueBranch && inputFocused) setContinueBranch(null);
       setInputFocused((prev) => !prev);
       return;
     }
@@ -1183,40 +1218,47 @@ export default function Dashboard({ cwd }: { cwd: string }) {
       if (input === "k" || key.upArrow) {
         setSelectedIdx((prev) => Math.max(prev - 1, 0));
       }
-      if (key.return) {
-        const agent = visible[clampedIdx];
-        if (agent?.status === "running") {
-          // Attach to running agent — opens interactive Claude session
-          attachToAgent(agent);
-        } else if (agent?.result?.prUrl) {
-          // Open completed PR in browser
-          openUrl(agent.result.prUrl);
-        } else if (agent?.transcriptPath) {
-          // Continue conversation interactively
-          continueConversation(agent);
-        }
-      }
-      if (input === "s") {
-        const agent = visible[clampedIdx];
-        if (agent?.meta) shellIntoAgent(agent);
-      }
-      if (input === "c") {
-        const agent = visible[clampedIdx];
-        if (agent && !isActive(agent)) continueConversation(agent);
-      }
-      if (input === "x") {
-        const agent = visible[clampedIdx];
-        if (agent) killAgent(agent);
-      }
-      if (input === "l") {
-        setLogExpanded((prev) => !prev);
-      }
-      if (key.backspace || key.delete) {
-        const agent = visible[clampedIdx];
-        if (agent && !isActive(agent)) {
-          setAgents((prev) => prev.filter((a) => a !== agent));
-          setSelectedIdx((prev) => Math.min(prev, Math.max(visible.length - 2, 0)));
-          removeFromHistory(cwd, agent.taskId);
+
+      // Resolve agent-specific actions via state machine
+      const agent = visible[clampedIdx];
+      if (agent) {
+        const ctx = {
+          status: agent.status,
+          hasPrUrl: !!agent.result?.prUrl,
+          hasFinalBranch: !!agent.result?.finalBranch,
+          hasMeta: !!agent.meta,
+          prState: agent.prState,
+        };
+        const actions = availableActions(ctx);
+        const action = resolveKeypress(input, key, actions);
+
+        switch (action) {
+          case "attach":
+            attachToAgent(agent);
+            break;
+          case "open_pr":
+            if (agent.result?.prUrl) openUrl(agent.result.prUrl);
+            break;
+          case "shell":
+            shellIntoAgent(agent);
+            break;
+          case "continue_pr":
+            continuePr(agent);
+            break;
+          case "kill":
+            killAgent(agent);
+            break;
+          case "delete":
+            setAgents((prev) => prev.filter((a) => a !== agent));
+            setSelectedIdx((prev) => Math.min(prev, Math.max(visible.length - 2, 0)));
+            removeFromHistory(cwd, agent.taskId);
+            break;
+          case "toggle_logs":
+            setLogExpanded((prev) => !prev);
+            break;
+          case "retry":
+            spawnAgent(agent.prompt);
+            break;
         }
       }
     }
@@ -1238,7 +1280,10 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   const chromeHeight = 5; // header + top divider + bottom divider + input + footer
   const detailHeight = logExpanded && selected ? Math.min(MAX_VISIBLE_LOGS + 1, 6) : 0;
   const listHeight = Math.max(termHeight - chromeHeight - detailHeight, 3);
-  const maxVisibleEntries = Math.max(Math.floor(listHeight / ENTRY_ROWS), 1);
+  // Use the larger row size to ensure we don't overflow the list area
+  const hasPrEntries = visibleAgents.some((a) => a.result?.prUrl);
+  const entryRows = hasPrEntries ? ENTRY_ROWS_WITH_PR : ENTRY_ROWS_BASE;
+  const maxVisibleEntries = Math.max(Math.floor(listHeight / entryRows), 1);
 
   // Row fixed overhead: paddingX(2) + pointer(1) + icon(1) + time(5) + gaps(4) = 13
   // +3 for PR badge (emoji 2-wide + gap 1) when present
@@ -1312,6 +1357,18 @@ export default function Dashboard({ cwd }: { cwd: string }) {
                   {prBadge && <Text>{prBadge.icon}</Text>}
                   <Text dimColor>{formatTime(agent.elapsed)}</Text>
                 </Box>
+                {/* PR link line */}
+                {agent.result?.prUrl && (
+                  <Box paddingLeft={3}>
+                    <Text
+                      dimColor={!isSelected}
+                      color={agent.prState === "merged" ? "magenta" : agent.prState === "closed" ? "red" : "green"}
+                      wrap="truncate"
+                    >
+                      {truncate(agent.result.prUrl, logWidth)}
+                    </Text>
+                  </Box>
+                )}
                 {/* Log lines */}
                 {recentLogs.map((line, j) => (
                   <Box key={j} paddingLeft={3}>
@@ -1361,7 +1418,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
         {inputFocused ? (
           <TextInput
             key={inputKey}
-            placeholder={preflightOk ? "type prompt and press enter to launch agent" : "preflight checks failed"}
+            placeholder={!preflightOk ? "preflight checks failed" : continueBranch ? `prompt for ${continueBranch} (Esc to cancel)` : "type prompt and press enter to launch agent"}
             isDisabled={!preflightOk}
             defaultValue={inputDefault}
             onSubmit={(value) => {
@@ -1370,7 +1427,9 @@ export default function Dashboard({ cwd }: { cwd: string }) {
                 setHistoryIdx(-1);
                 setInputDefault("");
                 setInputKey((k) => k + 1);
-                spawnAgent(value);
+                const branch = continueBranch;
+                setContinueBranch(null);
+                spawnAgent(value, branch ?? undefined);
               }
             }}
           />
@@ -1389,15 +1448,22 @@ export default function Dashboard({ cwd }: { cwd: string }) {
         ) : (
           <>
             <Text dimColor>Tab focus</Text>
-            {visibleAgents.length > 0 && <Text dimColor>j/k nav</Text>}
-            {selected && (selected.status === "running" || selected.result?.prUrl || selected.transcriptPath) && (
-              <Text dimColor>⏎ {selected.status === "running" ? "attach" : selected.result?.prUrl ? "open PR" : "open"}</Text>
+            {inputFocused ? null : (
+              <>
+                <Text dimColor>j/k nav</Text>
+                {selected && availableActions({
+                  status: selected.status,
+                  hasPrUrl: !!selected.result?.prUrl,
+                  hasFinalBranch: !!selected.result?.finalBranch,
+                  hasMeta: !!selected.meta,
+                  prState: selected.prState,
+                }).map((action) => (
+                  <Text key={action} dimColor>
+                    {ACTION_BINDINGS[action].keyDisplay} {ACTION_BINDINGS[action].label}
+                  </Text>
+                ))}
+              </>
             )}
-            {selected && !isActive(selected) && <Text dimColor>c continue</Text>}
-            {selected?.meta && <Text dimColor>s shell</Text>}
-            {selected && <Text dimColor>x kill</Text>}
-            {selected && !isActive(selected) && <Text dimColor>⌫ delete</Text>}
-            <Text dimColor>l logs</Text>
             <Text dimColor>q quit</Text>
           </>
         )}

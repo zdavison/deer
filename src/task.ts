@@ -82,6 +82,8 @@ export interface PersistedTask {
   elapsed: number;
   /** @example "https://github.com/org/repo/pull/42" */
   prUrl: string | null;
+  /** @example "deer/fix-login-bug" */
+  finalBranch: string | null;
   error: string | null;
   /** Path to persisted Q&A transcript markdown file */
   transcriptPath: string | null;
