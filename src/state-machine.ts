@@ -26,6 +26,7 @@ export type AgentAction =
   | "attach"
   | "create_pr"
   | "open_pr"
+  | "update_pr"
   | "kill"
   | "delete"
   | "toggle_logs"
@@ -71,7 +72,7 @@ const ACTIONS_BY_STATE: Record<AgentState, AgentAction[]> = {
   setup:       ["kill", "delete", "toggle_logs"],
   running:     ["attach", "kill", "delete", "toggle_logs"],
   teardown:    ["delete", "toggle_logs"],
-  completed:   ["attach", "create_pr", "open_pr", "delete", "toggle_logs"],
+  completed:   ["attach", "create_pr", "open_pr", "update_pr", "delete", "toggle_logs"],
   failed:      ["retry", "delete", "toggle_logs"],
   cancelled:   ["delete", "toggle_logs"],
   interrupted: ["delete", "toggle_logs"],
@@ -83,6 +84,7 @@ export const ACTION_BINDINGS: Record<AgentAction, ActionBinding> = {
   attach:       { keyDisplay: "⏎", label: "attach" },
   create_pr:    { keyDisplay: "p", label: "create PR" },
   open_pr:      { keyDisplay: "p", label: "open PR" },
+  update_pr:    { keyDisplay: "u", label: "update PR" },
   kill:         { keyDisplay: "x", label: "kill" },
   delete:       { keyDisplay: "⌫", label: "delete" },
   toggle_logs:  { keyDisplay: "l", label: "logs" },
@@ -98,9 +100,9 @@ export const ACTION_BINDINGS: Record<AgentAction, ActionBinding> = {
  */
 export function availableActions(ctx: AgentContext): AgentAction[] {
   const base = [...ACTIONS_BY_STATE[ctx.status]];
-  // Idle agents can create PRs (Claude is alive but waiting for input)
+  // Idle agents can create or update PRs (Claude is alive but waiting for input)
   if (ctx.isIdle && !base.includes("create_pr")) {
-    base.push("create_pr", "open_pr");
+    base.push("create_pr", "open_pr", "update_pr");
   }
   return base.filter((action) => {
     switch (action) {
@@ -109,6 +111,8 @@ export function availableActions(ctx: AgentContext): AgentAction[] {
       case "create_pr":
         return ctx.hasFinalBranch && !ctx.hasPrUrl;
       case "open_pr":
+        return ctx.hasPrUrl;
+      case "update_pr":
         return ctx.hasPrUrl;
       case "delete":
         return true;
@@ -159,6 +163,7 @@ export function resolveKeypress(
     x: "kill",
     l: "toggle_logs",
     r: "retry",
+    u: "update_pr",
   };
 
   const action = charMap[input];

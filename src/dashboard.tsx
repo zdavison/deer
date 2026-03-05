@@ -7,7 +7,7 @@ import { loadConfig } from "./config";
 import type { DeerConfig } from "./config";
 import { transition, availableActions, resolveKeypress, ACTION_BINDINGS } from "./state-machine";
 import type { AgentState as AgentStatus } from "./state-machine";
-import { startAgent, destroyAgent, deleteTask, createAgentPR } from "./agent";
+import { startAgent, destroyAgent, deleteTask, createAgentPR, updateAgentPR } from "./agent";
 import { isTmuxSessionDead, captureTmuxPane } from "./sandbox/index";
 import { resolveRuntime } from "./sandbox/resolve";
 import { detectRepo } from "./git/worktree";
@@ -757,6 +757,31 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   }, [cwd]);
 
 
+  const updatePr = useCallback(async (agent: AgentState) => {
+    if (!agent.handle || !agent.result?.prUrl) return;
+
+    agent.creatingPr = true;
+    agent.lastActivity = "Updating PR...";
+    setAgents((prev) => [...prev]);
+
+    try {
+      await updateAgentPR(
+        agent.handle,
+        cwd,
+        agent.baseBranch,
+        agent.prompt,
+        agent.result.prUrl,
+      );
+      agent.lastActivity = "PR updated";
+    } catch (err) {
+      agent.lastActivity = `PR update failed: ${err instanceof Error ? err.message : String(err)}`;
+    } finally {
+      agent.creatingPr = false;
+    }
+    await saveToHistory(agent, cwd);
+    setAgents((prev) => [...prev]);
+  }, [cwd]);
+
   // ── Keyboard input ────────────────────────────────────────────────
 
   useInput((input, key) => {
@@ -895,6 +920,9 @@ export default function Dashboard({ cwd }: { cwd: string }) {
             break;
           case "create_pr":
             createPr(agent);
+            break;
+          case "update_pr":
+            updatePr(agent);
             break;
           case "open_pr":
             if (agent.result?.prUrl) openUrl(agent.result.prUrl);

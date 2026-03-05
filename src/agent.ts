@@ -7,7 +7,7 @@
 
 import { join, resolve } from "node:path";
 import { createWorktree, removeWorktree } from "./git/worktree";
-import { createPullRequest, cleanupWorktree } from "./git/finalize";
+import { createPullRequest, updatePullRequest, cleanupWorktree } from "./git/finalize";
 import type { CreatePRResult } from "./git/finalize";
 import { launchSandbox, isTmuxSessionDead, captureTmuxPane } from "./sandbox/index";
 import type { SandboxSession, SandboxRuntime } from "./sandbox/index";
@@ -218,6 +218,26 @@ export async function createAgentPR(
     branch: handle.branch,
     baseBranch,
     prompt,
+  });
+}
+
+/**
+ * Push new commits and update the title/body of an existing PR.
+ */
+export async function updateAgentPR(
+  handle: AgentHandle,
+  repoPath: string,
+  baseBranch: string,
+  prompt: string,
+  prUrl: string,
+): Promise<void> {
+  return updatePullRequest({
+    repoPath,
+    worktreePath: handle.worktreePath,
+    finalBranch: handle.branch,
+    baseBranch,
+    prompt,
+    prUrl,
   });
 }
 

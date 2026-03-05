@@ -292,12 +292,61 @@ describe("resolveKeypress", () => {
   });
 });
 
+// ── update_pr action tests ────────────────────────────────────────────
+
+describe("update_pr action", () => {
+  const baseCtx = (overrides: Partial<AgentContext>): AgentContext => ({
+    status: "completed",
+    hasPrUrl: true,
+    hasFinalBranch: true,
+    hasHandle: true,
+    isIdle: false,
+    prState: "open",
+    ...overrides,
+  });
+
+  test("update_pr available in completed state when PR exists", () => {
+    const actions = availableActions(baseCtx({ hasPrUrl: true }));
+    expect(actions).toContain("update_pr");
+  });
+
+  test("update_pr not available in completed state when no PR", () => {
+    const actions = availableActions(baseCtx({ hasPrUrl: false }));
+    expect(actions).not.toContain("update_pr");
+  });
+
+  test("update_pr available in idle running state when PR exists", () => {
+    const actions = availableActions(baseCtx({ status: "running", isIdle: true, hasPrUrl: true }));
+    expect(actions).toContain("update_pr");
+  });
+
+  test("update_pr not available in idle running state when no PR", () => {
+    const actions = availableActions(baseCtx({ status: "running", isIdle: true, hasPrUrl: false }));
+    expect(actions).not.toContain("update_pr");
+  });
+
+  test("update_pr not available in non-terminal non-idle states", () => {
+    for (const status of ["setup", "teardown", "cancelled", "interrupted"] as const) {
+      const actions = availableActions(baseCtx({ status, hasPrUrl: true }));
+      expect(actions).not.toContain("update_pr");
+    }
+  });
+
+  test("'u' key resolves to update_pr when available", () => {
+    expect(resolveKeypress("u", {}, ["update_pr", "open_pr", "delete"])).toBe("update_pr");
+  });
+
+  test("'u' key returns null when update_pr is not available", () => {
+    expect(resolveKeypress("u", {}, ["open_pr", "delete"])).toBeNull();
+  });
+});
+
 // ── ACTION_BINDINGS tests ────────────────────────────────────────────
 
 describe("ACTION_BINDINGS", () => {
   test("every action has a keyDisplay and label", () => {
     const actions: AgentAction[] = [
-      "attach", "create_pr", "open_pr", "kill", "delete", "toggle_logs", "retry",
+      "attach", "create_pr", "open_pr", "update_pr", "kill", "delete", "toggle_logs", "retry",
     ];
     for (const action of actions) {
       const binding = ACTION_BINDINGS[action];
