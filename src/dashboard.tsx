@@ -205,7 +205,7 @@ async function checkPrState(prUrl: string): Promise<"open" | "merged" | "closed"
 
 // ── Prompt Input ─────────────────────────────────────────────────────
 
-/** Text input that supports Shift+Enter to insert newlines and Enter to submit. */
+/** Text input that supports Shift+Enter or /↵ to insert newlines and Enter to submit. */
 function PromptInput({
   defaultValue = "",
   placeholder = "",
@@ -276,7 +276,19 @@ function PromptInput({
           setValue(newValue);
           setCursorOffset(newCursor);
         } else {
-          onSubmit?.(valueRef.current);
+          // If the character immediately before the cursor is '/', replace it
+          // with a newline instead of submitting (like Claude Code's \ continuation).
+          const cur = cursorOffsetRef.current;
+          const val = valueRef.current;
+          if (cur > 0 && val[cur - 1] === "/") {
+            const newValue = val.slice(0, cur - 1) + "\n" + val.slice(cur);
+            valueRef.current = newValue;
+            cursorOffsetRef.current = cur;
+            setValue(newValue);
+            setCursorOffset(cur);
+          } else {
+            onSubmit?.(valueRef.current);
+          }
         }
         return;
       }
@@ -1090,7 +1102,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
             {inputFocused ? (
               <PromptInput
                 key={inputKey}
-                placeholder={!preflightOk ? "preflight checks failed" : "type prompt and press Enter to launch agent (Shift+Enter for newline)"}
+                placeholder={!preflightOk ? "preflight checks failed" : "type prompt and press Enter to launch agent (Shift+Enter or /↵ for newline)"}
                 isDisabled={!preflightOk}
                 defaultValue={inputDefault}
                 onSubmit={(value) => {
