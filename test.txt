@@ -1,0 +1,1 @@
+Claude is an AI assistant made by Anthropic. It is designed to be helpful, harmless, and honest. Claude can assist with a wide range of tasks including writing, analysis, coding, math, research, and conversation. It is built on large language model technology and is available through Anthropic's API and various products.
