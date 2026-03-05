@@ -1,6 +1,6 @@
 import { Box, Text, useInput, useApp, useStdout } from "ink";
-import { TextInput, Spinner } from "@inkjs/ui";
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import { Spinner } from "@inkjs/ui";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { generateTaskId, transcriptsDir, loadHistory, upsertHistory, removeFromHistory } from "./task";
@@ -859,6 +859,98 @@ function historicalAgent(task: PersistedTask, id: number): AgentState {
   });
 }
 
+// ── Prompt Input ─────────────────────────────────────────────────────
+
+/** Text input that supports Shift+Enter to insert newlines and Enter to submit. */
+function PromptInput({
+  defaultValue = "",
+  placeholder = "",
+  isDisabled = false,
+  onSubmit,
+}: {
+  defaultValue?: string;
+  placeholder?: string;
+  isDisabled?: boolean;
+  onSubmit?: (value: string) => void;
+}) {
+  const [value, setValue] = useState(defaultValue);
+  const [cursorOffset, setCursorOffset] = useState(defaultValue.length);
+
+  useInput(
+    (input, key) => {
+      if (
+        key.upArrow ||
+        key.downArrow ||
+        (key.ctrl && input === "c") ||
+        key.tab ||
+        (key.shift && key.tab)
+      ) {
+        return;
+      }
+
+      if (key.return) {
+        if (key.shift) {
+          const newValue = value.slice(0, cursorOffset) + "\n" + value.slice(cursorOffset);
+          setValue(newValue);
+          setCursorOffset((prev) => prev + 1);
+        } else {
+          onSubmit?.(value);
+        }
+        return;
+      }
+
+      if (key.leftArrow) {
+        setCursorOffset((prev) => Math.max(0, prev - 1));
+      } else if (key.rightArrow) {
+        setCursorOffset((prev) => Math.min(value.length, prev + 1));
+      } else if (key.backspace || key.delete) {
+        if (cursorOffset > 0) {
+          const newValue = value.slice(0, cursorOffset - 1) + value.slice(cursorOffset);
+          setValue(newValue);
+          setCursorOffset((prev) => prev - 1);
+        }
+      } else if (input) {
+        const newValue = value.slice(0, cursorOffset) + input + value.slice(cursorOffset);
+        setValue(newValue);
+        setCursorOffset((prev) => prev + 1);
+      }
+    },
+    { isActive: !isDisabled },
+  );
+
+  const parts = useMemo(() => {
+    if (isDisabled) {
+      return [<Text key="val" dimColor>{placeholder}</Text>];
+    }
+    if (value.length === 0) {
+      if (!placeholder) {
+        return [<Text key="cursor" inverse> </Text>];
+      }
+      return [
+        <Text key="cursor" inverse>{placeholder[0]}</Text>,
+        <Text key="rest" dimColor>{placeholder.slice(1)}</Text>,
+      ];
+    }
+    const result: React.ReactNode[] = [];
+    let i = 0;
+    for (const char of value) {
+      const displayChar = char === "\n" ? "↵" : char;
+      if (i === cursorOffset) {
+        result.push(<Text key={i} inverse>{displayChar}</Text>);
+      } else {
+        result.push(displayChar);
+      }
+      i++;
+    }
+    if (cursorOffset === value.length) {
+      result.push(<Text key="end-cursor" inverse> </Text>);
+    }
+    return result;
+  }, [value, cursorOffset, placeholder, isDisabled]);
+
+  return <Text>{parts}</Text>;
+}
+
 // ── Main Component ───────────────────────────────────────────────────
 
 export default function Dashboard({ cwd }: { cwd: string }) {
@@ -1507,9 +1599,9 @@ export default function Dashboard({ cwd }: { cwd: string }) {
       <Box paddingX={1} gap={1}>
         <Text dimColor>{">"}</Text>
         {inputFocused ? (
-          <TextInput
+          <PromptInput
             key={inputKey}
-            placeholder={!preflightOk ? "preflight checks failed" : continueBranch ? `prompt for ${continueBranch} (Esc to cancel)` : "type prompt and press enter to launch agent"}
+            placeholder={!preflightOk ? "preflight checks failed" : continueBranch ? `prompt for ${continueBranch} (Esc to cancel)` : "type prompt and press Enter to launch agent (Shift+Enter for newline)"}
             isDisabled={!preflightOk}
             defaultValue={inputDefault}
             onSubmit={(value) => {
