@@ -27,8 +27,6 @@ export interface ConfigAlert {
 export interface ClaudeConfigGuard {
   /** Current unacknowledged alerts */
   alerts: ConfigAlert[];
-  /** Dismiss all current alerts */
-  acknowledge(): void;
   /** Stop watching */
   stop(): void;
 }
@@ -314,9 +312,6 @@ export async function startClaudeConfigGuard(
 
   return {
     alerts,
-    acknowledge() {
-      alerts.length = 0;
-    },
     stop() {
       stopped = true;
       if (debounceTimer) clearTimeout(debounceTimer);

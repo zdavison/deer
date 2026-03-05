@@ -126,9 +126,6 @@ ${truncatedDiff}`;
 export async function createPullRequest(options: CreatePROptions): Promise<CreatePRResult> {
   const { repoPath, worktreePath, branch, baseBranch, prompt } = options;
 
-  // Remove deer internal files before staging
-  await Bun.$`rm -rf ${worktreePath}/.deer-claude-config ${worktreePath}/.deer-prompt`.quiet().nothrow();
-
   // Stage and commit any uncommitted changes
   await Bun.$`git -C ${worktreePath} add -A`.quiet();
   const status = await Bun.$`git -C ${worktreePath} status --porcelain`.quiet();

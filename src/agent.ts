@@ -131,10 +131,6 @@ export async function startAgent(options: AgentRunOptions): Promise<AgentHandle>
   await Bun.$`git -C ${worktree.worktreePath} config user.name "deer-agent"`.quiet();
   await Bun.$`git -C ${worktree.worktreePath} config user.email "deer@noreply"`.quiet();
 
-  // Write the prompt to a file in the worktree so Claude can read it
-  const promptPath = `${worktree.worktreePath}/.deer-prompt`;
-  await Bun.write(promptPath, prompt);
-
   // Build the Claude command — interactive mode (no -p) so users can
   // attach to the tmux session and observe/intervene.
   const claudeCmd = [
@@ -160,9 +156,6 @@ export async function startAgent(options: AgentRunOptions): Promise<AgentHandle>
     await removeWorktree(repoPath, worktree.worktreePath).catch(() => {});
     throw err;
   }
-
-  // Clean up the prompt file (it's already been passed to Claude)
-  await Bun.$`rm -f ${promptPath}`.quiet().nothrow();
 
   // Dismiss the --dangerously-skip-permissions confirmation dialog.
   // The dialog defaults to "1. No, exit" — send Down then Enter

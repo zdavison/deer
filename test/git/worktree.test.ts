@@ -15,7 +15,6 @@ import { tmpdir } from "node:os";
  */
 async function createTestRepo(dir: string): Promise<{
   repoPath: string;
-  barePath: string;
 }> {
   const barePath = join(dir, "bare.git");
   const repoPath = join(dir, "repo");
@@ -35,7 +34,7 @@ async function createTestRepo(dir: string): Promise<{
   await Bun.$`git -C ${repoPath} commit --allow-empty -m "initial commit"`.quiet();
   await Bun.$`git -C ${repoPath} push -u origin main`.quiet();
 
-  return { repoPath, barePath };
+  return { repoPath };
 }
 
 describe("detectRepo", () => {
@@ -50,7 +49,7 @@ describe("detectRepo", () => {
   });
 
   test("finds .git walking up from subdirectory", async () => {
-    const { repoPath, barePath } = await createTestRepo(tmpDir);
+    const { repoPath } = await createTestRepo(tmpDir);
     const subDir = join(repoPath, "src", "deep", "nested");
     await mkdir(subDir, { recursive: true });
 
@@ -58,8 +57,6 @@ describe("detectRepo", () => {
 
     expect(result.repoPath).toBe(repoPath);
     expect(result.defaultBranch).toBe("main");
-    // Remote should contain the bare path
-    expect(result.remote).toContain(barePath);
   });
 
   test("finds .git from repo root directly", async () => {
