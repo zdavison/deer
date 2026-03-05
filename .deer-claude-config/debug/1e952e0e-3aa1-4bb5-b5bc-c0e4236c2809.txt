@@ -1,0 +1,1480 @@
+2026-03-05T09:32:30.934Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:30.935Z [DEBUG] MDM settings load completed in 1ms
+2026-03-05T09:32:30.946Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:30.946Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /home/z/.local/share/deer/tasks/deer_mmd9op3m3s3d0a1f/worktree/.claude/settings.json
+2026-03-05T09:32:30.946Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:30.946Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /home/z/.local/share/deer/tasks/deer_mmd9op3m3s3d0a1f/worktree/.claude/settings.local.json
+2026-03-05T09:32:30.946Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:30.946Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:30.946Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:30.946Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:30.946Z [DEBUG] [init] configureGlobalMTLS starting
+2026-03-05T09:32:30.946Z [DEBUG] [init] configureGlobalMTLS complete
+2026-03-05T09:32:30.946Z [DEBUG] [init] configureGlobalAgents starting
+2026-03-05T09:32:30.947Z [DEBUG] [init] configureGlobalAgents complete
+2026-03-05T09:32:30.948Z [DEBUG] Error log sink initialized
+2026-03-05T09:32:30.952Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:30.952Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:30.952Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:30.952Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /home/z/.local/share/deer/tasks/deer_mmd9op3m3s3d0a1f/worktree/.claude/settings.json
+2026-03-05T09:32:30.952Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:30.952Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /home/z/.local/share/deer/tasks/deer_mmd9op3m3s3d0a1f/worktree/.claude/settings.local.json
+2026-03-05T09:32:30.952Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:30.952Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:30.952Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-03-05T09:32:30.954Z [DEBUG] [ToolSearch:optimistic] mode=tst, ENABLE_TOOL_SEARCH=undefined, result=true
+2026-03-05T09:32:30.954Z [DEBUG] [STARTUP] Running setup()...
+2026-03-05T09:32:30.956Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:30.956Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:30.956Z [DEBUG] Loading skills from: managed=/etc/claude-code/.claude/skills, user=/home/z/.claude/skills, project=[]
+2026-03-05T09:32:30.957Z [DEBUG] Error log sink initialized
+2026-03-05T09:32:30.961Z [DEBUG] [Claude in Chrome] Found chrome profiles: Profile 5, Profile 1, Default
+2026-03-05T09:32:30.962Z [DEBUG] Failed to acquire lock for 2.1.69: Error: EROFS: read-only file system, open '/home/z/.local/state/claude/locks/2.1.69.lock.tmp.357295.1772703150962'
+2026-03-05T09:32:30.962Z [ERROR] Error: Error: NON-FATAL: Lock acquisition failed for /home/z/.local/share/claude/versions/2.1.69 (expected in multi-process scenarios)
+    at vu$ (/$bunfs/root/src/entrypoints/cli.js:2396:2066)
+    at MmA (/$bunfs/root/src/entrypoints/cli.js:2396:1210)
+    at processTicksAndRejections (native:7:39)
+2026-03-05T09:32:30.963Z [DEBUG] [STARTUP] setup() completed in 9ms
+2026-03-05T09:32:30.963Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-03-05T09:32:30.978Z [DEBUG] Loaded 1 installed plugins from /home/z/.claude/plugins/installed_plugins.json
+2026-03-05T09:32:30.978Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:30.978Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:30.978Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:30.978Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:30.979Z [DEBUG] Loading plugin rust-analyzer-lsp from source: "./plugins/rust-analyzer-lsp"
+2026-03-05T09:32:30.979Z [DEBUG] Loaded 4 unique skills (4 unconditional, 0 conditional, managed: 0, user: 4, project: 0, additional: 0, legacy commands: 0)
+2026-03-05T09:32:30.988Z [DEBUG] Git remote URL: git@github.com:mm-zacharydavison/deer.git
+2026-03-05T09:32:30.988Z [DEBUG] Parsed repository: github.com/mm-zacharydavison/deer from URL: git@github.com:mm-zacharydavison/deer.git
+2026-03-05T09:32:30.988Z [DEBUG] Using provided version for rust-analyzer-lsp@claude-plugins-official: 1.0.0
+2026-03-05T09:32:31.001Z [DEBUG] Plugin rust-analyzer-lsp@claude-plugins-official version 1.0.0 already cached at /home/z/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0
+2026-03-05T09:32:31.001Z [DEBUG] Resolved local plugin rust-analyzer-lsp to versioned cache: /home/z/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0
+2026-03-05T09:32:31.001Z [DEBUG] [Claude in Chrome] Extension not found in any browser
+2026-03-05T09:32:31.001Z [DEBUG] Plugin rust-analyzer-lsp has no entry.skills defined
+2026-03-05T09:32:31.001Z [DEBUG] Found 1 plugins (1 enabled, 0 disabled)
+2026-03-05T09:32:31.001Z [DEBUG] getPluginSkills: Processing 1 enabled plugins
+2026-03-05T09:32:31.001Z [DEBUG] Checking plugin rust-analyzer-lsp: skillsPath=none, skillsPaths=0 paths
+2026-03-05T09:32:31.001Z [DEBUG] Registered 0 hooks from 1 plugins
+2026-03-05T09:32:31.001Z [DEBUG] Total plugin skills loaded: 0
+2026-03-05T09:32:31.001Z [DEBUG] Total plugin commands loaded: 0
+2026-03-05T09:32:31.001Z [DEBUG] Total plugin agents loaded: 0
+2026-03-05T09:32:31.001Z [DEBUG] getSkills returning: 4 skill dir commands, 0 plugin skills, 5 bundled skills, 0 builtin plugin skills
+2026-03-05T09:32:31.002Z [DEBUG] [STARTUP] Commands and agents loaded in 39ms
+2026-03-05T09:32:31.004Z [DEBUG] [STARTUP] Running showSetupScreens()...
+2026-03-05T09:32:31.026Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:31.026Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /home/z/.local/share/deer/tasks/deer_mmd9op3m3s3d0a1f/worktree/.claude/settings.local.json
+2026-03-05T09:32:31.026Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:31.026Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:31.027Z [ERROR] Failed to backup config: Error: EROFS: read-only file system, copyfile '/home/z/.claude.json' -> '/home/z/.claude/backups/.claude.json.backup.1772703151027'
+2026-03-05T09:32:31.028Z [DEBUG] Writing to temp file: /home/z/.claude.json.tmp.357295.1772703151028
+2026-03-05T09:32:31.028Z [DEBUG] Preserving file permissions: 100664
+2026-03-05T09:32:31.028Z [DEBUG] Temp file written successfully, size: 120225 bytes
+2026-03-05T09:32:31.028Z [DEBUG] Applied original permissions to temp file
+2026-03-05T09:32:31.028Z [DEBUG] Renaming /home/z/.claude.json.tmp.357295.1772703151028 to /home/z/.claude.json
+2026-03-05T09:32:31.028Z [ERROR] Failed to write file atomically: Error: EBUSY: resource busy or locked, rename '/home/z/.claude.json.tmp.357295.1772703151028' -> '/home/z/.claude.json'
+2026-03-05T09:32:31.028Z [DEBUG] Cleaning up temp file: /home/z/.claude.json.tmp.357295.1772703151028
+2026-03-05T09:32:31.028Z [DEBUG] Falling back to non-atomic write for /home/z/.claude.json
+2026-03-05T09:32:31.029Z [DEBUG] File /home/z/.claude.json written successfully with non-atomic fallback
+2026-03-05T09:32:31.029Z [DEBUG] Added /home/z/.local/share/deer/tasks/deer_mmd9op3m3s3d0a1f/worktree to tracked paths for repo mm-zacharydavison/deer
+2026-03-05T09:32:31.029Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-03-05T09:32:31.029Z [DEBUG] [3P telemetry] isTelemetryEnabled=false (CLAUDE_CODE_ENABLE_TELEMETRY=undefined)
+2026-03-05T09:32:31.032Z [DEBUG] [keybindings] KeybindingSetup initialized with 104 bindings, 0 warnings
+2026-03-05T09:32:31.045Z [DEBUG] [keybindings] Watching for changes to /home/z/.claude/keybindings.json
+2026-03-05T09:32:31.429Z [DEBUG] Writing to temp file: /home/z/.claude/settings.json.tmp.357295.1772703151429
+2026-03-05T09:32:31.429Z [DEBUG] Preserving file permissions: 100664
+2026-03-05T09:32:31.430Z [ERROR] Failed to write file atomically: Error: EROFS: read-only file system, open '/home/z/.claude/settings.json.tmp.357295.1772703151429'
+2026-03-05T09:32:31.430Z [DEBUG] Falling back to non-atomic write for /home/z/.claude/settings.json
+2026-03-05T09:32:31.430Z [DEBUG] Non-atomic write also failed: Error: EROFS: read-only file system, open '/home/z/.claude/settings.json'
+2026-03-05T09:32:31.430Z [ERROR] Error: Error: Failed to read raw settings from /home/z/.claude/settings.json: Error: EROFS: read-only file system, open '/home/z/.claude/settings.json'
+    at FL (/$bunfs/root/src/entrypoints/cli.js:6423:80)
+    at D (/$bunfs/root/src/entrypoints/cli.js:6580:47131)
+    at onChange (/$bunfs/root/src/entrypoints/cli.js:6580:48281)
+    at <anonymous> (/$bunfs/root/src/entrypoints/cli.js:2313:35116)
+    at <anonymous> (/$bunfs/root/src/entrypoints/cli.js:617:14297)
+    at <anonymous> (/$bunfs/root/src/entrypoints/cli.js:617:3051)
+    at I (/$bunfs/root/src/entrypoints/cli.js:617:3902)
+    at emit (/$bunfs/root/src/entrypoints/cli.js:604:528)
+    at Ev9 (/$bunfs/root/src/entrypoints/cli.js:611:913)
+    at <anonymous> (/$bunfs/root/src/entrypoints/cli.js:574:110094)
+2026-03-05T09:32:31.430Z [DEBUG] [STARTUP] showSetupScreens() completed in 426ms
+2026-03-05T09:32:31.430Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-03-05T09:32:31.430Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-03-05T09:32:31.430Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-03-05T09:32:31.430Z [DEBUG] Starting background startup prefetches
+2026-03-05T09:32:31.430Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T09:32:31.430Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T09:32:31.430Z [DEBUG] [STARTUP] MCP configs resolved in 93ms (awaited at +478ms)
+2026-03-05T09:32:31.431Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:31.431Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:31.431Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T09:32:31.431Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:31.431Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:31.431Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:31.431Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:31.431Z [DEBUG] Getting matching hook commands for SessionStart with query: startup
+2026-03-05T09:32:31.431Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T09:32:31.432Z [DEBUG] Matched 0 unique hooks for query "startup" (0 before deduplication)
+2026-03-05T09:32:31.436Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:31.436Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:31.437Z [DEBUG] All plugins already exist, skipping migration
+2026-03-05T09:32:31.437Z [DEBUG] Initialized versioned plugins system with 1 plugins
+2026-03-05T09:32:31.439Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:31.439Z [DEBUG] [Reconnection] computeInitialTeamContext: No teammate context set (not a teammate)
+2026-03-05T09:32:31.440Z [ERROR] Failed to backup config: Error: EROFS: read-only file system, copyfile '/home/z/.claude.json' -> '/home/z/.claude/backups/.claude.json.backup.1772703151440'
+2026-03-05T09:32:31.441Z [DEBUG] Writing to temp file: /home/z/.claude.json.tmp.357295.1772703151441
+2026-03-05T09:32:31.441Z [DEBUG] Preserving file permissions: 100664
+2026-03-05T09:32:31.441Z [DEBUG] Temp file written successfully, size: 120225 bytes
+2026-03-05T09:32:31.441Z [DEBUG] Applied original permissions to temp file
+2026-03-05T09:32:31.441Z [DEBUG] Renaming /home/z/.claude.json.tmp.357295.1772703151441 to /home/z/.claude.json
+2026-03-05T09:32:31.441Z [ERROR] Failed to write file atomically: Error: EBUSY: resource busy or locked, rename '/home/z/.claude.json.tmp.357295.1772703151441' -> '/home/z/.claude.json'
+2026-03-05T09:32:31.441Z [DEBUG] Cleaning up temp file: /home/z/.claude.json.tmp.357295.1772703151441
+2026-03-05T09:32:31.441Z [DEBUG] Falling back to non-atomic write for /home/z/.claude.json
+2026-03-05T09:32:31.442Z [DEBUG] File /home/z/.claude.json written successfully with non-atomic fallback
+2026-03-05T09:32:31.766Z [DEBUG] [keybindings] KeybindingSetup initialized with 104 bindings, 0 warnings
+2026-03-05T09:32:31.772Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:31.785Z [DEBUG] [REPL:mount] REPL mounted, disabled=false
+2026-03-05T09:32:31.785Z [DEBUG] Official marketplace auto-install skipped: already_attempted
+2026-03-05T09:32:31.786Z [DEBUG] performStartupChecks called
+2026-03-05T09:32:31.786Z [DEBUG] Starting background plugin installations
+2026-03-05T09:32:31.787Z [DEBUG] FileHistory: Added snapshot for dfdc4dc6-7c9d-4380-80b4-193515f2bf6c, tracking 0 files
+2026-03-05T09:32:31.787Z [DEBUG] Loaded 1 CLAUDE.md/rules files:
+  [User] /home/z/.claude/CLAUDE.md (1799 chars)
+2026-03-05T09:32:31.791Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:31.793Z [DEBUG] performBackgroundPluginInstallations called
+2026-03-05T09:32:31.799Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T09:32:31.799Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T09:32:31.799Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T09:32:31.799Z [DEBUG] Sending 7 skills via attachment (initial, 7 total sent)
+2026-03-05T09:32:31.799Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T09:32:31.800Z [WARN] [3P telemetry] Event dropped (no event logger initialized): user_prompt
+2026-03-05T09:32:31.800Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:31.800Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:31.800Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:31.800Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:31.800Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-03-05T09:32:31.800Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T09:32:31.800Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-03-05T09:32:31.800Z [DEBUG] FileHistory: Making snapshot for message 431e6d30-8705-4449-9c4e-6831e357be86
+2026-03-05T09:32:31.800Z [DEBUG] FileHistory: Added snapshot for 431e6d30-8705-4449-9c4e-6831e357be86, tracking 0 files
+2026-03-05T09:32:31.802Z [DEBUG] Loaded 1 LSP server(s) from plugin: rust-analyzer-lsp
+2026-03-05T09:32:31.802Z [DEBUG] Total LSP servers loaded: 1
+2026-03-05T09:32:31.802Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 1 server(s)
+2026-03-05T09:32:31.802Z [DEBUG] Queued request handler for plugin:rust-analyzer-lsp:rust-analyzer.workspace/configuration (connection not ready)
+2026-03-05T09:32:31.802Z [DEBUG] LSP manager initialized with 1 servers
+2026-03-05T09:32:31.802Z [DEBUG] LSP server manager initialized successfully
+2026-03-05T09:32:31.802Z [DEBUG] Queued notification handler for plugin:rust-analyzer-lsp:rust-analyzer.textDocument/publishDiagnostics (connection not ready)
+2026-03-05T09:32:31.802Z [DEBUG] Registered diagnostics handler for plugin:rust-analyzer-lsp:rust-analyzer
+2026-03-05T09:32:31.802Z [DEBUG] LSP notification handlers registered successfully for all 1 server(s)
+2026-03-05T09:32:31.802Z [DEBUG] Failed to remove .orphaned_at: /home/z/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0: Error: EROFS: read-only file system, unlink '/home/z/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0/.orphaned_at'
+2026-03-05T09:32:31.802Z [DEBUG] Failed to write prompt history: Error: EROFS: read-only file system, open '/home/z/.claude/history.jsonl'
+2026-03-05T09:32:31.804Z [DEBUG] [claudeai-mcp] Checking gate (cached)...
+2026-03-05T09:32:31.804Z [DEBUG] [claudeai-mcp] Gate returned: true
+2026-03-05T09:32:31.804Z [DEBUG] [claudeai-mcp] Missing user:mcp_servers scope (scopes=user:inference)
+2026-03-05T09:32:31.806Z [DEBUG] Security messages are fresh (<1h old), skipping fetch
+2026-03-05T09:32:31.806Z [DEBUG] Watching for changes in setting files /home/z/.claude/settings.json...
+2026-03-05T09:32:31.806Z [DEBUG] Watching for changes in skill/command directories: /home/z/.claude/skills, /home/z/.claude/commands...
+2026-03-05T09:32:31.810Z [DEBUG] Loaded plugins - Enabled: 1, Disabled: 0, Commands: 0, Agents: 0, Errors: 0
+2026-03-05T09:32:31.815Z [DEBUG] [useDeferredValue] Messages deferred by 2 (0→2)
+2026-03-05T09:32:31.824Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:31.830Z [DEBUG] Total plugin output styles loaded: 0
+2026-03-05T09:32:31.832Z [DEBUG] Ripgrep first use test: PASSED (mode=builtin, path=/home/z/.local/share/claude/versions/2.1.69)
+2026-03-05T09:32:31.841Z [DEBUG] AutoUpdaterWrapper: Installation type: native
+2026-03-05T09:32:31.841Z [DEBUG] SSH config check: code=255 configured=false
+2026-03-05T09:32:31.855Z [DEBUG] autocompact: tokens=418 threshold=167000 effectiveWindow=180000
+2026-03-05T09:32:31.856Z [DEBUG] Dynamic tool loading: 0/21 deferred tools included
+2026-03-05T09:32:31.857Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:31.857Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T09:32:31.857Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T09:32:31.857Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:31.858Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T09:32:31.858Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:31.860Z [DEBUG] [useDeferredValue] Messages deferred by 2 (0→2)
+2026-03-05T09:32:31.861Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:31.863Z [DEBUG] git pull: cwd=/home/z/.claude/plugins/marketplaces/claude-plugins-official ref=default
+2026-03-05T09:32:31.867Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:31.875Z [WARN] git pull failed, will re-clone: error: cannot open '.git/FETCH_HEAD': Read-only file system
+2026-03-05T09:32:31.876Z [INFO] Marketplace refresh failed with HTTPS for anthropics/claude-plugins-official, falling back to SSH
+2026-03-05T09:32:31.882Z [DEBUG] git pull: cwd=/home/z/.claude/plugins/marketplaces/claude-plugins-official ref=default
+2026-03-05T09:32:31.893Z [WARN] git pull failed, will re-clone: error: cannot open '.git/FETCH_HEAD': Read-only file system
+2026-03-05T09:32:31.893Z [ERROR] Failed to refresh marketplace claude-plugins-official: Failed to clean up existing marketplace directory. Please manually delete the directory at /home/z/.claude/plugins/marketplaces/claude-plugins-official and try again.
+
+Technical details: EROFS: read-only file system, rm '/home/z/.claude/plugins/marketplaces/claude-plugins-official'
+2026-03-05T09:32:31.893Z [WARN] Plugin autoupdate: failed to refresh marketplace claude-plugins-official: Failed to refresh marketplace 'claude-plugins-official': Failed to clean up existing marketplace directory. Please manually delete the directory at /home/z/.claude/plugins/marketplaces/claude-plugins-official and try again.
+
+Technical details: EROFS: read-only file system, rm '/home/z/.claude/plugins/marketplaces/claude-plugins-official'
+2026-03-05T09:32:31.893Z [DEBUG] Plugin autoupdate: checking installed plugins
+2026-03-05T09:32:31.896Z [DEBUG] Using provided version for rust-analyzer-lsp@claude-plugins-official: 1.0.0
+2026-03-05T09:32:32.302Z [DEBUG] Failed to write prompt history: Error: EROFS: read-only file system, open '/home/z/.claude/history.jsonl'
+2026-03-05T09:32:32.790Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:32.805Z [DEBUG] Failed to write prompt history: Error: EROFS: read-only file system, open '/home/z/.claude/history.jsonl'
+2026-03-05T09:32:33.306Z [DEBUG] Failed to write prompt history: Error: EROFS: read-only file system, open '/home/z/.claude/history.jsonl'
+2026-03-05T09:32:33.751Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:33.806Z [DEBUG] Failed to write prompt history: Error: EROFS: read-only file system, open '/home/z/.claude/history.jsonl'
+2026-03-05T09:32:34.306Z [DEBUG] Failed to write prompt history: Error: EROFS: read-only file system, open '/home/z/.claude/history.jsonl'
+2026-03-05T09:32:34.711Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:35.671Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:35.951Z [ERROR] Failed to backup config: Error: EROFS: read-only file system, copyfile '/home/z/.claude.json' -> '/home/z/.claude/backups/.claude.json.backup.1772703155951'
+2026-03-05T09:32:35.952Z [DEBUG] Writing to temp file: /home/z/.claude.json.tmp.357295.1772703155952
+2026-03-05T09:32:35.952Z [DEBUG] Preserving file permissions: 100664
+2026-03-05T09:32:35.952Z [DEBUG] Temp file written successfully, size: 120226 bytes
+2026-03-05T09:32:35.952Z [DEBUG] Applied original permissions to temp file
+2026-03-05T09:32:35.952Z [DEBUG] Renaming /home/z/.claude.json.tmp.357295.1772703155952 to /home/z/.claude.json
+2026-03-05T09:32:35.952Z [ERROR] Failed to write file atomically: Error: EBUSY: resource busy or locked, rename '/home/z/.claude.json.tmp.357295.1772703155952' -> '/home/z/.claude.json'
+2026-03-05T09:32:35.952Z [DEBUG] Cleaning up temp file: /home/z/.claude.json.tmp.357295.1772703155952
+2026-03-05T09:32:35.952Z [DEBUG] Falling back to non-atomic write for /home/z/.claude.json
+2026-03-05T09:32:35.953Z [DEBUG] File /home/z/.claude.json written successfully with non-atomic fallback
+2026-03-05T09:32:35.955Z [ERROR] Failed to backup config: Error: EROFS: read-only file system, copyfile '/home/z/.claude.json' -> '/home/z/.claude/backups/.claude.json.backup.1772703155955'
+2026-03-05T09:32:35.955Z [DEBUG] Writing to temp file: /home/z/.claude.json.tmp.357295.1772703155955
+2026-03-05T09:32:35.955Z [DEBUG] Preserving file permissions: 100664
+2026-03-05T09:32:35.955Z [DEBUG] Temp file written successfully, size: 120227 bytes
+2026-03-05T09:32:35.955Z [DEBUG] Applied original permissions to temp file
+2026-03-05T09:32:35.955Z [DEBUG] Renaming /home/z/.claude.json.tmp.357295.1772703155955 to /home/z/.claude.json
+2026-03-05T09:32:35.955Z [ERROR] Failed to write file atomically: Error: EBUSY: resource busy or locked, rename '/home/z/.claude.json.tmp.357295.1772703155955' -> '/home/z/.claude.json'
+2026-03-05T09:32:35.955Z [DEBUG] Cleaning up temp file: /home/z/.claude.json.tmp.357295.1772703155955
+2026-03-05T09:32:35.955Z [DEBUG] Falling back to non-atomic write for /home/z/.claude.json
+2026-03-05T09:32:35.956Z [DEBUG] File /home/z/.claude.json written successfully with non-atomic fallback
+2026-03-05T09:32:35.958Z [ERROR] Failed to backup config: Error: EROFS: read-only file system, copyfile '/home/z/.claude.json' -> '/home/z/.claude/backups/.claude.json.backup.1772703155958'
+2026-03-05T09:32:35.958Z [DEBUG] Writing to temp file: /home/z/.claude.json.tmp.357295.1772703155958
+2026-03-05T09:32:35.958Z [DEBUG] Preserving file permissions: 100664
+2026-03-05T09:32:35.958Z [DEBUG] Temp file written successfully, size: 120228 bytes
+2026-03-05T09:32:35.958Z [DEBUG] Applied original permissions to temp file
+2026-03-05T09:32:35.958Z [DEBUG] Renaming /home/z/.claude.json.tmp.357295.1772703155958 to /home/z/.claude.json
+2026-03-05T09:32:35.958Z [ERROR] Failed to write file atomically: Error: EBUSY: resource busy or locked, rename '/home/z/.claude.json.tmp.357295.1772703155958' -> '/home/z/.claude.json'
+2026-03-05T09:32:35.958Z [DEBUG] Cleaning up temp file: /home/z/.claude.json.tmp.357295.1772703155958
+2026-03-05T09:32:35.958Z [DEBUG] Falling back to non-atomic write for /home/z/.claude.json
+2026-03-05T09:32:35.959Z [DEBUG] File /home/z/.claude.json written successfully with non-atomic fallback
+2026-03-05T09:32:35.960Z [ERROR] Failed to backup config: Error: EROFS: read-only file system, copyfile '/home/z/.claude.json' -> '/home/z/.claude/backups/.claude.json.backup.1772703155960'
+2026-03-05T09:32:35.961Z [DEBUG] Writing to temp file: /home/z/.claude.json.tmp.357295.1772703155961
+2026-03-05T09:32:35.961Z [DEBUG] Preserving file permissions: 100664
+2026-03-05T09:32:35.961Z [DEBUG] Temp file written successfully, size: 120229 bytes
+2026-03-05T09:32:35.961Z [DEBUG] Applied original permissions to temp file
+2026-03-05T09:32:35.961Z [DEBUG] Renaming /home/z/.claude.json.tmp.357295.1772703155961 to /home/z/.claude.json
+2026-03-05T09:32:35.961Z [ERROR] Failed to write file atomically: Error: EBUSY: resource busy or locked, rename '/home/z/.claude.json.tmp.357295.1772703155961' -> '/home/z/.claude.json'
+2026-03-05T09:32:35.961Z [DEBUG] Cleaning up temp file: /home/z/.claude.json.tmp.357295.1772703155961
+2026-03-05T09:32:35.961Z [DEBUG] Falling back to non-atomic write for /home/z/.claude.json
+2026-03-05T09:32:35.962Z [DEBUG] File /home/z/.claude.json written successfully with non-atomic fallback
+2026-03-05T09:32:35.963Z [ERROR] Failed to backup config: Error: EROFS: read-only file system, copyfile '/home/z/.claude.json' -> '/home/z/.claude/backups/.claude.json.backup.1772703155963'
+2026-03-05T09:32:35.964Z [DEBUG] Writing to temp file: /home/z/.claude.json.tmp.357295.1772703155964
+2026-03-05T09:32:35.964Z [DEBUG] Preserving file permissions: 100664
+2026-03-05T09:32:35.964Z [DEBUG] Temp file written successfully, size: 120230 bytes
+2026-03-05T09:32:35.964Z [DEBUG] Applied original permissions to temp file
+2026-03-05T09:32:35.964Z [DEBUG] Renaming /home/z/.claude.json.tmp.357295.1772703155964 to /home/z/.claude.json
+2026-03-05T09:32:35.964Z [ERROR] Failed to write file atomically: Error: EBUSY: resource busy or locked, rename '/home/z/.claude.json.tmp.357295.1772703155964' -> '/home/z/.claude.json'
+2026-03-05T09:32:35.964Z [DEBUG] Cleaning up temp file: /home/z/.claude.json.tmp.357295.1772703155964
+2026-03-05T09:32:35.964Z [DEBUG] Falling back to non-atomic write for /home/z/.claude.json
+2026-03-05T09:32:35.964Z [DEBUG] File /home/z/.claude.json written successfully with non-atomic fallback
+2026-03-05T09:32:36.008Z [ERROR] Failed to backup config: Error: EROFS: read-only file system, copyfile '/home/z/.claude.json' -> '/home/z/.claude/backups/.claude.json.backup.1772703156008'
+2026-03-05T09:32:36.008Z [DEBUG] Writing to temp file: /home/z/.claude.json.tmp.357295.1772703156008
+2026-03-05T09:32:36.008Z [DEBUG] Preserving file permissions: 100664
+2026-03-05T09:32:36.008Z [DEBUG] Temp file written successfully, size: 120229 bytes
+2026-03-05T09:32:36.008Z [DEBUG] Applied original permissions to temp file
+2026-03-05T09:32:36.008Z [DEBUG] Renaming /home/z/.claude.json.tmp.357295.1772703156008 to /home/z/.claude.json
+2026-03-05T09:32:36.008Z [ERROR] Failed to write file atomically: Error: EBUSY: resource busy or locked, rename '/home/z/.claude.json.tmp.357295.1772703156008' -> '/home/z/.claude.json'
+2026-03-05T09:32:36.008Z [DEBUG] Cleaning up temp file: /home/z/.claude.json.tmp.357295.1772703156008
+2026-03-05T09:32:36.008Z [DEBUG] Falling back to non-atomic write for /home/z/.claude.json
+2026-03-05T09:32:36.009Z [DEBUG] File /home/z/.claude.json written successfully with non-atomic fallback
+2026-03-05T09:32:36.010Z [ERROR] Failed to backup config: Error: EROFS: read-only file system, copyfile '/home/z/.claude.json' -> '/home/z/.claude/backups/.claude.json.backup.1772703156010'
+2026-03-05T09:32:36.011Z [DEBUG] Writing to temp file: /home/z/.claude.json.tmp.357295.1772703156011
+2026-03-05T09:32:36.011Z [DEBUG] Preserving file permissions: 100664
+2026-03-05T09:32:36.011Z [DEBUG] Temp file written successfully, size: 120232 bytes
+2026-03-05T09:32:36.011Z [DEBUG] Applied original permissions to temp file
+2026-03-05T09:32:36.011Z [DEBUG] Renaming /home/z/.claude.json.tmp.357295.1772703156011 to /home/z/.claude.json
+2026-03-05T09:32:36.011Z [ERROR] Failed to write file atomically: Error: EBUSY: resource busy or locked, rename '/home/z/.claude.json.tmp.357295.1772703156011' -> '/home/z/.claude.json'
+2026-03-05T09:32:36.011Z [DEBUG] Cleaning up temp file: /home/z/.claude.json.tmp.357295.1772703156011
+2026-03-05T09:32:36.011Z [DEBUG] Falling back to non-atomic write for /home/z/.claude.json
+2026-03-05T09:32:36.011Z [DEBUG] File /home/z/.claude.json written successfully with non-atomic fallback
+2026-03-05T09:32:36.013Z [ERROR] Failed to backup config: Error: EROFS: read-only file system, copyfile '/home/z/.claude.json' -> '/home/z/.claude/backups/.claude.json.backup.1772703156013'
+2026-03-05T09:32:36.013Z [DEBUG] Writing to temp file: /home/z/.claude.json.tmp.357295.1772703156013
+2026-03-05T09:32:36.013Z [DEBUG] Preserving file permissions: 100664
+2026-03-05T09:32:36.013Z [DEBUG] Temp file written successfully, size: 120233 bytes
+2026-03-05T09:32:36.013Z [DEBUG] Applied original permissions to temp file
+2026-03-05T09:32:36.013Z [DEBUG] Renaming /home/z/.claude.json.tmp.357295.1772703156013 to /home/z/.claude.json
+2026-03-05T09:32:36.013Z [ERROR] Failed to write file atomically: Error: EBUSY: resource busy or locked, rename '/home/z/.claude.json.tmp.357295.1772703156013' -> '/home/z/.claude.json'
+2026-03-05T09:32:36.013Z [DEBUG] Cleaning up temp file: /home/z/.claude.json.tmp.357295.1772703156013
+2026-03-05T09:32:36.013Z [DEBUG] Falling back to non-atomic write for /home/z/.claude.json
+2026-03-05T09:32:36.014Z [DEBUG] File /home/z/.claude.json written successfully with non-atomic fallback
+2026-03-05T09:32:36.015Z [ERROR] Failed to backup config: Error: EROFS: read-only file system, copyfile '/home/z/.claude.json' -> '/home/z/.claude/backups/.claude.json.backup.1772703156015'
+2026-03-05T09:32:36.015Z [DEBUG] Writing to temp file: /home/z/.claude.json.tmp.357295.1772703156015
+2026-03-05T09:32:36.015Z [DEBUG] Preserving file permissions: 100664
+2026-03-05T09:32:36.015Z [DEBUG] Temp file written successfully, size: 120234 bytes
+2026-03-05T09:32:36.015Z [DEBUG] Applied original permissions to temp file
+2026-03-05T09:32:36.015Z [DEBUG] Renaming /home/z/.claude.json.tmp.357295.1772703156015 to /home/z/.claude.json
+2026-03-05T09:32:36.015Z [ERROR] Failed to write file atomically: Error: EBUSY: resource busy or locked, rename '/home/z/.claude.json.tmp.357295.1772703156015' -> '/home/z/.claude.json'
+2026-03-05T09:32:36.015Z [DEBUG] Cleaning up temp file: /home/z/.claude.json.tmp.357295.1772703156015
+2026-03-05T09:32:36.015Z [DEBUG] Falling back to non-atomic write for /home/z/.claude.json
+2026-03-05T09:32:36.016Z [DEBUG] File /home/z/.claude.json written successfully with non-atomic fallback
+2026-03-05T09:32:36.017Z [ERROR] Failed to backup config: Error: EROFS: read-only file system, copyfile '/home/z/.claude.json' -> '/home/z/.claude/backups/.claude.json.backup.1772703156017'
+2026-03-05T09:32:36.017Z [DEBUG] Writing to temp file: /home/z/.claude.json.tmp.357295.1772703156017
+2026-03-05T09:32:36.017Z [DEBUG] Preserving file permissions: 100664
+2026-03-05T09:32:36.017Z [DEBUG] Temp file written successfully, size: 120235 bytes
+2026-03-05T09:32:36.017Z [DEBUG] Applied original permissions to temp file
+2026-03-05T09:32:36.017Z [DEBUG] Renaming /home/z/.claude.json.tmp.357295.1772703156017 to /home/z/.claude.json
+2026-03-05T09:32:36.017Z [ERROR] Failed to write file atomically: Error: EBUSY: resource busy or locked, rename '/home/z/.claude.json.tmp.357295.1772703156017' -> '/home/z/.claude.json'
+2026-03-05T09:32:36.017Z [DEBUG] Cleaning up temp file: /home/z/.claude.json.tmp.357295.1772703156017
+2026-03-05T09:32:36.017Z [DEBUG] Falling back to non-atomic write for /home/z/.claude.json
+2026-03-05T09:32:36.018Z [DEBUG] File /home/z/.claude.json written successfully with non-atomic fallback
+2026-03-05T09:32:36.019Z [ERROR] Failed to backup config: Error: EROFS: read-only file system, copyfile '/home/z/.claude.json' -> '/home/z/.claude/backups/.claude.json.backup.1772703156019'
+2026-03-05T09:32:36.019Z [DEBUG] Writing to temp file: /home/z/.claude.json.tmp.357295.1772703156019
+2026-03-05T09:32:36.019Z [DEBUG] Preserving file permissions: 100664
+2026-03-05T09:32:36.020Z [DEBUG] Temp file written successfully, size: 120236 bytes
+2026-03-05T09:32:36.020Z [DEBUG] Applied original permissions to temp file
+2026-03-05T09:32:36.020Z [DEBUG] Renaming /home/z/.claude.json.tmp.357295.1772703156019 to /home/z/.claude.json
+2026-03-05T09:32:36.020Z [ERROR] Failed to write file atomically: Error: EBUSY: resource busy or locked, rename '/home/z/.claude.json.tmp.357295.1772703156019' -> '/home/z/.claude.json'
+2026-03-05T09:32:36.020Z [DEBUG] Cleaning up temp file: /home/z/.claude.json.tmp.357295.1772703156019
+2026-03-05T09:32:36.020Z [DEBUG] Falling back to non-atomic write for /home/z/.claude.json
+2026-03-05T09:32:36.020Z [DEBUG] File /home/z/.claude.json written successfully with non-atomic fallback
+2026-03-05T09:32:36.022Z [ERROR] Failed to backup config: Error: EROFS: read-only file system, copyfile '/home/z/.claude.json' -> '/home/z/.claude/backups/.claude.json.backup.1772703156022'
+2026-03-05T09:32:36.022Z [DEBUG] Writing to temp file: /home/z/.claude.json.tmp.357295.1772703156022
+2026-03-05T09:32:36.022Z [DEBUG] Preserving file permissions: 100664
+2026-03-05T09:32:36.022Z [DEBUG] Temp file written successfully, size: 120237 bytes
+2026-03-05T09:32:36.022Z [DEBUG] Applied original permissions to temp file
+2026-03-05T09:32:36.022Z [DEBUG] Renaming /home/z/.claude.json.tmp.357295.1772703156022 to /home/z/.claude.json
+2026-03-05T09:32:36.022Z [ERROR] Failed to write file atomically: Error: EBUSY: resource busy or locked, rename '/home/z/.claude.json.tmp.357295.1772703156022' -> '/home/z/.claude.json'
+2026-03-05T09:32:36.022Z [DEBUG] Cleaning up temp file: /home/z/.claude.json.tmp.357295.1772703156022
+2026-03-05T09:32:36.022Z [DEBUG] Falling back to non-atomic write for /home/z/.claude.json
+2026-03-05T09:32:36.022Z [DEBUG] File /home/z/.claude.json written successfully with non-atomic fallback
+2026-03-05T09:32:36.024Z [ERROR] Failed to backup config: Error: EROFS: read-only file system, copyfile '/home/z/.claude.json' -> '/home/z/.claude/backups/.claude.json.backup.1772703156024'
+2026-03-05T09:32:36.024Z [DEBUG] Writing to temp file: /home/z/.claude.json.tmp.357295.1772703156024
+2026-03-05T09:32:36.024Z [DEBUG] Preserving file permissions: 100664
+2026-03-05T09:32:36.024Z [DEBUG] Temp file written successfully, size: 120220 bytes
+2026-03-05T09:32:36.024Z [DEBUG] Applied original permissions to temp file
+2026-03-05T09:32:36.024Z [DEBUG] Renaming /home/z/.claude.json.tmp.357295.1772703156024 to /home/z/.claude.json
+2026-03-05T09:32:36.024Z [ERROR] Failed to write file atomically: Error: EBUSY: resource busy or locked, rename '/home/z/.claude.json.tmp.357295.1772703156024' -> '/home/z/.claude.json'
+2026-03-05T09:32:36.024Z [DEBUG] Cleaning up temp file: /home/z/.claude.json.tmp.357295.1772703156024
+2026-03-05T09:32:36.024Z [DEBUG] Falling back to non-atomic write for /home/z/.claude.json
+2026-03-05T09:32:36.024Z [DEBUG] File /home/z/.claude.json written successfully with non-atomic fallback
+2026-03-05T09:32:36.025Z [ERROR] Failed to backup config: Error: EROFS: read-only file system, copyfile '/home/z/.claude.json' -> '/home/z/.claude/backups/.claude.json.backup.1772703156025'
+2026-03-05T09:32:36.026Z [DEBUG] Writing to temp file: /home/z/.claude.json.tmp.357295.1772703156026
+2026-03-05T09:32:36.026Z [DEBUG] Preserving file permissions: 100664
+2026-03-05T09:32:36.026Z [DEBUG] Temp file written successfully, size: 120219 bytes
+2026-03-05T09:32:36.026Z [DEBUG] Applied original permissions to temp file
+2026-03-05T09:32:36.026Z [DEBUG] Renaming /home/z/.claude.json.tmp.357295.1772703156026 to /home/z/.claude.json
+2026-03-05T09:32:36.026Z [ERROR] Failed to write file atomically: Error: EBUSY: resource busy or locked, rename '/home/z/.claude.json.tmp.357295.1772703156026' -> '/home/z/.claude.json'
+2026-03-05T09:32:36.026Z [DEBUG] Cleaning up temp file: /home/z/.claude.json.tmp.357295.1772703156026
+2026-03-05T09:32:36.026Z [DEBUG] Falling back to non-atomic write for /home/z/.claude.json
+2026-03-05T09:32:36.026Z [DEBUG] File /home/z/.claude.json written successfully with non-atomic fallback
+2026-03-05T09:32:36.027Z [ERROR] Failed to backup config: Error: EROFS: read-only file system, copyfile '/home/z/.claude.json' -> '/home/z/.claude/backups/.claude.json.backup.1772703156027'
+2026-03-05T09:32:36.028Z [DEBUG] Writing to temp file: /home/z/.claude.json.tmp.357295.1772703156028
+2026-03-05T09:32:36.028Z [DEBUG] Preserving file permissions: 100664
+2026-03-05T09:32:36.028Z [DEBUG] Temp file written successfully, size: 120142 bytes
+2026-03-05T09:32:36.028Z [DEBUG] Applied original permissions to temp file
+2026-03-05T09:32:36.028Z [DEBUG] Renaming /home/z/.claude.json.tmp.357295.1772703156028 to /home/z/.claude.json
+2026-03-05T09:32:36.028Z [ERROR] Failed to write file atomically: Error: EBUSY: resource busy or locked, rename '/home/z/.claude.json.tmp.357295.1772703156028' -> '/home/z/.claude.json'
+2026-03-05T09:32:36.028Z [DEBUG] Cleaning up temp file: /home/z/.claude.json.tmp.357295.1772703156028
+2026-03-05T09:32:36.028Z [DEBUG] Falling back to non-atomic write for /home/z/.claude.json
+2026-03-05T09:32:36.028Z [DEBUG] File /home/z/.claude.json written successfully with non-atomic fallback
+2026-03-05T09:32:36.029Z [ERROR] Failed to backup config: Error: EROFS: read-only file system, copyfile '/home/z/.claude.json' -> '/home/z/.claude/backups/.claude.json.backup.1772703156029'
+2026-03-05T09:32:36.029Z [DEBUG] Writing to temp file: /home/z/.claude.json.tmp.357295.1772703156029
+2026-03-05T09:32:36.029Z [DEBUG] Preserving file permissions: 100664
+2026-03-05T09:32:36.029Z [DEBUG] Temp file written successfully, size: 120040 bytes
+2026-03-05T09:32:36.029Z [DEBUG] Applied original permissions to temp file
+2026-03-05T09:32:36.029Z [DEBUG] Renaming /home/z/.claude.json.tmp.357295.1772703156029 to /home/z/.claude.json
+2026-03-05T09:32:36.029Z [ERROR] Failed to write file atomically: Error: EBUSY: resource busy or locked, rename '/home/z/.claude.json.tmp.357295.1772703156029' -> '/home/z/.claude.json'
+2026-03-05T09:32:36.029Z [DEBUG] Cleaning up temp file: /home/z/.claude.json.tmp.357295.1772703156029
+2026-03-05T09:32:36.030Z [DEBUG] Falling back to non-atomic write for /home/z/.claude.json
+2026-03-05T09:32:36.030Z [DEBUG] File /home/z/.claude.json written successfully with non-atomic fallback
+2026-03-05T09:32:36.039Z [ERROR] Error: Error: Failed to fetch version from https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases/latest: Request failed with status code 403
+    at sB1 (/$bunfs/root/src/entrypoints/cli.js:2394:2074)
+    at processTicksAndRejections (native:7:39)
+2026-03-05T09:32:36.039Z [ERROR] Error: Error: Failed to fetch version from https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases/latest: Request failed with status code 403
+    at sB1 (/$bunfs/root/src/entrypoints/cli.js:2394:2074)
+    at processTicksAndRejections (native:7:39)
+2026-03-05T09:32:36.041Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:36.632Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:36.848Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:37.592Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:38.189Z [DEBUG] Stream started - received first chunk
+2026-03-05T09:32:38.191Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:38.552Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:38.635Z [DEBUG] [useDeferredValue] Messages deferred by 1 (2→3)
+2026-03-05T09:32:38.637Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:38.638Z [DEBUG] [useDeferredValue] Messages deferred by 1 (2→3)
+2026-03-05T09:32:38.641Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:38.642Z [DEBUG] [useDeferredValue] Messages deferred by 1 (2→3)
+2026-03-05T09:32:38.642Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:38.644Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:38.887Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:38.889Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:38.892Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:38.898Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:38.910Z [DEBUG] executePreToolHooks called for tool: ToolSearch
+2026-03-05T09:32:38.910Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:38.910Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:38.910Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:38.910Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:38.910Z [DEBUG] Getting matching hook commands for PreToolUse with query: ToolSearch
+2026-03-05T09:32:38.910Z [DEBUG] Found 1 hook matchers in settings
+2026-03-05T09:32:38.910Z [DEBUG] Matched 0 unique hooks for query "ToolSearch" (0 before deduplication)
+2026-03-05T09:32:38.911Z [DEBUG] ToolSearchTool: cache invalidated - deferred tools changed
+2026-03-05T09:32:38.911Z [DEBUG] ToolSearchTool: selected Read, Glob, Grep
+2026-03-05T09:32:38.911Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:38.911Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:38.912Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:38.912Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:38.912Z [DEBUG] Getting matching hook commands for PostToolUse with query: ToolSearch
+2026-03-05T09:32:38.912Z [DEBUG] Found 7 hook matchers in settings
+2026-03-05T09:32:38.912Z [DEBUG] Matched 1 unique hooks for query "ToolSearch" (1 before deduplication)
+2026-03-05T09:32:38.913Z [DEBUG] [useDeferredValue] Messages deferred by 1 (3→4)
+2026-03-05T09:32:38.914Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:38.922Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:38.950Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-03-05T09:32:38.959Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T09:32:38.959Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T09:32:38.960Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T09:32:38.960Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T09:32:38.960Z [DEBUG] autocompact: tokens=6424 threshold=167000 effectiveWindow=180000
+2026-03-05T09:32:38.960Z [DEBUG] Dynamic tool loading: found 3 discovered tools in message history
+2026-03-05T09:32:38.961Z [DEBUG] Dynamic tool loading: 3/22 deferred tools included
+2026-03-05T09:32:38.961Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.69.109; cc_entrypoint=cli; cch=00000;
+2026-03-05T09:32:38.961Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:38.961Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T09:32:38.961Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T09:32:38.961Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:38.961Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T09:32:38.961Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:38.963Z [DEBUG] [useDeferredValue] Messages deferred by 3 (4→7)
+2026-03-05T09:32:38.964Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:38.971Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:39.514Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:40.473Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:41.045Z [DEBUG] Stream started - received first chunk
+2026-03-05T09:32:41.048Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:41.433Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:42.316Z [DEBUG] executePreToolHooks called for tool: Read
+2026-03-05T09:32:42.316Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:42.316Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:42.316Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:42.316Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:42.316Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-03-05T09:32:42.316Z [DEBUG] Found 1 hook matchers in settings
+2026-03-05T09:32:42.316Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-03-05T09:32:42.318Z [DEBUG] [useDeferredValue] Messages deferred by 1 (7→8)
+2026-03-05T09:32:42.320Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:42.323Z [DEBUG] Read tool error (6ms): File does not exist. Note: your current working directory is /home/z/.local/share/deer/tasks/deer_mmd9op3m3s3d0a1f/worktree.
+2026-03-05T09:32:42.323Z [ERROR] Error: Error: File does not exist. Note: your current working directory is /home/z/.local/share/deer/tasks/deer_mmd9op3m3s3d0a1f/worktree.
+    at call (/$bunfs/root/src/entrypoints/cli.js:1457:5979)
+    at async Ho1 (/$bunfs/root/src/entrypoints/cli.js:3464:14916)
+    at processTicksAndRejections (native:7:39)
+2026-03-05T09:32:42.327Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:42.327Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:42.327Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:42.327Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:42.327Z [DEBUG] Getting matching hook commands for PostToolUseFailure with query: Read
+2026-03-05T09:32:42.327Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T09:32:42.327Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-03-05T09:32:42.329Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:42.394Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:42.692Z [DEBUG] [useDeferredValue] Messages deferred by 1 (8→9)
+2026-03-05T09:32:42.694Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:42.697Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:43.355Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:43.619Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:43.621Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:43.634Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:43.639Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:43.642Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:43.644Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:43.646Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:43.649Z [DEBUG] [useDeferredValue] Messages deferred by 2 (9→11)
+2026-03-05T09:32:43.649Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:43.651Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:43.669Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:43.693Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T09:32:43.693Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T09:32:43.693Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T09:32:43.693Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T09:32:43.693Z [DEBUG] autocompact: tokens=8583 threshold=167000 effectiveWindow=180000
+2026-03-05T09:32:43.694Z [DEBUG] Dynamic tool loading: found 3 discovered tools in message history
+2026-03-05T09:32:43.694Z [DEBUG] Dynamic tool loading: 3/22 deferred tools included
+2026-03-05T09:32:43.694Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.69.109; cc_entrypoint=cli; cch=00000;
+2026-03-05T09:32:43.694Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:43.694Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T09:32:43.694Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T09:32:43.694Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:43.694Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T09:32:43.694Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:43.697Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:44.316Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:45.113Z [DEBUG] Stream started - received first chunk
+2026-03-05T09:32:45.116Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:45.276Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:45.537Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:45.539Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:45.732Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:45.741Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:45.746Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:45.755Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:45.761Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:45.762Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:45.765Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:45.788Z [DEBUG] executePreToolHooks called for tool: Glob
+2026-03-05T09:32:45.788Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:45.788Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:45.788Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:45.788Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:45.788Z [DEBUG] Getting matching hook commands for PreToolUse with query: Glob
+2026-03-05T09:32:45.788Z [DEBUG] Found 1 hook matchers in settings
+2026-03-05T09:32:45.788Z [DEBUG] Matched 0 unique hooks for query "Glob" (0 before deduplication)
+2026-03-05T09:32:45.791Z [DEBUG] [useDeferredValue] Messages deferred by 1 (11→12)
+2026-03-05T09:32:45.792Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:45.795Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:45.819Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:45.913Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:45.913Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:45.913Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:45.913Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:45.913Z [DEBUG] Getting matching hook commands for PostToolUse with query: Glob
+2026-03-05T09:32:45.913Z [DEBUG] Found 7 hook matchers in settings
+2026-03-05T09:32:45.913Z [DEBUG] Matched 2 unique hooks for query "Glob" (2 before deduplication)
+2026-03-05T09:32:45.947Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-03-05T09:32:45.948Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T09:32:45.948Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T09:32:45.948Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T09:32:45.948Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T09:32:45.948Z [DEBUG] autocompact: tokens=9362 threshold=167000 effectiveWindow=180000
+2026-03-05T09:32:45.949Z [DEBUG] Dynamic tool loading: found 3 discovered tools in message history
+2026-03-05T09:32:45.949Z [DEBUG] Dynamic tool loading: 3/22 deferred tools included
+2026-03-05T09:32:45.949Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.69.109; cc_entrypoint=cli; cch=00000;
+2026-03-05T09:32:45.949Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:45.949Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T09:32:45.949Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T09:32:45.949Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:45.949Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T09:32:45.949Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:45.950Z [DEBUG] [useDeferredValue] Messages deferred by 5 (12→17)
+2026-03-05T09:32:45.952Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:45.954Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:45.991Z [ERROR] AxiosError: [url=https://http-intake.logs.us5.datadoghq.com/api/v2/logs,status=403] Error
+    at qB (/$bunfs/root/src/entrypoints/cli.js:92:1144)
+    at <anonymous> (/$bunfs/root/src/entrypoints/cli.js:93:10049)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (/$bunfs/root/src/entrypoints/cli.js:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-05T09:32:46.239Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:47.200Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:48.161Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:48.468Z [DEBUG] Stream started - received first chunk
+2026-03-05T09:32:48.470Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:49.121Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:49.403Z [DEBUG] [useDeferredValue] Messages deferred by 1 (17→18)
+2026-03-05T09:32:49.406Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:49.409Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:49.843Z [DEBUG] executePreToolHooks called for tool: Read
+2026-03-05T09:32:49.843Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:49.843Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:49.844Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:49.844Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:49.844Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-03-05T09:32:49.844Z [DEBUG] Found 1 hook matchers in settings
+2026-03-05T09:32:49.844Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-03-05T09:32:49.845Z [DEBUG] [useDeferredValue] Messages deferred by 1 (18→19)
+2026-03-05T09:32:49.847Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:49.850Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:49.851Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:49.851Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:49.852Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:49.852Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:49.852Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-03-05T09:32:49.852Z [DEBUG] Found 7 hook matchers in settings
+2026-03-05T09:32:49.852Z [DEBUG] Matched 2 unique hooks for query "Read" (2 before deduplication)
+2026-03-05T09:32:49.889Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-03-05T09:32:50.083Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:50.215Z [DEBUG] [useDeferredValue] Messages deferred by 5 (19→24)
+2026-03-05T09:32:50.217Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:50.219Z [DEBUG] executePreToolHooks called for tool: Read
+2026-03-05T09:32:50.219Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:50.219Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:50.219Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:50.219Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:50.219Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-03-05T09:32:50.219Z [DEBUG] Found 1 hook matchers in settings
+2026-03-05T09:32:50.219Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-03-05T09:32:50.220Z [DEBUG] [useDeferredValue] Messages deferred by 6 (19→25)
+2026-03-05T09:32:50.222Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:50.223Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:50.223Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:50.223Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:50.223Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:50.223Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-03-05T09:32:50.223Z [DEBUG] Found 7 hook matchers in settings
+2026-03-05T09:32:50.223Z [DEBUG] Matched 2 unique hooks for query "Read" (2 before deduplication)
+2026-03-05T09:32:50.227Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:50.262Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-03-05T09:32:50.703Z [DEBUG] executePreToolHooks called for tool: Read
+2026-03-05T09:32:50.703Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:50.703Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:50.703Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:50.703Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:50.703Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-03-05T09:32:50.703Z [DEBUG] Found 1 hook matchers in settings
+2026-03-05T09:32:50.703Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-03-05T09:32:50.707Z [DEBUG] [useDeferredValue] Messages deferred by 6 (25→31)
+2026-03-05T09:32:50.709Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:50.718Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:50.718Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:50.719Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:50.719Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:50.719Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-03-05T09:32:50.719Z [DEBUG] Found 7 hook matchers in settings
+2026-03-05T09:32:50.719Z [DEBUG] Matched 2 unique hooks for query "Read" (2 before deduplication)
+2026-03-05T09:32:50.724Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:50.763Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-03-05T09:32:50.764Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T09:32:50.764Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T09:32:50.764Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T09:32:50.766Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T09:32:50.766Z [DEBUG] autocompact: tokens=14084 threshold=167000 effectiveWindow=180000
+2026-03-05T09:32:50.766Z [DEBUG] Dynamic tool loading: found 3 discovered tools in message history
+2026-03-05T09:32:50.766Z [DEBUG] Dynamic tool loading: 3/22 deferred tools included
+2026-03-05T09:32:50.767Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.69.109; cc_entrypoint=cli; cch=00000;
+2026-03-05T09:32:50.767Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:50.767Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T09:32:50.767Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T09:32:50.767Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:50.767Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T09:32:50.767Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:50.769Z [DEBUG] [useDeferredValue] Messages deferred by 5 (31→36)
+2026-03-05T09:32:50.771Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:50.781Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:51.048Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:52.007Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:52.969Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:53.930Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:54.385Z [DEBUG] Stream started - received first chunk
+2026-03-05T09:32:54.387Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:54.389Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:54.390Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:54.392Z [DEBUG] executePreToolHooks called for tool: Read
+2026-03-05T09:32:54.392Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:54.392Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:54.392Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:54.392Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:54.392Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-03-05T09:32:54.392Z [DEBUG] Found 1 hook matchers in settings
+2026-03-05T09:32:54.392Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-03-05T09:32:54.393Z [DEBUG] [useDeferredValue] Messages deferred by 1 (36→37)
+2026-03-05T09:32:54.394Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:54.395Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T09:32:54.395Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T09:32:54.395Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T09:32:54.397Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:54.636Z [DEBUG] Persisted tool result to /home/z/.claude/projects/-home-z--local-share-deer-tasks-deer-mmd9op3m3s3d0a1f-worktree/1e952e0e-3aa1-4bb5-b5bc-c0e4236c2809/tool-results/toolu_01VxsLV7ZbJ2TBZewgJ7WMJ7.txt (64.7KB)
+2026-03-05T09:32:54.636Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:54.637Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:54.637Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:54.637Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:54.637Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-03-05T09:32:54.637Z [DEBUG] Found 7 hook matchers in settings
+2026-03-05T09:32:54.637Z [DEBUG] Matched 2 unique hooks for query "Read" (2 before deduplication)
+2026-03-05T09:32:54.675Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-03-05T09:32:54.811Z [DEBUG] [useDeferredValue] Messages deferred by 5 (37→42)
+2026-03-05T09:32:54.813Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:54.815Z [DEBUG] [useDeferredValue] Messages deferred by 5 (37→42)
+2026-03-05T09:32:54.816Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:54.817Z [DEBUG] executePreToolHooks called for tool: Read
+2026-03-05T09:32:54.817Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:54.817Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:54.817Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:54.817Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:54.817Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-03-05T09:32:54.817Z [DEBUG] Found 1 hook matchers in settings
+2026-03-05T09:32:54.817Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-03-05T09:32:54.818Z [DEBUG] [useDeferredValue] Messages deferred by 6 (37→43)
+2026-03-05T09:32:54.820Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:54.821Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:54.821Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:54.821Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:54.821Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:54.821Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-03-05T09:32:54.821Z [DEBUG] Found 7 hook matchers in settings
+2026-03-05T09:32:54.821Z [DEBUG] Matched 2 unique hooks for query "Read" (2 before deduplication)
+2026-03-05T09:32:54.825Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:54.855Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-03-05T09:32:54.891Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:55.358Z [DEBUG] [useDeferredValue] Messages deferred by 5 (43→48)
+2026-03-05T09:32:55.360Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:55.363Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:55.364Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:55.365Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:55.366Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:55.369Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:55.371Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:55.371Z [DEBUG] executePreToolHooks called for tool: Read
+2026-03-05T09:32:55.372Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:55.372Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:55.372Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:55.372Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:55.372Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-03-05T09:32:55.372Z [DEBUG] Found 1 hook matchers in settings
+2026-03-05T09:32:55.372Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-03-05T09:32:55.373Z [DEBUG] [useDeferredValue] Messages deferred by 1 (48→49)
+2026-03-05T09:32:55.374Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:55.376Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:55.377Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:55.377Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:55.377Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:32:55.377Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:32:55.377Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-03-05T09:32:55.377Z [DEBUG] Found 7 hook matchers in settings
+2026-03-05T09:32:55.377Z [DEBUG] Matched 2 unique hooks for query "Read" (2 before deduplication)
+2026-03-05T09:32:55.394Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:55.418Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-03-05T09:32:55.418Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T09:32:55.418Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T09:32:55.418Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T09:32:55.420Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T09:32:55.420Z [DEBUG] autocompact: tokens=19646 threshold=167000 effectiveWindow=180000
+2026-03-05T09:32:55.420Z [DEBUG] Dynamic tool loading: found 3 discovered tools in message history
+2026-03-05T09:32:55.421Z [DEBUG] Dynamic tool loading: 3/22 deferred tools included
+2026-03-05T09:32:55.421Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.69.109; cc_entrypoint=cli; cch=00000;
+2026-03-05T09:32:55.421Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:55.421Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T09:32:55.421Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T09:32:55.421Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:55.422Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T09:32:55.422Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:55.423Z [DEBUG] [useDeferredValue] Messages deferred by 6 (49→55)
+2026-03-05T09:32:55.425Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:55.428Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:55.851Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:56.782Z [DEBUG] Stream started - received first chunk
+2026-03-05T09:32:56.783Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:56.813Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:57.775Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:57.981Z [DEBUG] [useDeferredValue] Messages deferred by 1 (55→56)
+2026-03-05T09:32:57.982Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:57.984Z [DEBUG] [useDeferredValue] Messages deferred by 1 (55→56)
+2026-03-05T09:32:57.985Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:57.987Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:58.737Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:32:59.699Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:00.657Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:01.617Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:02.006Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:02.009Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:02.014Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:02.016Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:02.017Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:02.020Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:02.022Z [DEBUG] executePreToolHooks called for tool: Read
+2026-03-05T09:33:02.022Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:02.022Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:02.022Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:02.022Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:02.022Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-03-05T09:33:02.022Z [DEBUG] Found 1 hook matchers in settings
+2026-03-05T09:33:02.022Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-03-05T09:33:02.023Z [DEBUG] [useDeferredValue] Messages deferred by 1 (56→57)
+2026-03-05T09:33:02.025Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:02.031Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T09:33:02.031Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T09:33:02.031Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T09:33:02.034Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:02.297Z [DEBUG] Persisted tool result to /home/z/.claude/projects/-home-z--local-share-deer-tasks-deer-mmd9op3m3s3d0a1f-worktree/1e952e0e-3aa1-4bb5-b5bc-c0e4236c2809/tool-results/toolu_01KV4sf3qV6QhNradtP4zwhf.txt (75.7KB)
+2026-03-05T09:33:02.297Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:02.297Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:02.297Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:02.297Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:02.297Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-03-05T09:33:02.297Z [DEBUG] Found 7 hook matchers in settings
+2026-03-05T09:33:02.297Z [DEBUG] Matched 2 unique hooks for query "Read" (2 before deduplication)
+2026-03-05T09:33:02.334Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-03-05T09:33:02.578Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:02.786Z [DEBUG] [useDeferredValue] Messages deferred by 5 (57→62)
+2026-03-05T09:33:02.788Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:02.791Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:02.807Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:02.817Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:02.827Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:02.858Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:02.876Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:02.969Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:02.990Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:03.002Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:03.015Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:03.045Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:03.049Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:03.065Z [DEBUG] executePreToolHooks called for tool: Read
+2026-03-05T09:33:03.065Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:03.065Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:03.065Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:03.065Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:03.065Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-03-05T09:33:03.065Z [DEBUG] Found 1 hook matchers in settings
+2026-03-05T09:33:03.065Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-03-05T09:33:03.067Z [DEBUG] [useDeferredValue] Messages deferred by 1 (62→63)
+2026-03-05T09:33:03.068Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:03.073Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:03.073Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:03.073Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:03.073Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:03.073Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-03-05T09:33:03.073Z [DEBUG] Found 7 hook matchers in settings
+2026-03-05T09:33:03.073Z [DEBUG] Matched 2 unique hooks for query "Read" (2 before deduplication)
+2026-03-05T09:33:03.077Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:03.116Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-03-05T09:33:03.132Z [DEBUG] [useDeferredValue] Messages deferred by 5 (63→68)
+2026-03-05T09:33:03.135Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:03.144Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T09:33:03.144Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T09:33:03.144Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T09:33:03.145Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T09:33:03.145Z [DEBUG] autocompact: tokens=22340 threshold=167000 effectiveWindow=180000
+2026-03-05T09:33:03.145Z [DEBUG] Dynamic tool loading: found 3 discovered tools in message history
+2026-03-05T09:33:03.145Z [DEBUG] Dynamic tool loading: 3/22 deferred tools included
+2026-03-05T09:33:03.146Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.69.109; cc_entrypoint=cli; cch=00000;
+2026-03-05T09:33:03.146Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:03.146Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T09:33:03.146Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T09:33:03.146Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:03.146Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T09:33:03.146Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:03.148Z [DEBUG] [useDeferredValue] Messages deferred by 5 (63→68)
+2026-03-05T09:33:03.150Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:03.153Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:03.540Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:04.455Z [DEBUG] Stream started - received first chunk
+2026-03-05T09:33:04.457Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:04.501Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:04.855Z [ERROR] AxiosError: [url=https://http-intake.logs.us5.datadoghq.com/api/v2/logs,status=403] Error
+    at qB (/$bunfs/root/src/entrypoints/cli.js:92:1144)
+    at <anonymous> (/$bunfs/root/src/entrypoints/cli.js:93:10049)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (/$bunfs/root/src/entrypoints/cli.js:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-05T09:33:05.303Z [DEBUG] [useDeferredValue] Messages deferred by 1 (68→69)
+2026-03-05T09:33:05.305Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:05.306Z [DEBUG] [useDeferredValue] Messages deferred by 1 (68→69)
+2026-03-05T09:33:05.308Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:05.310Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:05.461Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:05.755Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:05.759Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:05.762Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:05.767Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:05.781Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:05.785Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:05.796Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:05.804Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:05.809Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:05.841Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:05.844Z [DEBUG] executePreToolHooks called for tool: Read
+2026-03-05T09:33:05.844Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:05.844Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:05.844Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:05.844Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:05.844Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-03-05T09:33:05.844Z [DEBUG] Found 1 hook matchers in settings
+2026-03-05T09:33:05.844Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-03-05T09:33:05.845Z [DEBUG] [useDeferredValue] Messages deferred by 1 (69→70)
+2026-03-05T09:33:05.847Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:05.848Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:05.848Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:05.849Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:05.849Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:05.849Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-03-05T09:33:05.849Z [DEBUG] Found 7 hook matchers in settings
+2026-03-05T09:33:05.849Z [DEBUG] Matched 2 unique hooks for query "Read" (2 before deduplication)
+2026-03-05T09:33:05.852Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:05.887Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:05.892Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-03-05T09:33:05.893Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T09:33:05.893Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T09:33:05.893Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T09:33:05.893Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T09:33:05.893Z [DEBUG] autocompact: tokens=25066 threshold=167000 effectiveWindow=180000
+2026-03-05T09:33:05.894Z [DEBUG] Dynamic tool loading: found 3 discovered tools in message history
+2026-03-05T09:33:05.894Z [DEBUG] Dynamic tool loading: 3/22 deferred tools included
+2026-03-05T09:33:05.894Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.69.109; cc_entrypoint=cli; cch=00000;
+2026-03-05T09:33:05.894Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:05.894Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T09:33:05.894Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T09:33:05.894Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:05.894Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T09:33:05.894Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:05.896Z [DEBUG] [useDeferredValue] Messages deferred by 5 (70→75)
+2026-03-05T09:33:05.898Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:05.900Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:06.423Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:07.355Z [DEBUG] Stream started - received first chunk
+2026-03-05T09:33:07.357Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:07.359Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:07.386Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:08.347Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:09.002Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:09.005Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:09.306Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:09.354Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:09.355Z [DEBUG] executePreToolHooks called for tool: Read
+2026-03-05T09:33:09.355Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:09.355Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:09.356Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:09.356Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:09.356Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-03-05T09:33:09.356Z [DEBUG] Found 1 hook matchers in settings
+2026-03-05T09:33:09.356Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-03-05T09:33:09.357Z [DEBUG] [useDeferredValue] Messages deferred by 1 (75→76)
+2026-03-05T09:33:09.358Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:09.363Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:09.363Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:09.363Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:09.363Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:09.363Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-03-05T09:33:09.363Z [DEBUG] Found 7 hook matchers in settings
+2026-03-05T09:33:09.363Z [DEBUG] Matched 2 unique hooks for query "Read" (2 before deduplication)
+2026-03-05T09:33:09.367Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:09.371Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:09.375Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:09.407Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-03-05T09:33:09.408Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T09:33:09.408Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T09:33:09.408Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T09:33:09.409Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T09:33:09.410Z [DEBUG] autocompact: tokens=29183 threshold=167000 effectiveWindow=180000
+2026-03-05T09:33:09.410Z [DEBUG] Dynamic tool loading: found 3 discovered tools in message history
+2026-03-05T09:33:09.410Z [DEBUG] Dynamic tool loading: 3/22 deferred tools included
+2026-03-05T09:33:09.411Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.69.109; cc_entrypoint=cli; cch=00000;
+2026-03-05T09:33:09.411Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:09.411Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T09:33:09.411Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T09:33:09.411Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:09.411Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T09:33:09.411Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:09.413Z [DEBUG] [useDeferredValue] Messages deferred by 5 (76→81)
+2026-03-05T09:33:09.415Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:09.426Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:10.266Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:11.052Z [DEBUG] Stream started - received first chunk
+2026-03-05T09:33:11.054Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:11.056Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:11.226Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:12.186Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:12.707Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:12.732Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:12.979Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:12.982Z [DEBUG] executePreToolHooks called for tool: Read
+2026-03-05T09:33:12.982Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:12.982Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:12.982Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:12.982Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:12.982Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-03-05T09:33:12.982Z [DEBUG] Found 1 hook matchers in settings
+2026-03-05T09:33:12.982Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-03-05T09:33:12.983Z [DEBUG] [useDeferredValue] Messages deferred by 1 (81→82)
+2026-03-05T09:33:12.985Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:12.986Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:12.986Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:12.986Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:12.986Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:12.986Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-03-05T09:33:12.986Z [DEBUG] Found 7 hook matchers in settings
+2026-03-05T09:33:12.986Z [DEBUG] Matched 2 unique hooks for query "Read" (2 before deduplication)
+2026-03-05T09:33:12.989Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:12.999Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:13.022Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-03-05T09:33:13.022Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T09:33:13.022Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T09:33:13.022Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T09:33:13.023Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T09:33:13.023Z [DEBUG] autocompact: tokens=33789 threshold=167000 effectiveWindow=180000
+2026-03-05T09:33:13.023Z [DEBUG] Dynamic tool loading: found 3 discovered tools in message history
+2026-03-05T09:33:13.023Z [DEBUG] Dynamic tool loading: 3/22 deferred tools included
+2026-03-05T09:33:13.024Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.69.109; cc_entrypoint=cli; cch=00000;
+2026-03-05T09:33:13.024Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:13.024Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T09:33:13.024Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T09:33:13.024Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:13.024Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T09:33:13.024Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:13.026Z [DEBUG] [useDeferredValue] Messages deferred by 5 (82→87)
+2026-03-05T09:33:13.027Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:13.036Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:13.149Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:14.110Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:14.171Z [DEBUG] Stream started - received first chunk
+2026-03-05T09:33:14.174Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:15.071Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:15.829Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:16.031Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:16.056Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:16.059Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:16.060Z [DEBUG] executePreToolHooks called for tool: Read
+2026-03-05T09:33:16.060Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:16.060Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:16.060Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:16.060Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:16.060Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-03-05T09:33:16.060Z [DEBUG] Found 1 hook matchers in settings
+2026-03-05T09:33:16.060Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-03-05T09:33:16.062Z [DEBUG] [useDeferredValue] Messages deferred by 1 (87→88)
+2026-03-05T09:33:16.064Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:16.066Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:16.066Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:16.066Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:16.066Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:16.066Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-03-05T09:33:16.066Z [DEBUG] Found 7 hook matchers in settings
+2026-03-05T09:33:16.066Z [DEBUG] Matched 2 unique hooks for query "Read" (2 before deduplication)
+2026-03-05T09:33:16.071Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:16.101Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:16.109Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-03-05T09:33:16.110Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T09:33:16.110Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T09:33:16.110Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T09:33:16.110Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T09:33:16.111Z [DEBUG] autocompact: tokens=39381 threshold=167000 effectiveWindow=180000
+2026-03-05T09:33:16.111Z [DEBUG] Dynamic tool loading: found 3 discovered tools in message history
+2026-03-05T09:33:16.111Z [DEBUG] Dynamic tool loading: 3/22 deferred tools included
+2026-03-05T09:33:16.111Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.69.109; cc_entrypoint=cli; cch=00000;
+2026-03-05T09:33:16.111Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:16.111Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T09:33:16.111Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T09:33:16.112Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:16.112Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T09:33:16.112Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:16.113Z [DEBUG] [useDeferredValue] Messages deferred by 5 (88→93)
+2026-03-05T09:33:16.115Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:16.118Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:16.991Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:17.951Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:18.913Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:19.874Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:20.834Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:20.858Z [ERROR] AxiosError: [url=https://http-intake.logs.us5.datadoghq.com/api/v2/logs,status=403] Error
+    at qB (/$bunfs/root/src/entrypoints/cli.js:92:1144)
+    at <anonymous> (/$bunfs/root/src/entrypoints/cli.js:93:10049)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (/$bunfs/root/src/entrypoints/cli.js:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-05T09:33:21.794Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:22.757Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:23.034Z [DEBUG] Stream started - received first chunk
+2026-03-05T09:33:23.037Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:23.038Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:23.717Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:24.676Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:24.678Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:24.915Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:24.994Z [DEBUG] executePreToolHooks called for tool: Read
+2026-03-05T09:33:24.994Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:24.994Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:24.994Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:24.994Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:24.994Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-03-05T09:33:24.994Z [DEBUG] Found 1 hook matchers in settings
+2026-03-05T09:33:24.994Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-03-05T09:33:24.996Z [DEBUG] [useDeferredValue] Messages deferred by 1 (93→94)
+2026-03-05T09:33:24.997Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:24.999Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:24.999Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:24.999Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:24.999Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:24.999Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-03-05T09:33:24.999Z [DEBUG] Found 7 hook matchers in settings
+2026-03-05T09:33:24.999Z [DEBUG] Matched 2 unique hooks for query "Read" (2 before deduplication)
+2026-03-05T09:33:25.002Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:25.034Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-03-05T09:33:25.035Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T09:33:25.035Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T09:33:25.035Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T09:33:25.036Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T09:33:25.036Z [DEBUG] autocompact: tokens=45056 threshold=167000 effectiveWindow=180000
+2026-03-05T09:33:25.036Z [DEBUG] Dynamic tool loading: found 3 discovered tools in message history
+2026-03-05T09:33:25.036Z [DEBUG] Dynamic tool loading: 3/22 deferred tools included
+2026-03-05T09:33:25.037Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.69.109; cc_entrypoint=cli; cch=00000;
+2026-03-05T09:33:25.037Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:25.037Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T09:33:25.037Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T09:33:25.037Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:25.037Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T09:33:25.037Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:25.039Z [DEBUG] [useDeferredValue] Messages deferred by 5 (94→99)
+2026-03-05T09:33:25.041Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:25.049Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:25.642Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:26.603Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:27.563Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:27.845Z [DEBUG] Stream started - received first chunk
+2026-03-05T09:33:27.845Z [DEBUG] [useDeferredValue] Messages deferred by 1 (99→100)
+2026-03-05T09:33:27.846Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:27.849Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:28.525Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:28.756Z [DEBUG] [useDeferredValue] Messages deferred by 1 (100→101)
+2026-03-05T09:33:28.758Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:28.762Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:29.484Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:29.766Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:29.768Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:29.769Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:29.772Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:29.778Z [DEBUG] executePreToolHooks called for tool: Read
+2026-03-05T09:33:29.778Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:29.778Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:29.778Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:29.778Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:29.778Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-03-05T09:33:29.778Z [DEBUG] Found 1 hook matchers in settings
+2026-03-05T09:33:29.778Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-03-05T09:33:29.780Z [DEBUG] [useDeferredValue] Messages deferred by 1 (101→102)
+2026-03-05T09:33:29.782Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:29.784Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:29.784Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:29.784Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:33:29.784Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:33:29.784Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-03-05T09:33:29.784Z [DEBUG] Found 7 hook matchers in settings
+2026-03-05T09:33:29.785Z [DEBUG] Matched 2 unique hooks for query "Read" (2 before deduplication)
+2026-03-05T09:33:29.788Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:29.798Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:29.819Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-03-05T09:33:29.820Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T09:33:29.820Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T09:33:29.820Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T09:33:29.821Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T09:33:29.821Z [DEBUG] autocompact: tokens=47036 threshold=167000 effectiveWindow=180000
+2026-03-05T09:33:29.821Z [DEBUG] Dynamic tool loading: found 3 discovered tools in message history
+2026-03-05T09:33:29.821Z [DEBUG] Dynamic tool loading: 3/22 deferred tools included
+2026-03-05T09:33:29.821Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.69.109; cc_entrypoint=cli; cch=00000;
+2026-03-05T09:33:29.822Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:29.822Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T09:33:29.822Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T09:33:29.822Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:29.822Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T09:33:29.822Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:29.823Z [DEBUG] [useDeferredValue] Messages deferred by 5 (102→107)
+2026-03-05T09:33:29.825Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:29.833Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:30.445Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:31.406Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:32.365Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:33.326Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:34.285Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:35.246Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:36.207Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:37.167Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:38.128Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:39.089Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:40.021Z [ERROR] AxiosError: [url=https://http-intake.logs.us5.datadoghq.com/api/v2/logs,status=403] Error
+    at qB (/$bunfs/root/src/entrypoints/cli.js:92:1144)
+    at <anonymous> (/$bunfs/root/src/entrypoints/cli.js:93:10049)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (/$bunfs/root/src/entrypoints/cli.js:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-05T09:33:40.049Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:41.011Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:41.971Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:42.932Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:43.894Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:44.854Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:45.816Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:46.776Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:47.738Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:48.699Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:49.658Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:50.619Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:51.579Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:52.542Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:53.500Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:54.462Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:55.421Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:55.638Z [DEBUG] Stream started - received first chunk
+2026-03-05T09:33:55.639Z [DEBUG] [useDeferredValue] Messages deferred by 1 (107→108)
+2026-03-05T09:33:55.640Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:55.643Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:56.381Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:57.343Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:58.302Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:33:59.265Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:00.225Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:01.186Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:02.148Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:03.106Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:04.066Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:05.026Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:05.987Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:06.948Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:07.908Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:08.869Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:09.828Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:10.790Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:11.687Z [DEBUG] [useDeferredValue] Messages deferred by 1 (108→109)
+2026-03-05T09:34:11.688Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:11.689Z [DEBUG] [useDeferredValue] Messages deferred by 1 (108→109)
+2026-03-05T09:34:11.692Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:11.717Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:11.722Z [DEBUG] High write ratio: blit=2000, write=4344 (68.5% writes), screen=106x200
+2026-03-05T09:34:11.745Z [DEBUG] executePreToolHooks called for tool: ToolSearch
+2026-03-05T09:34:11.745Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:34:11.745Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:34:11.745Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:34:11.745Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:34:11.745Z [DEBUG] Getting matching hook commands for PreToolUse with query: ToolSearch
+2026-03-05T09:34:11.745Z [DEBUG] Found 1 hook matchers in settings
+2026-03-05T09:34:11.745Z [DEBUG] Matched 0 unique hooks for query "ToolSearch" (0 before deduplication)
+2026-03-05T09:34:11.746Z [DEBUG] ToolSearchTool: cache invalidated - deferred tools changed
+2026-03-05T09:34:11.746Z [DEBUG] ToolSearchTool: selected Bash
+2026-03-05T09:34:11.746Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:34:11.746Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:34:11.747Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:34:11.747Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:34:11.747Z [DEBUG] Getting matching hook commands for PostToolUse with query: ToolSearch
+2026-03-05T09:34:11.747Z [DEBUG] Found 7 hook matchers in settings
+2026-03-05T09:34:11.747Z [DEBUG] Matched 1 unique hooks for query "ToolSearch" (1 before deduplication)
+2026-03-05T09:34:11.747Z [DEBUG] [useDeferredValue] Messages deferred by 1 (109→110)
+2026-03-05T09:34:11.749Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:11.751Z [DEBUG] High write ratio: blit=0, write=4690 (100.0% writes), screen=106x200
+2026-03-05T09:34:11.754Z [DEBUG] [useDeferredValue] Messages deferred by 1 (109→110)
+2026-03-05T09:34:11.755Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:11.756Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:11.764Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:11.789Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-03-05T09:34:11.790Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T09:34:11.790Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T09:34:11.790Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T09:34:11.791Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T09:34:11.791Z [DEBUG] autocompact: tokens=50193 threshold=167000 effectiveWindow=180000
+2026-03-05T09:34:11.792Z [DEBUG] Dynamic tool loading: found 4 discovered tools in message history
+2026-03-05T09:34:11.792Z [DEBUG] Dynamic tool loading: 4/22 deferred tools included
+2026-03-05T09:34:11.793Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.69.109; cc_entrypoint=cli; cch=00000;
+2026-03-05T09:34:11.793Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:11.793Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T09:34:11.793Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T09:34:11.793Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:11.793Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T09:34:11.794Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:11.796Z [DEBUG] [useDeferredValue] Messages deferred by 4 (110→114)
+2026-03-05T09:34:11.797Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:11.805Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:12.712Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:13.672Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:14.632Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:15.593Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:15.766Z [DEBUG] Stream started - received first chunk
+2026-03-05T09:34:15.768Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:16.553Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:17.513Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:18.474Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:19.435Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:20.395Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:21.354Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:22.315Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:23.275Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:24.209Z [DEBUG] [useDeferredValue] Messages deferred by 1 (114→115)
+2026-03-05T09:34:24.210Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:24.212Z [DEBUG] [useDeferredValue] Messages deferred by 1 (114→115)
+2026-03-05T09:34:24.214Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:24.217Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:24.234Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:25.194Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:25.480Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:25.577Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:25.579Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:25.580Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:25.584Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:25.587Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:25.592Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-03-05T09:34:25.592Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:34:25.593Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:34:25.593Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:34:25.593Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:34:25.593Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-03-05T09:34:25.593Z [DEBUG] Found 1 hook matchers in settings
+2026-03-05T09:34:25.593Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-03-05T09:34:25.597Z [DEBUG] [useDeferredValue] Messages deferred by 1 (115→116)
+2026-03-05T09:34:25.599Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:25.601Z [DEBUG] High write ratio: blit=0, write=4696 (100.0% writes), screen=106x200
+2026-03-05T09:34:25.609Z [DEBUG] [useDeferredValue] Messages deferred by 1 (115→116)
+2026-03-05T09:34:25.611Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:25.614Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:25.618Z [DEBUG] tree-sitter: loaded from embedded
+2026-03-05T09:34:25.622Z [DEBUG] Creating shell snapshot for bash (/bin/bash)
+2026-03-05T09:34:25.622Z [DEBUG] Looking for shell config file: /home/z/.bashrc
+2026-03-05T09:34:25.622Z [DEBUG] Shell config file not found: /home/z/.bashrc, creating snapshot with Claude Code defaults only
+2026-03-05T09:34:25.622Z [DEBUG] Snapshots directory: /home/z/.claude/shell-snapshots
+2026-03-05T09:34:25.623Z [DEBUG] Creating snapshot at: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh
+2026-03-05T09:34:25.623Z [DEBUG] Execution timeout: 10000ms
+2026-03-05T09:34:25.652Z [DEBUG] Shell snapshot creation failed: Command failed: /bin/bash -c -l SNAPSHOT_FILE=/home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh
+      # No user config file to source
+
+      # First, create/clear the snapshot file
+      echo "# Snapshot file" >| "$SNAPSHOT_FILE"
+
+      # When this file is sourced, we first unalias to avoid conflicts
+      # This is necessary because aliases get "frozen" inside function definitions at definition time,
+      # which can cause unexpected behavior when functions use commands that conflict with aliases
+      echo "# Unset all aliases to avoid conflicts with functions" >> "$SNAPSHOT_FILE"
+      echo "unalias -a 2>/dev/null || true" >> "$SNAPSHOT_FILE"
+
+      echo "shopt -s expand_aliases" >> "$SNAPSHOT_FILE"
+
+      
+      # Check for rg availability
+      echo "# Check for rg availability" >> "$SNAPSHOT_FILE"
+      echo "if ! (unalias rg 2>/dev/null; command -v rg) >/dev/null 2>&1; then" >> "$SNAPSHOT_FILE"
+  
+      echo '  alias rg='"'/home/z/.local/share/claude/versions/2.1.69 --ripgrep'" >> "$SNAPSHOT_FILE"
+    
+      echo "fi" >> "$SNAPSHOT_FILE"
+  
+
+      # Add PATH to the file
+      echo "export PATH=/home/z/Desktop/work/deer/node_modules/.bin\:/home/z/Desktop/work/deer/node_modules/.bin\:/home/z/Desktop/work/node_modules/.bin\:/home/z/Desktop/node_modules/.bin\:/home/z/node_modules/.bin\:/home/node_modules/.bin\:/node_modules/.bin\:/home/z/Desktop/work/deer/node_modules/.bin\:/home/z/Desktop/work/deer/node_modules/.bin\:/home/z/Desktop/work/node_modules/.bin\:/home/z/Desktop/node_modules/.bin\:/home/z/node_modules/.bin\:/home/node_modules/.bin\:/node_modules/.bin\:/home/z/.git-ai/bin\:/home/z/.local/share/pnpm\:/home/z/.maestro/bin\:/home/z/.volta/bin\:/home/z/.bun/bin\:/home/z/.go/bin\:/home/linuxbrew/.linuxbrew/bin\:/home/linuxbrew/.linuxbrew/sbin\:/home/z/.config/venv/bin\:/home/z/usr/local/go/bin\:/home/z/.pulumi/bin\:/home/z/.local/bin\:/home/z/.config/venv/bin\:/home/z/.autojump/bin\:/home/z/.cargo/bin\:/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin\:/usr/games\:/usr/local/games\:/snap/bin\:/snap/bin\:/home/z/.krew/bin" >> "$SNAPSHOT_FILE"
+  
+
+      # Exit silently on success, only report errors
+      if [ ! -f "$SNAPSHOT_FILE" ]; then
+        echo "Error: Snapshot file was not created at $SNAPSHOT_FILE" >&2
+        exit 1
+      fi
+    
+/bin/bash: line 5: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+/bin/bash: line 10: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+/bin/bash: line 11: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+/bin/bash: line 13: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+/bin/bash: line 17: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+/bin/bash: line 18: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+/bin/bash: line 20: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+/bin/bash: line 22: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+/bin/bash: line 26: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+Error: Snapshot file was not created at /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh
+2026-03-05T09:34:25.652Z [DEBUG] Error details:
+2026-03-05T09:34:25.652Z [DEBUG] - Error code: 1
+2026-03-05T09:34:25.652Z [DEBUG] - Error signal: null
+2026-03-05T09:34:25.652Z [DEBUG] - Error killed: false
+2026-03-05T09:34:25.652Z [DEBUG] - Shell path: /bin/bash
+2026-03-05T09:34:25.652Z [DEBUG] - Config file: /home/z/.bashrc
+2026-03-05T09:34:25.652Z [DEBUG] - Config file exists: false
+2026-03-05T09:34:25.652Z [DEBUG] - Working directory: /home/z/.local/share/deer/tasks/deer_mmd9op3m3s3d0a1f/worktree
+2026-03-05T09:34:25.652Z [DEBUG] - Claude home: /home/z/.claude
+2026-03-05T09:34:25.652Z [DEBUG] Full snapshot script:
+SNAPSHOT_FILE=/home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh
+      # No user config file to source
+
+      # First, create/clear the snapshot file
+      echo "# Snapshot file" >| "$SNAPSHOT_FILE"
+
+      # When this file is sourced, we first unalias to avoid conflicts
+      # This is necessary because aliases get "frozen" inside function definitions at definition time,
+      # which can cause unexpected behavior when functions use commands that conflict with aliases
+      echo "# Unset all aliases to avoid conflicts with functions" >> "$SNAPSHOT_FILE"
+      echo "unalias -a 2>/dev/null || true" >> "$SNAPSHOT_FILE"
+
+      echo "shopt -s expand_aliases" >> "$SNAPSHOT_FILE"
+
+      
+      # Check for rg availability
+      echo "# Check for rg availability" >> "$SNAPSHOT_FILE"
+      echo "if ! (unalias rg 2>/dev/null; command -v rg) >/dev/null 2>&1; then" >> "$SNAPSHOT_FILE"
+  
+      echo '  alias rg='"'/home/z/.local/share/claude/versions/2.1.69 --ripgrep'" >> "$SNAPSHOT_FILE"
+    
+      echo "fi" >> "$SNAPSHOT_FILE"
+  
+
+      # Add PATH to the file
+      echo "export PATH=/home/z/Desktop/work/deer/node_modules/.bin\:/home/z/Desktop/work/deer/node_modules/.bin\:/home/z/Desktop/work/node_modules/.bin\:/home/z/Desktop/node_modules/.bin\:/home/z/node_modules/.bin\:/home/node_modules/.bin\:/node_modules/.bin\:/home/z/Desktop/work/deer/node_modules/.bin\:/home/z/Desktop/work/deer/node_modules/.bin\:/home/z/Desktop/work/node_modules/.bin\:/home/z/Desktop/node_modules/.bin\:/home/z/node_modules/.bin\:/home/node_modules/.bin\:/node_modules/.bin\:/home/z/.git-ai/bin\:/home/z/.local/share/pnpm\:/home/z/.maestro/bin\:/home/z/.volta/bin\:/home/z/.bun/bin\:/home/z/.go/bin\:/home/linuxbrew/.linuxbrew/bin\:/home/linuxbrew/.linuxbrew/sbin\:/home/z/.config/venv/bin\:/home/z/usr/local/go/bin\:/home/z/.pulumi/bin\:/home/z/.local/bin\:/home/z/.config/venv/bin\:/home/z/.autojump/bin\:/home/z/.cargo/bin\:/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin\:/usr/games\:/usr/local/games\:/snap/bin\:/snap/bin\:/home/z/.krew/bin" >> "$SNAPSHOT_FILE"
+  
+
+      # Exit silently on success, only report errors
+      if [ ! -f "$SNAPSHOT_FILE" ]; then
+        echo "Error: Snapshot file was not created at $SNAPSHOT_FILE" >&2
+        exit 1
+      fi
+2026-03-05T09:34:25.652Z [DEBUG] No stdout output captured
+2026-03-05T09:34:25.652Z [DEBUG] stderr output (1126 chars): /bin/bash: line 5: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+/bin/bash: line 10: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+/bin/bash: line 11: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+/bin/bash: line 13: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+/bin/bash: line 17: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+/bin/bash: line 18: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+/bin/bash: line 20: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+/bin/bash: line 22: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+/bin/bash: line 26: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+Error: Snapshot file was not created at /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh
+2026-03-05T09:34:25.653Z [ERROR] Error: Error: Failed to create shell snapshot: Command failed: /bin/bash -c -l SNAPSHOT_FILE=/home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh
+      # No user config file to source
+
+      # First, create/clear the snapshot file
+      echo "# Snapshot file" >| "$SNAPSHOT_FILE"
+
+      # When this file is sourced, we first unalias to avoid conflicts
+      # This is necessary because aliases get "frozen" inside function definitions at definition time,
+      # which can cause unexpected behavior when functions use commands that conflict with aliases
+      echo "# Unset all aliases to avoid conflicts with functions" >> "$SNAPSHOT_FILE"
+      echo "unalias -a 2>/dev/null || true" >> "$SNAPSHOT_FILE"
+
+      echo "shopt -s expand_aliases" >> "$SNAPSHOT_FILE"
+
+      
+      # Check for rg availability
+      echo "# Check for rg availability" >> "$SNAPSHOT_FILE"
+      echo "if ! (unalias rg 2>/dev/null; command -v rg) >/dev/null 2>&1; then" >> "$SNAPSHOT_FILE"
+  
+      echo '  alias rg='"'/home/z/.local/share/claude/versions/2.1.69 --ripgrep'" >> "$SNAPSHOT_FILE"
+    
+      echo "fi" >> "$SNAPSHOT_FILE"
+  
+
+      # Add PATH to the file
+      echo "export PATH=/home/z/Desktop/work/deer/node_modules/.bin\:/home/z/Desktop/work/deer/node_modules/.bin\:/home/z/Desktop/work/node_modules/.bin\:/home/z/Desktop/node_modules/.bin\:/home/z/node_modules/.bin\:/home/node_modules/.bin\:/node_modules/.bin\:/home/z/Desktop/work/deer/node_modules/.bin\:/home/z/Desktop/work/deer/node_modules/.bin\:/home/z/Desktop/work/node_modules/.bin\:/home/z/Desktop/node_modules/.bin\:/home/z/node_modules/.bin\:/home/node_modules/.bin\:/node_modules/.bin\:/home/z/.git-ai/bin\:/home/z/.local/share/pnpm\:/home/z/.maestro/bin\:/home/z/.volta/bin\:/home/z/.bun/bin\:/home/z/.go/bin\:/home/linuxbrew/.linuxbrew/bin\:/home/linuxbrew/.linuxbrew/sbin\:/home/z/.config/venv/bin\:/home/z/usr/local/go/bin\:/home/z/.pulumi/bin\:/home/z/.local/bin\:/home/z/.config/venv/bin\:/home/z/.autojump/bin\:/home/z/.cargo/bin\:/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin\:/usr/games\:/usr/local/games\:/snap/bin\:/snap/bin\:/home/z/.krew/bin" >> "$SNAPSHOT_FILE"
+  
+
+      # Exit silently on success, only report errors
+      if [ ! -f "$SNAPSHOT_FILE" ]; then
+        echo "Error: Snapshot file was not created at $SNAPSHOT_FILE" >&2
+        exit 1
+      fi
+    
+/bin/bash: line 5: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+/bin/bash: line 10: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+/bin/bash: line 11: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+/bin/bash: line 13: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+/bin/bash: line 17: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+/bin/bash: line 18: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+/bin/bash: line 20: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+/bin/bash: line 22: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+/bin/bash: line 26: /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh: Read-only file system
+Error: Snapshot file was not created at /home/z/.claude/shell-snapshots/snapshot-bash-1772703265622-9ombkt.sh
+
+    at <anonymous> (/$bunfs/root/src/entrypoints/cli.js:1408:138)
+    at exitHandler (node:child_process:109:27)
+    at emit (node:events:98:22)
+    at #maybeClose (node:child_process:766:16)
+    at #handleOnExit (node:child_process:520:72)
+    at processTicksAndRejections (native:7:39)
+2026-03-05T09:34:25.653Z [DEBUG] No session environment scripts found
+2026-03-05T09:34:25.683Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:34:25.683Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:34:25.683Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-05T09:34:25.683Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /etc/claude-code/managed-settings.json
+2026-03-05T09:34:25.683Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-03-05T09:34:25.683Z [DEBUG] Found 7 hook matchers in settings
+2026-03-05T09:34:25.683Z [DEBUG] Matched 1 unique hooks for query "Bash" (1 before deduplication)
+2026-03-05T09:34:25.717Z [DEBUG] Hook output does not start with {, treating as plain text
+2026-03-05T09:34:25.718Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T09:34:25.718Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T09:34:25.718Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T09:34:25.718Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T09:34:25.719Z [DEBUG] autocompact: tokens=52961 threshold=167000 effectiveWindow=180000
+2026-03-05T09:34:25.719Z [DEBUG] Dynamic tool loading: found 4 discovered tools in message history
+2026-03-05T09:34:25.720Z [DEBUG] Dynamic tool loading: 4/22 deferred tools included
+2026-03-05T09:34:25.720Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.69.109; cc_entrypoint=cli; cch=00000;
+2026-03-05T09:34:25.720Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:25.721Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T09:34:25.721Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T09:34:25.721Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:25.721Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T09:34:25.721Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:25.723Z [DEBUG] [useDeferredValue] Messages deferred by 3 (116→119)
+2026-03-05T09:34:25.725Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:25.733Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization
+2026-03-05T09:34:26.001Z [ERROR] API error (attempt 1/11): undefined Connection error.
+2026-03-05T09:34:26.002Z [DEBUG] [useDeferredValue] Messages deferred by 1 (119→120)
+2026-03-05T09:34:26.003Z [DEBUG] Fast mode unavailable: Fast mode has been disabled by your organization

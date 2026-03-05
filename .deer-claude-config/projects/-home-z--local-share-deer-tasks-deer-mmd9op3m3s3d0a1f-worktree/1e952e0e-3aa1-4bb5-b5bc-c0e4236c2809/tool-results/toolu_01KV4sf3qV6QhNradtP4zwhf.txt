@@ -1,0 +1,1574 @@
+     1→     1→import { Box, Text, useInput, useApp, useStdout } from "ink";
+     2→     2→import { TextInput, Spinner } from "@inkjs/ui";
+     3→     3→import React, { useState, useEffect, useRef, useCallback } from "react";
+     4→     4→import { join } from "node:path";
+     5→     5→import { mkdir } from "node:fs/promises";
+     6→     6→import { generateTaskId, transcriptsDir, loadHistory, upsertHistory, removeFromHistory } from "./task";
+     7→     7→import type { PersistedTask } from "./task";
+     8→     8→import { loadConfig } from "./config";
+     9→     9→import type { DeerConfig } from "./config";
+    10→    10→import { transition, availableActions, resolveKeypress, ACTION_BINDINGS } from "./state-machine";
+    11→    11→import type { AgentState as AgentStatus } from "./state-machine";
+    12→    12→
+    13→    13→// The Docker Sandbox proxy reads ANTHROPIC_API_KEY from the host process env
+    14→    14→// on every `docker sandbox exec` call and injects it into API requests,
+    15→    15→// overriding OAuth auth. Remove it from the process so child processes
+    16→    16→// (especially docker sandbox exec) never inherit it.
+    17→    17→delete process.env.ANTHROPIC_API_KEY;
+    18→    18→
+    19→    19→// ── Types ────────────────────────────────────────────────────────────
+    20→    20→
+    21→    21→interface SandboxMeta {
+    22→    22→  sandboxName: string;
+    23→    23→  worktreePath: string;
+    24→    24→  tempBranch: string;
+    25→    25→  baseBranch: string;
+    26→    26→  sandboxHome: string;
+    27→    27→  model: string;
+    28→    28→  /** Temp dir for deer artifacts (inside GIT_DIR, not tracked by git) */
+    29→    29→  deerTmpDir: string;
+    30→    30→}
+    31→    31→
+    32→    32→interface TeardownResult {
+    33→    33→  finalBranch: string;
+    34→    34→  prUrl: string;
+    35→    35→}
+    36→    36→
+    37→    37→/** @internal Exported for testing */
+    38→    38→export interface AgentState {
+    39→    39→  id: number;
+    40→    40→  /** Persistent task ID (deer_xxx format) for history storage */
+    41→    41→  taskId: string;
+    42→    42→  prompt: string;
+    43→    43→  status: AgentStatus;
+    44→    44→  /** Elapsed seconds */
+    45→    45→  elapsed: number;
+    46→    46→  /** Last activity from tmux pane capture */
+    47→    47→  lastActivity: string;
+    48→    48→  /** Current tool being used */
+    49→    49→  currentTool: string;
+    50→    50→  /** Log lines (capped) */
+    51→    51→  logs: string[];
+    52→    52→  /** Sandbox metadata from setup */
+    53→    53→  meta: SandboxMeta | null;
+    54→    54→  /** Teardown result */
+    55→    55→  result: TeardownResult | null;
+    56→    56→  /** Error message on failure */
+    57→    57→  error: string;
+    58→    58→  /** Running process handle (or tmux kill handle) */
+    59→    59→  proc: { kill(): void } | null;
+    60→    60→  /** Timer handle */
+    61→    61→  timer: ReturnType<typeof setInterval> | null;
+    62→    62→  /** PR state on GitHub: null = unchecked, "open" = open, "merged" = merged, "closed" = closed */
+    63→    63→  prState: "open" | "merged" | "closed" | null;
+    64→    64→  /** Agent is waiting for user input (e.g. AskUserQuestion tool) */
+    65→    65→  needsAttention: boolean;
+    66→    66→  /** Human-readable conversation transcript (terminal output lines) */
+    67→    67→  transcript: string[];
+    68→    68→  /** Path to persisted transcript file (set when completed with no code changes) */
+    69→    69→  transcriptPath: string | null;
+    70→    70→  /** True if this agent was loaded from history (not spawned this session) */
+    71→    71→  historical: boolean;
+    72→    72→}
+    73→    73→
+    74→    74→// ── Constants ────────────────────────────────────────────────────────
+    75→    75→
+    76→    76→const STATUS_DISPLAY: Record<AgentStatus, { icon: string; color: string }> = {
+    77→    77→  setup:       { icon: "⏳", color: "yellow" },
+    78→    78→  running:     { icon: "●",  color: "cyan" },
+    79→    79→  teardown:    { icon: "⬆",  color: "blue" },
+    80→    80→  completed:   { icon: "✓",  color: "green" },
+    81→    81→  failed:      { icon: "✗",  color: "red" },
+    82→    82→  cancelled:   { icon: "⊘",  color: "gray" },
+    83→    83→  interrupted: { icon: "!",  color: "yellow" },
+    84→    84→};
+    85→    85→
+    86→    86→const MAX_LOG_LINES = 200;
+    87→    87→const MAX_VISIBLE_LOGS = 5;
+    88→    88→const LOG_LINES_PER_ENTRY = 2;
+    89→    89→/** Base rows per entry: title + log lines. Entries with a PR URL add 1 more row. */
+    90→    90→const ENTRY_ROWS_BASE = 1 + LOG_LINES_PER_ENTRY;
+    91→    91→const ENTRY_ROWS_WITH_PR = ENTRY_ROWS_BASE + 1;
+    92→    92→const MODEL = "sonnet";
+    93→    93→const PR_MERGE_CHECK_INTERVAL_MS = 60_000;
+    94→    94→
+    95→    95→/** Timeout for the metadata extraction follow-up invocation */
+    96→    96→const METADATA_TIMEOUT_MS = 60_000;
+    97→    97→
+    98→    98→const SCRIPTS_DIR = join(import.meta.dir, "..", "scripts");
+    99→    99→
+   100→   100→// ── Helpers ──────────────────────────────────────────────────────────
+   101→   101→
+   102→   102→function truncate(s: string, max: number): string {
+   103→   103→  if (max <= 0) return "";
+   104→   104→  return s.length > max ? s.slice(0, max - 1) + "…" : s;
+   105→   105→}
+   106→   106→
+   107→   107→function formatTime(seconds: number): string {
+   108→   108→  const m = Math.floor(seconds / 60);
+   109→   109→  const s = seconds % 60;
+   110→   110→  return `${m}:${String(s).padStart(2, "0")}`;
+   111→   111→}
+   112→   112→
+   113→   113→function appendLog(agent: AgentState, line: string) {
+   114→   114→  agent.logs.push(line);
+   115→   115→  if (agent.logs.length > MAX_LOG_LINES) {
+   116→   116→    agent.logs.splice(0, agent.logs.length - MAX_LOG_LINES);
+   117→   117→  }
+   118→   118→}
+   119→   119→
+   120→   120→function isActive(a: AgentState): boolean {
+   121→   121→  return a.status === "setup" || a.status === "running" || a.status === "teardown";
+   122→   122→}
+   123→   123→
+   124→   124→/** Suspend the ink alternate screen, run fn, then restore. */
+   125→   125→async function withSuspendedTerminal(
+   126→   126→  setSuspended: (v: boolean) => void,
+   127→   127→  fn: () => Promise<void>,
+   128→   128→): Promise<void> {
+   129→   129→  setSuspended(true);
+   130→   130→  process.stdout.write("\x1b[?1049l");
+   131→   131→  if (process.stdin.setRawMode) process.stdin.setRawMode(false);
+   132→   132→  try {
+   133→   133→    await fn();
+   134→   134→  } finally {
+   135→   135→    if (process.stdin.setRawMode) process.stdin.setRawMode(true);
+   136→   136→    process.stdout.write("\x1b[?1049h\x1b[2J\x1b[H");
+   137→   137→    setSuspended(false);
+   138→   138→  }
+   139→   139→}
+   140→   140→
+   141→   141→/** Spawn a bash script, check exit code, parse JSON from last stdout line. */
+   142→   142→async function runScriptJson<T>(args: string[], cwd: string): Promise<T> {
+   143→   143→  const proc = Bun.spawn(args, { cwd, stdout: "pipe", stderr: "pipe" });
+   144→   144→  const code = await proc.exited;
+   145→   145→  if (code !== 0) {
+   146→   146→    const stderr = await new Response(proc.stderr).text();
+   147→   147→    throw new Error(`Script failed (exit ${code}): ${stderr.trim().split("\n").pop()}`);
+   148→   148→  }
+   149→   149→  const stdout = await new Response(proc.stdout).text();
+   150→   150→  const lines = stdout.trim().split("\n").filter(Boolean);
+   151→   151→  const jsonLine = lines[lines.length - 1];
+   152→   152→  if (!jsonLine) throw new Error("Script produced no output");
+   153→   153→  return JSON.parse(jsonLine) as T;
+   154→   154→}
+   155→   155→
+   156→   156→/** Spawn claude -p inside a docker sandbox with OAuth env. */
+   157→   157→function spawnClaudeInSandbox(meta: SandboxMeta, promptPath: string): ReturnType<typeof Bun.spawn> {
+   158→   158→  return Bun.spawn([
+   159→   159→    "docker", "sandbox", "exec", "--privileged", meta.sandboxName,
+   160→   160→    "env", "-u", "ANTHROPIC_API_KEY",
+   161→   161→    `CLAUDE_CODE_OAUTH_TOKEN=${process.env.CLAUDE_CODE_OAUTH_TOKEN}`,
+   162→   162→    "sh", "-c",
+   163→   163→    `cd ${meta.worktreePath} && cat ${promptPath} | claude -p --output-format stream-json --verbose --dangerously-skip-permissions --model ${MODEL}`,
+   164→   164→  ], { stdout: "pipe", stderr: "pipe" });
+   165→   165→}
+   166→   166→
+   167→   167→function prStateColor(state: "open" | "merged" | "closed" | null): string {
+   168→   168→  if (state === "merged") return "magenta";
+   169→   169→  if (state === "closed") return "red";
+   170→   170→  return "green";
+   171→   171→}
+   172→   172→
+   173→   173→/** Factory for AgentState with sensible defaults. */
+   174→   174→export function createAgentState(overrides: Partial<AgentState>): AgentState {
+   175→   175→  return {
+   176→   176→    id: 0,
+   177→   177→    taskId: "",
+   178→   178→    prompt: "",
+   179→   179→    status: "setup",
+   180→   180→    elapsed: 0,
+   181→   181→    lastActivity: "",
+   182→   182→    currentTool: "",
+   183→   183→    logs: [],
+   184→   184→    meta: null,
+   185→   185→    result: null,
+   186→   186→    error: "",
+   187→   187→    proc: null,
+   188→   188→    timer: null,
+   189→   189→    prState: null,
+   190→   190→    needsAttention: false,
+   191→   191→    transcript: [],
+   192→   192→    transcriptPath: null,
+   193→   193→    historical: false,
+   194→   194→    ...overrides,
+   195→   195→  };
+   196→   196→}
+   197→   197→
+   198→   198→/** Strip ANSI escape sequences from terminal output */
+   199→   199→export function stripAnsi(s: string): string {
+   200→   200→  return s.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "")
+   201→   201→          .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "");
+   202→   202→}
+   203→   203→
+   204→   204→/** Check if the deer tmux pane's command has exited */
+   205→   205→async function isTmuxPaneDead(sandboxName: string): Promise<boolean> {
+   206→   206→  const proc = Bun.spawn([
+   207→   207→    "docker", "sandbox", "exec", sandboxName,
+   208→   208→    "tmux", "list-panes", "-t", "deer", "-F", "#{pane_dead}",
+   209→   209→  ], { stdout: "pipe", stderr: "pipe" });
+   210→   210→  if ((await proc.exited) !== 0) return true; // session gone = dead
+   211→   211→  const result = (await new Response(proc.stdout).text()).trim();
+   212→   212→  return result === "1";
+   213→   213→}
+   214→   214→
+   215→   215→/** Capture tmux pane content. Returns lines or null if session doesn't exist. */
+   216→   216→async function captureTmuxPane(
+   217→   217→  sandboxName: string,
+   218→   218→  fullScrollback = false,
+   219→   219→): Promise<string[] | null> {
+   220→   220→  const args = ["docker", "sandbox", "exec", sandboxName,
+   221→   221→    "tmux", "capture-pane", "-t", "deer", "-p"];
+   222→   222→  if (fullScrollback) args.push("-S", "-");
+   223→   223→
+   224→   224→  const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
+   225→   225→  if ((await proc.exited) !== 0) return null;
+   226→   226→  const text = await new Response(proc.stdout).text();
+   227→   227→  return text.split("\n");
+   228→   228→}
+   229→   229→
+   230→   230→function openUrl(url: string) {
+   231→   231→  const cmd = process.platform === "darwin" ? "open" : "xdg-open";
+   232→   232→  Bun.spawn([cmd, url], { stdout: "pipe", stderr: "pipe" });
+   233→   233→}
+   234→   234→
+   235→   235→/** Timeout for the needs-input classification invocation */
+   236→   236→const NEEDS_INPUT_TIMEOUT_MS = 15_000;
+   237→   237→
+   238→   238→/**
+   239→   239→ * Use a fast LLM call to determine if the agent's last transcript message
+   240→   240→ * is asking the user for input/clarification/decisions — works across
+   241→   241→ * all languages.
+   242→   242→ *
+   243→   243→ * Returns true if the agent appears to be blocked on human intervention.
+   244→   244→ */
+   245→   245→export async function needsHumanInput(transcript: string[]): Promise<boolean> {
+   246→   246→  if (transcript.length === 0) return false;
+   247→   247→  const last = transcript[transcript.length - 1].trim();
+   248→   248→  if (!last) return false;
+   249→   249→
+   250→   250→  const prompt = [
+   251→   251→    "You are a classifier. The following message is the final output from an AI coding agent.",
+   252→   252→    "Is a response from the user expected after this message?",
+   253→   253→    "For example: the agent asked a question, presented options to choose from,",
+   254→   254→    "requested clarification, asked the user to do something, or is otherwise",
+   255→   255→    "waiting for input before it can continue.",
+   256→   256→    "",
+   257→   257→    "Respond with exactly YES or NO. Nothing else.",
+   258→   258→    "",
+   259→   259→    "<agent-message>",
+   260→   260→    last.length > 2000 ? last.slice(-2000) : last,
+   261→   261→    "</agent-message>",
+   262→   262→  ].join("\n");
+   263→   263→
+   264→   264→  try {
+   265→   265→    const { CLAUDECODE: _, ANTHROPIC_API_KEY: __, ...env } = process.env;
+   266→   266→    const proc = Bun.spawn([
+   267→   267→      "claude", "-p", "--output-format", "text", "--model", "haiku",
+   268→   268→    ], {
+   269→   269→      stdin: new Response(prompt),
+   270→   270→      stdout: "pipe",
+   271→   271→      stderr: "pipe",
+   272→   272→      env,
+   273→   273→    });
+   274→   274→
+   275→   275→    const timeout = new Promise<never>((_, reject) =>
+   276→   276→      setTimeout(() => {
+   277→   277→        proc.kill();
+   278→   278→        reject(new Error("needs-input classification timed out"));
+   279→   279→      }, NEEDS_INPUT_TIMEOUT_MS),
+   280→   280→    );
+   281→   281→
+   282→   282→    const result = await Promise.race([
+   283→   283→      proc.exited.then(async (code) => {
+   284→   284→        if (code !== 0) return false;
+   285→   285→        const text = (await new Response(proc.stdout).text()).trim().toUpperCase();
+   286→   286→        return text === "YES";
+   287→   287→      }),
+   288→   288→      timeout,
+   289→   289→    ]);
+   290→   290→
+   291→   291→    return result;
+   292→   292→  } catch {
+   293→   293→    // On any failure, assume no — don't block the normal flow
+   294→   294→    return false;
+   295→   295→  }
+   296→   296→}
+   297→   297→
+   298→   298→function buildTranscriptMarkdown(agent: AgentState): string {
+   299→   299→  const date = new Date().toISOString().replace("T", " ").slice(0, 16);
+   300→   300→  const heading = agent.prompt.length > 80 ? agent.prompt.slice(0, 80) + "…" : agent.prompt;
+   301→   301→
+   302→   302→  const sections: string[] = [
+   303→   303→    `# deer — ${heading}`,
+   304→   304→    "",
+   305→   305→    `**Date:** ${date}`,
+   306→   306→    "",
+   307→   307→    "---",
+   308→   308→    "",
+   309→   309→    "## User",
+   310→   310→    "",
+   311→   311→    agent.prompt,
+   312→   312→    "",
+   313→   313→    "## Assistant",
+   314→   314→    "",
+   315→   315→    agent.transcript.join("\n\n"),
+   316→   316→  ];
+   317→   317→
+   318→   318→  return sections.join("\n") + "\n";
+   319→   319→}
+   320→   320→
+   321→   321→async function persistTranscript(agent: AgentState): Promise<string> {
+   322→   322→  const dir = transcriptsDir();
+   323→   323→  await mkdir(dir, { recursive: true });
+   324→   324→  const filePath = join(dir, `${agent.taskId}.md`);
+   325→   325→  await Bun.write(filePath, buildTranscriptMarkdown(agent));
+   326→   326→  return filePath;
+   327→   327→}
+   328→   328→
+   329→   329→// ── Preflight ────────────────────────────────────────────────────────
+   330→   330→
+   331→   331→interface PreflightResult {
+   332→   332→  ok: boolean;
+   333→   333→  errors: string[];
+   334→   334→}
+   335→   335→
+   336→   336→async function runPreflight(): Promise<PreflightResult> {
+   337→   337→  const errors: string[] = [];
+   338→   338→
+   339→   339→  // Check docker sandbox
+   340→   340→  try {
+   341→   341→    const p = Bun.spawn(["docker", "sandbox", "version"], { stdout: "pipe", stderr: "pipe" });
+   342→   342→    const code = await p.exited;
+   343→   343→    if (code !== 0) errors.push("docker sandbox not available (Docker Desktop 4.58+ required)");
+   344→   344→  } catch {
+   345→   345→    errors.push("docker sandbox not available");
+   346→   346→  }
+   347→   347→
+   348→   348→  // Check gh auth
+   349→   349→  try {
+   350→   350→    const p = Bun.spawn(["gh", "auth", "token"], { stdout: "pipe", stderr: "pipe" });
+   351→   351→    const code = await p.exited;
+   352→   352→    if (code !== 0) errors.push("gh auth not configured — run 'gh auth login'");
+   353→   353→  } catch {
+   354→   354→    errors.push("gh CLI not available");
+   355→   355→  }
+   356→   356→
+   357→   357→  // Check OAuth token
+   358→   358→  const tokenFile = join(process.env.HOME || "", ".claude/agent-oauth-token");
+   359→   359→  if (!process.env.CLAUDE_CODE_OAUTH_TOKEN) {
+   360→   360→    try {
+   361→   361→      const f = Bun.file(tokenFile);
+   362→   362→      if (await f.exists()) {
+   363→   363→        process.env.CLAUDE_CODE_OAUTH_TOKEN = (await f.text()).trim();
+   364→   364→      }
+   365→   365→    } catch { /* ignore */ }
+   366→   366→  }
+   367→   367→  if (!process.env.CLAUDE_CODE_OAUTH_TOKEN) {
+   368→   368→    errors.push("No OAuth token — set CLAUDE_CODE_OAUTH_TOKEN or create ~/.claude/agent-oauth-token");
+   369→   369→  }
+   370→   370→
+   371→   371→  return { ok: errors.length === 0, errors };
+   372→   372→}
+   373→   373→
+   374→   374→// ── Agent Lifecycle ──────────────────────────────────────────────────
+   375→   375→
+   376→   376→async function setupAgent(
+   377→   377→  cwd: string,
+   378→   378→  agent: AgentState,
+   379→   379→  setAgents: (updater: (prev: AgentState[]) => AgentState[]) => void,
+   380→   380→  baseBranch?: string,
+   381→   381→): Promise<SandboxMeta> {
+   382→   382→  const args = ["bash", join(SCRIPTS_DIR, "setup-sandbox.sh"), cwd, MODEL];
+   383→   383→  if (baseBranch) args.push(baseBranch);
+   384→   384→
+   385→   385→  const proc = Bun.spawn(args, { cwd, stdout: "pipe", stderr: "pipe" });
+   386→   386→
+   387→   387→  // Stream stderr lines into agent logs in real-time
+   388→   388→  const stderrStream = proc.stderr as ReadableStream;
+   389→   389→  const reader = stderrStream.getReader();
+   390→   390→  const decoder = new TextDecoder();
+   391→   391→  let stderrBuf = "";
+   392→   392→
+   393→   393→  (async () => {
+   394→   394→    try {
+   395→   395→      while (true) {
+   396→   396→        const { done, value } = await reader.read();
+   397→   397→        if (done) break;
+   398→   398→        stderrBuf += decoder.decode(value, { stream: true });
+   399→   399→        const lines = stderrBuf.split("\n");
+   400→   400→        stderrBuf = lines.pop()!;
+   401→   401→        for (const raw of lines) {
+   402→   402→          const line = stripAnsi(raw).trim();
+   403→   403→          if (line) {
+   404→   404→            appendLog(agent, `[setup] ${line}`);
+   405→   405→            agent.lastActivity = truncate(line, 120);
+   406→   406→            setAgents((prev) => [...prev]);
+   407→   407→          }
+   408→   408→        }
+   409→   409→      }
+   410→   410→      // Flush remaining
+   411→   411→      const last = stripAnsi(stderrBuf).trim();
+   412→   412→      if (last) {
+   413→   413→        appendLog(agent, `[setup] ${last}`);
+   414→   414→        agent.lastActivity = truncate(last, 120);
+   415→   415→        setAgents((prev) => [...prev]);
+   416→   416→      }
+   417→   417→    } catch { /* stream closed */ }
+   418→   418→  })();
+   419→   419→
+   420→   420→  const code = await proc.exited;
+   421→   421→  if (code !== 0) {
+   422→   422→    throw new Error(`Setup failed (exit ${code})`);
+   423→   423→  }
+   424→   424→  const stdout = await new Response(proc.stdout).text();
+   425→   425→  const jsonLines = stdout.trim().split("\n").filter(Boolean);
+   426→   426→  const jsonLine = jsonLines[jsonLines.length - 1];
+   427→   427→  if (!jsonLine) throw new Error("Setup script produced no output");
+   428→   428→  return JSON.parse(jsonLine) as SandboxMeta;
+   429→   429→}
+   430→   430→
+   431→   431→/**
+   432→   432→ * Apply a deny-by-default network policy to the sandbox, allowing only the
+   433→   433→ * domains in the config allowlist. Called after sandbox creation but before
+   434→   434→ * the agent starts, so tmux/apt installs during setup are unaffected.
+   435→   435→ */
+   436→   436→/** Domains that must bypass the MITM proxy so OAuth credentials pass through
+   437→   437→ *  unmodified. The `claude` sandbox template's proxy intercepts these and
+   438→   438→ *  injects the host's ANTHROPIC_API_KEY, overriding CLAUDE_CODE_OAUTH_TOKEN. */
+   439→   439→const PROXY_BYPASS_HOSTS = [
+   440→   440→  "api.anthropic.com",
+   441→   441→  "claude.ai",
+   442→   442→  "statsig.anthropic.com",
+   443→   443→  "sentry.io",
+   444→   444→];
+   445→   445→
+   446→   446→async function applyNetworkPolicy(sandboxName: string, allowlist: string[]): Promise<void> {
+   447→   447→  const args = [
+   448→   448→    "docker", "sandbox", "network", "proxy", sandboxName,
+   449→   449→    "--policy", "deny",
+   450→   450→    ...allowlist.flatMap((host) => ["--allow-host", host]),
+   451→   451→    ...PROXY_BYPASS_HOSTS.flatMap((host) => ["--bypass-host", host]),
+   452→   452→  ];
+   453→   453→  const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
+   454→   454→  const code = await proc.exited;
+   455→   455→  if (code !== 0) {
+   456→   456→    const stderr = await new Response(proc.stderr).text();
+   457→   457→    throw new Error(`Network policy failed (exit ${code}): ${stderr.trim()}`);
+   458→   458→  }
+   459→   459→}
+   460→   460→
+   461→   461→/**
+   462→   462→ * Start Claude inside a tmux session in the sandbox.
+   463→   463→ * Writes a launcher script to deerTmpDir (bind-mounted into the sandbox)
+   464→   464→ * that bakes in the OAuth token and unsets ANTHROPIC_API_KEY. The script
+   465→   465→ * runs as tmux's initial command, so when Claude exits the pane dies
+   466→   466→ * (remain-on-exit preserves content for scrollback capture).
+   467→   467→ *
+   468→   468→ * A script file avoids fragile quoting through multiple shell layers
+   469→   469→ * (TypeScript → docker exec → sh → tmux send-keys → tmux shell).
+   470→   470→ */
+   471→   471→async function startClaudeInTmux(meta: SandboxMeta, prompt: string): Promise<void> {
+   472→   472→  const promptPath = join(meta.deerTmpDir, ".agent-prompt");
+   473→   473→  await Bun.write(promptPath, prompt);
+   474→   474→
+   475→   475→  // Write launcher script — runs as tmux session's initial command.
+   476→   476→  // The token is written directly into the file, avoiding send-keys quoting.
+   477→   477→  // deerTmpDir is inside GIT_DIR which is bind-mounted into the sandbox.
+   478→   478→  const launcherPath = join(meta.deerTmpDir, ".agent-launcher.sh");
+   479→   479→  await Bun.write(launcherPath, [
+   480→   480→    `#!/bin/sh`,
+   481→   481→    `unset ANTHROPIC_API_KEY`,
+   482→   482→    `export CLAUDE_CODE_OAUTH_TOKEN='${process.env.CLAUDE_CODE_OAUTH_TOKEN}'`,
+   483→   483→    `cd "${meta.worktreePath}"`,
+   484→   484→    `cat "${meta.deerTmpDir}/.agent-prompt" | claude -p --verbose --dangerously-skip-permissions --model ${MODEL}`,
+   485→   485→  ].join("\n") + "\n");
+   486→   486→
+   487→   487→  const script = [
+   488→   488→    `export PATH="$PATH:/usr/bin:/usr/local/bin:/bin"`,
+   489→   489→    `export TERM=xterm-256color`,
+   490→   490→    `chmod +x ${launcherPath}`,
+   491→   491→    `tmux new-session -d -s deer "sh ${launcherPath}"`,
+   492→   492→    `tmux set -t deer remain-on-exit on`,
+   493→   493→  ].join(" && ");
+   494→   494→
+   495→   495→  const proc = Bun.spawn([
+   496→   496→    "docker", "sandbox", "exec", "--privileged", meta.sandboxName,
+   497→   497→    "sh", "-c", script,
+   498→   498→  ], {
+   499→   499→    stdout: "pipe",
+   500→   500→    stderr: "pipe",
+   501→   501→  });
+   502→   502→
+   503→   503→  const code = await proc.exited;
+   504→   504→  if (code !== 0) {
+   505→   505→    const stderr = await new Response(proc.stderr).text();
+   506→   506→    throw new Error(`Failed to start Claude in tmux: ${stderr.trim()}`);
+   507→   507→  }
+   508→   508→}
+   509→   509→
+   510→   510→/**
+   511→   511→ * Build the follow-up prompt that asks the agent to write metadata files.
+   512→   512→ * Includes the repo's PR template if one exists.
+   513→   513→ */
+   514→   514→async function buildMetadataPrompt(worktreePath: string, deerTmpDir: string): Promise<string> {
+   515→   515→  let prTemplate = "";
+   516→   516→
+   517→   517→  const templatePaths = [
+   518→   518→    ".github/PULL_REQUEST_TEMPLATE.md",
+   519→   519→    ".github/pull_request_template.md",
+   520→   520→    "PULL_REQUEST_TEMPLATE.md",
+   521→   521→    "pull_request_template.md",
+   522→   522→  ];
+   523→   523→
+   524→   524→  for (const rel of templatePaths) {
+   525→   525→    const f = Bun.file(join(worktreePath, rel));
+   526→   526→    if (await f.exists()) {
+   527→   527→      prTemplate = await f.text();
+   528→   528→      break;
+   529→   529→    }
+   530→   530→  }
+   531→   531→
+   532→   532→  // Collect the diff so the metadata prompt is self-contained (no --continue needed)
+   533→   533→  const diffProc = Bun.spawn(["git", "-C", worktreePath, "diff", "HEAD"], {
+   534→   534→    stdout: "pipe",
+   535→   535→    stderr: "ignore",
+   536→   536→  });
+   537→   537→  let diff = await new Response(diffProc.stdout).text();
+   538→   538→  await diffProc.exited;
+   539→   539→
+   540→   540→  // If nothing is unstaged, get the diff against the parent commit instead
+   541→   541→  if (!diff.trim()) {
+   542→   542→    const logProc = Bun.spawn(["git", "-C", worktreePath, "diff", "HEAD~1..HEAD"], {
+   543→   543→      stdout: "pipe",
+   544→   544→      stderr: "ignore",
+   545→   545→    });
+   546→   546→    diff = await new Response(logProc.stdout).text();
+   547→   547→    await logProc.exited;
+   548→   548→  }
+   549→   549→
+   550→   550→  // Truncate very large diffs to avoid blowing up the context window
+   551→   551→  const MAX_DIFF_CHARS = 80_000;
+   552→   552→  if (diff.length > MAX_DIFF_CHARS) {
+   553→   553→    diff = diff.slice(0, MAX_DIFF_CHARS) + "\n\n... (diff truncated)";
+   554→   554→  }
+   555→   555→
+   556→   556→  const prSection = prTemplate
+   557→   557→    ? `A pull request description following this template:\n\n<pr-template>\n${prTemplate}\n</pr-template>`
+   558→   558→    : `A pull request description with a summary of the changes.`;
+   559→   559→
+   560→   560→  return [
+   561→   561→    "Below is the git diff of changes made by an automated agent. Based on this diff, write these three files:",
+   562→   562→    "",
+   563→   563→    `1. \`${deerTmpDir}/.agent-branch-name\``,
+   564→   564→    "   A short kebab-case name for a git branch describing the changes.",
+   565→   565→    "   No prefix. Examples: fix-login-validation, add-user-avatar-upload",
+   566→   566→    "",
+   567→   567→    `2. \`${deerTmpDir}/.agent-commit-message\``,
+   568→   568→    "   A conventional git commit message. First line is the subject (<72 chars),",
+   569→   569→    "   then a blank line, then an optional body.",
+   570→   570→    "",
+   571→   571→    `3. \`${deerTmpDir}/.agent-pr-body\``,
+   572→   572→    `   ${prSection}`,
+   573→   573→    "",
+   574→   574→    "Write these three files now. Do nothing else.",
+   575→   575→    "",
+   576→   576→    "<diff>",
+   577→   577→    diff,
+   578→   578→    "</diff>",
+   579→   579→  ].join("\n");
+   580→   580→}
+   581→   581→
+   582→   582→/**
+   583→   583→ * Run a follow-up `claude -p` to extract metadata (branch name,
+   584→   584→ * commit message, PR body) after the main task finishes. The prompt
+   585→   585→ * includes the git diff so it's self-contained.
+   586→   586→ *
+   587→   587→ * Non-fatal — if this fails or times out, teardown has fallbacks.
+   588→   588→ */
+   589→   589→async function startClaudeMetadata(meta: SandboxMeta, agent: AgentState): Promise<void> {
+   590→   590→  const prompt = await buildMetadataPrompt(meta.worktreePath, meta.deerTmpDir);
+   591→   591→  const promptPath = join(meta.deerTmpDir, ".agent-metadata-prompt");
+   592→   592→  await Bun.write(promptPath, prompt);
+   593→   593→
+   594→   594→  const proc = spawnClaudeInSandbox(meta, `${meta.deerTmpDir}/.agent-metadata-prompt`);
+   595→   595→
+   596→   596→  // Drain stdout/stderr to prevent backpressure
+   597→   597→  const stdoutPromise = new Response(proc.stdout as ReadableStream).text();
+   598→   598→  const stderrPromise = new Response(proc.stderr as ReadableStream).text();
+   599→   599→
+   600→   600→  let timeoutId: ReturnType<typeof setTimeout>;
+   601→   601→  const timeout = new Promise<never>((_, reject) => {
+   602→   602→    timeoutId = setTimeout(() => {
+   603→   603→      proc.kill();
+   604→   604→      reject(new Error("Metadata extraction timed out"));
+   605→   605→    }, METADATA_TIMEOUT_MS);
+   606→   606→  });
+   607→   607→
+   608→   608→  try {
+   609→   609→    await Promise.race([
+   610→   610→      proc.exited.then(async (code) => {
+   611→   611→        await stdoutPromise;
+   612→   612→        const stderr = await stderrPromise;
+   613→   613→        if (stderr.trim()) appendLog(agent, `[metadata stderr] ${stderr.trim()}`);
+   614→   614→        if (code !== 0) {
+   615→   615→          const hint = stderr.trim().split("\n").pop() || "";
+   616→   616→          throw new Error(`Metadata extraction exited with code ${code}${hint ? `: ${hint}` : ""}`);
+   617→   617→        }
+   618→   618→      }),
+   619→   619→      timeout,
+   620→   620→    ]);
+   621→   621→  } finally {
+   622→   622→    clearTimeout(timeoutId!);
+   623→   623→  }
+   624→   624→}
+   625→   625→
+   626→   626→async function teardownAgent(meta: SandboxMeta, cwd: string): Promise<TeardownResult> {
+   627→   627→  return runScriptJson<TeardownResult>([
+   628→   628→    "bash", join(SCRIPTS_DIR, "teardown-sandbox.sh"),
+   629→   629→    cwd, meta.worktreePath, meta.sandboxName, meta.tempBranch, meta.baseBranch, meta.model, meta.deerTmpDir,
+   630→   630→  ], cwd);
+   631→   631→}
+   632→   632→
+   633→   633→/** Like teardownAgent but captures stderr lines into agent logs. */
+   634→   634→async function teardownAgentWithLogs(meta: SandboxMeta, cwd: string, agent: AgentState): Promise<TeardownResult> {
+   635→   635→  const proc = Bun.spawn([
+   636→   636→    "bash", join(SCRIPTS_DIR, "teardown-sandbox.sh"),
+   637→   637→    cwd, meta.worktreePath, meta.sandboxName, meta.tempBranch, meta.baseBranch, meta.model, meta.deerTmpDir,
+   638→   638→  ], { cwd, stdout: "pipe", stderr: "pipe" });
+   639→   639→
+   640→   640→  const stdoutPromise = new Response(proc.stdout as ReadableStream).text();
+   641→   641→  const stderrPromise = new Response(proc.stderr as ReadableStream).text();
+   642→   642→
+   643→   643→  const code = await proc.exited;
+   644→   644→  const stdout = await stdoutPromise;
+   645→   645→  const stderr = await stderrPromise;
+   646→   646→
+   647→   647→  // Surface the script's progress messages into agent logs
+   648→   648→  for (const line of stderr.trim().split("\n").filter(Boolean)) {
+   649→   649→    appendLog(agent, `[teardown] ${stripAnsi(line).trim()}`);
+   650→   650→  }
+   651→   651→
+   652→   652→  if (code !== 0) {
+   653→   653→    throw new Error(`Teardown failed (exit ${code}): ${stderr.trim().split("\n").pop()}`);
+   654→   654→  }
+   655→   655→
+   656→   656→  const lines = stdout.trim().split("\n").filter(Boolean);
+   657→   657→  const jsonLine = lines[lines.length - 1];
+   658→   658→  if (!jsonLine) throw new Error("Teardown script produced no output");
+   659→   659→  return JSON.parse(jsonLine) as TeardownResult;
+   660→   660→}
+   661→   661→
+   662→   662→function cleanupAgent(agent: AgentState, repoRoot: string) {
+   663→   663→  if (agent.proc) {
+   664→   664→    try { agent.proc.kill(); } catch { /* ignore */ }
+   665→   665→  }
+   666→   666→  if (agent.timer) clearInterval(agent.timer);
+   667→   667→  if (agent.meta) {
+   668→   668→    // Best-effort cleanup — fire-and-forget to avoid blocking the UI
+   669→   669→    const { sandboxName, worktreePath, tempBranch } = agent.meta;
+   670→   670→    (async () => {
+   671→   671→      try { await Bun.spawn(["docker", "sandbox", "rm", sandboxName]).exited; } catch { /* ignore */ }
+   672→   672→      try { await Bun.spawn(["git", "-C", repoRoot, "worktree", "remove", "--force", worktreePath]).exited; } catch { /* ignore */ }
+   673→   673→      try { await Bun.spawn(["git", "-C", repoRoot, "branch", "-D", tempBranch]).exited; } catch { /* ignore */ }
+   674→   674→    })();
+   675→   675→  }
+   676→   676→}
+   677→   677→
+   678→   678→/**
+   679→   679→ * Run metadata extraction + teardown for an agent.
+   680→   680→ * Handles its own errors — sets agent status to completed or failed.
+   681→   681→ */
+   682→   682→async function finalizeAgent(
+   683→   683→  agent: AgentState,
+   684→   684→  cwd: string,
+   685→   685→  setAgents: (updater: (prev: AgentState[]) => AgentState[]) => void,
+   686→   686→): Promise<void> {
+   687→   687→  if (!agent.meta) return;
+   688→   688→
+   689→   689→  // Kill the dead tmux session left over from the main Claude run
+   690→   690→  // (remain-on-exit keeps it alive). Cleaning up avoids stale lock files
+   691→   691→  // or session state that could interfere with the metadata invocation.
+   692→   692→  try {
+   693→   693→    await Bun.spawn([
+   694→   694→      "docker", "sandbox", "exec", agent.meta.sandboxName,
+   695→   695→      "tmux", "kill-session", "-t", "deer",
+   696→   696→    ], { stdout: "pipe", stderr: "pipe" }).exited;
+   697→   697→  } catch { /* ignore */ }
+   698→   698→
+   699→   699→  // Check if Claude wrote any code
+   700→   700→  const statusProc = Bun.spawn(
+   701→   701→    ["git", "-C", agent.meta.worktreePath, "status", "--porcelain"],
+   702→   702→    { stdout: "pipe", stderr: "pipe" },
+   703→   703→  );
+   704→   704→  const statusOut = await new Response(statusProc.stdout).text();
+   705→   705→  await statusProc.exited;
+   706→   706→  const changeCount = statusOut.trim().split("\n").filter(Boolean).length;
+   707→   707→  appendLog(agent, `[teardown] ${changeCount} file(s) changed in worktree`);
+   708→   708→
+   709→   709→  // Metadata extraction (non-fatal)
+   710→   710→  agent.lastActivity = "Generating PR metadata...";
+   711→   711→  setAgents((prev) => [...prev]);
+   712→   712→
+   713→   713→  try {
+   714→   714→    await startClaudeMetadata(agent.meta, agent);
+   715→   715→  } catch (err) {
+   716→   716→    appendLog(agent, `[warn] Metadata extraction failed: ${err instanceof Error ? err.message : String(err)}`);
+   717→   717→  }
+   718→   718→
+   719→   719→  // Teardown
+   720→   720→  agent.status = transition(agent.status, "TEARDOWN_START") ?? agent.status;
+   721→   721→  agent.lastActivity = "Committing and creating PR...";
+   722→   722→  setAgents((prev) => [...prev]);
+   723→   723→
+   724→   724→  try {
+   725→   725→    agent.result = await teardownAgentWithLogs(agent.meta, cwd, agent);
+   726→   726→    agent.status = transition(agent.status, "TEARDOWN_COMPLETE") ?? agent.status;
+   727→   727→
+   728→   728→    if (agent.result.prUrl) {
+   729→   729→      agent.lastActivity = "PR ready";
+   730→   730→    } else if (agent.transcript.length > 0) {
+   731→   731→      agent.transcriptPath = await persistTranscript(agent);
+   732→   732→      agent.lastActivity = "Answer ready — Enter to continue";
+   733→   733→    } else {
+   734→   734→      agent.lastActivity = "No changes";
+   735→   735→    }
+   736→   736→  } catch (err) {
+   737→   737→    agent.status = transition(agent.status, "ERROR") ?? "failed";
+   738→   738→    agent.error = err instanceof Error ? err.message : String(err);
+   739→   739→    agent.lastActivity = truncate(agent.error, 120);
+   740→   740→  } finally {
+   741→   741→    if (agent.timer) clearInterval(agent.timer);
+   742→   742→    agent.timer = null;
+   743→   743→    agent.proc = null;
+   744→   744→    await saveToHistory(agent, cwd);
+   745→   745→    setAgents((prev) => [...prev]);
+   746→   746→  }
+   747→   747→}
+   748→   748→
+   749→   749→/** Check the current state of a PR via `gh pr view`. */
+   750→   750→async function checkPrState(prUrl: string): Promise<"open" | "merged" | "closed" | null> {
+   751→   751→  try {
+   752→   752→    const proc = Bun.spawn(
+   753→   753→      ["gh", "pr", "view", prUrl, "--json", "state", "-q", ".state"],
+   754→   754→      { stdout: "pipe", stderr: "pipe" },
+   755→   755→    );
+   756→   756→    const code = await proc.exited;
+   757→   757→    if (code !== 0) return null;
+   758→   758→    const state = (await new Response(proc.stdout).text()).trim();
+   759→   759→    if (state === "MERGED") return "merged";
+   760→   760→    if (state === "CLOSED") return "closed";
+   761→   761→    return "open";
+   762→   762→  } catch {
+   763→   763→    return null;
+   764→   764→  }
+   765→   765→}
+   766→   766→
+   767→   767→// ── NDJSON Parser ────────────────────────────────────────────────────
+   768→   768→
+   769→   769→/** @internal Exported for testing */
+   770→   770→export function parseNdjsonLine(line: string, agent: AgentState): boolean {
+   771→   771→  if (!line.trim()) return false;
+   772→   772→  let changed = false;
+   773→   773→
+   774→   774→  try {
+   775→   775→    const event = JSON.parse(line);
+   776→   776→
+   777→   777→    // Assistant text content
+   778→   778→    if (event.type === "assistant" && event.message?.content) {
+   779→   779→      for (const block of event.message.content) {
+   780→   780→        if (block.type === "text" && block.text) {
+   781→   781→          agent.lastActivity = truncate(block.text.replace(/\n/g, " ").trim(), 120);
+   782→   782→          appendLog(agent, block.text.trim());
+   783→   783→          agent.transcript.push(block.text);
+   784→   784→          changed = true;
+   785→   785→        }
+   786→   786→        if (block.type === "tool_use") {
+   787→   787→          const name = block.name || "tool";
+   788→   788→          const input = block.input ? JSON.stringify(block.input).slice(0, 100) : "";
+   789→   789→          agent.currentTool = `${name} ${input}`;
+   790→   790→          appendLog(agent, `[tool] ${name} ${input}`);
+   791→   791→          changed = true;
+   792→   792→        }
+   793→   793→      }
+   794→   794→    }
+   795→   795→
+   796→   796→    // Tool result
+   797→   797→    if (event.type === "result" && event.result) {
+   798→   798→      agent.lastActivity = truncate(String(event.result).replace(/\n/g, " ").trim(), 120);
+   799→   799→      changed = true;
+   800→   800→    }
+   801→   801→
+   802→   802→    // Content block delta (streaming)
+   803→   803→    if (event.type === "content_block_delta") {
+   804→   804→      if (event.delta?.type === "text_delta" && event.delta.text) {
+   805→   805→        agent.lastActivity = truncate(event.delta.text.replace(/\n/g, " ").trim(), 120);
+   806→   806→        changed = true;
+   807→   807→      }
+   808→   808→    }
+   809→   809→
+   810→   810→    // System message
+   811→   811→    if (event.type === "system" && event.message) {
+   812→   812→      appendLog(agent, `[system] ${event.message}`);
+   813→   813→    }
+   814→   814→  } catch {
+   815→   815→    // Not valid JSON — treat as plain text log
+   816→   816→    if (line.trim()) {
+   817→   817→      appendLog(agent, line.trim());
+   818→   818→      changed = true;
+   819→   819→    }
+   820→   820→  }
+   821→   821→
+   822→   822→  return changed;
+   823→   823→}
+   824→   824→
+   825→   825→/** Save a finished agent to the repo's history file. */
+   826→   826→async function saveToHistory(agent: AgentState, repoPath: string): Promise<void> {
+   827→   827→  if (agent.historical) return;
+   828→   828→  const status = agent.status as "completed" | "failed" | "cancelled";
+   829→   829→  const task: PersistedTask = {
+   830→   830→    taskId: agent.taskId,
+   831→   831→    prompt: agent.prompt,
+   832→   832→    status,
+   833→   833→    createdAt: new Date(Date.now() - agent.elapsed * 1000).toISOString(),
+   834→   834→    completedAt: new Date().toISOString(),
+   835→   835→    elapsed: agent.elapsed,
+   836→   836→    prUrl: agent.result?.prUrl ?? null,
+   837→   837→    finalBranch: agent.result?.finalBranch ?? null,
+   838→   838→    error: agent.error || null,
+   839→   839→    transcriptPath: agent.transcriptPath,
+   840→   840→    lastActivity: agent.lastActivity,
+   841→   841→  };
+   842→   842→  await upsertHistory(repoPath, task);
+   843→   843→}
+   844→   844→
+   845→   845→/** Convert a persisted task to a read-only AgentState for display. */
+   846→   846→function historicalAgent(task: PersistedTask, id: number): AgentState {
+   847→   847→  const wasInterrupted = task.status === "running";
+   848→   848→  return createAgentState({
+   849→   849→    id,
+   850→   850→    taskId: task.taskId,
+   851→   851→    prompt: task.prompt,
+   852→   852→    status: wasInterrupted ? "interrupted" : task.status,
+   853→   853→    elapsed: task.elapsed,
+   854→   854→    lastActivity: wasInterrupted ? "Interrupted — deer was closed" : task.lastActivity,
+   855→   855→    result: task.prUrl ? { finalBranch: task.finalBranch ?? "", prUrl: task.prUrl } : null,
+   856→   856→    error: task.error || "",
+   857→   857→    transcriptPath: task.transcriptPath,
+   858→   858→    historical: true,
+   859→   859→  });
+   860→   860→}
+   861→   861→
+   862→   862→// ── Main Component ───────────────────────────────────────────────────
+   863→   863→
+   864→   864→export default function Dashboard({ cwd }: { cwd: string }) {
+   865→   865→  const { exit } = useApp();
+   866→   866→  const { stdout } = useStdout();
+   867→   867→  const termWidth = stdout?.columns || 80;
+   868→   868→  const termHeight = stdout?.rows || 24;
+   869→   869→
+   870→   870→  const [agents, setAgents] = useState<AgentState[]>([]);
+   871→   871→  const [selectedIdx, setSelectedIdx] = useState(0);
+   872→   872→  const [inputFocused, setInputFocused] = useState(true);
+   873→   873→  const [logExpanded, setLogExpanded] = useState(false);
+   874→   874→  const [suspended, setSuspended] = useState(false);
+   875→   875→  const [preflight, setPreflight] = useState<PreflightResult | null>(null);
+   876→   876→  const [confirmQuit, setConfirmQuit] = useState(false);
+   877→   877→  const [promptHistory, setPromptHistory] = useState<string[]>([]);
+   878→   878→  const [historyIdx, setHistoryIdx] = useState(-1);
+   879→   879→  const [inputDefault, setInputDefault] = useState("");
+   880→   880→  const [inputKey, setInputKey] = useState(0);
+   881→   881→  /** When set, the next prompt submission spawns an agent off this branch instead of the current branch. */
+   882→   882→  const [continueBranch, setContinueBranch] = useState<string | null>(null);
+   883→   883→
+   884→   884→  const nextId = useRef(1);
+   885→   885→  const agentsRef = useRef(agents);
+   886→   886→  agentsRef.current = agents;
+   887→   887→  const configRef = useRef<DeerConfig | null>(null);
+   888→   888→
+   889→   889→  // ── Sync state from history file (cross-instance source of truth) ──
+   890→   890→
+   891→   891→  const syncWithHistory = useCallback(async () => {
+   892→   892→    const fileTasks = await loadHistory(cwd);
+   893→   893→    const currentAgents = agentsRef.current;
+   894→   894→    const agentByTaskId = new Map(currentAgents.map(a => [a.taskId, a]));
+   895→   895→    const fileTaskIds = new Set(fileTasks.map(t => t.taskId));
+   896→   896→
+   897→   897→    const newAgents: AgentState[] = fileTasks.map(task => {
+   898→   898→      const existing = agentByTaskId.get(task.taskId);
+   899→   899→      if (existing && !existing.historical) {
+   900→   900→        return existing; // keep live process handle and timer
+   901→   901→      }
+   902→   902→      const id = existing?.id ?? nextId.current++;
+   903→   903→      return historicalAgent(task, id);
+   904→   904→    });
+   905→   905→
+   906→   906→    // Keep owned agents not yet written to the file (edge case: spawned but not yet persisted)
+   907→   907→    for (const agent of currentAgents) {
+   908→   908→      if (!agent.historical && !fileTaskIds.has(agent.taskId)) {
+   909→   909→        newAgents.push(agent);
+   910→   910→      }
+   911→   911→    }
+   912→   912→
+   913→   913→    const changed =
+   914→   914→      newAgents.length !== currentAgents.length ||
+   915→   915→      newAgents.some((a, i) => {
+   916→   916→        const cur = currentAgents[i];
+   917→   917→        return !cur || a.taskId !== cur.taskId || a.status !== cur.status || a.lastActivity !== cur.lastActivity;
+   918→   918→      });
+   919→   919→
+   920→   920→    if (changed) setAgents(newAgents);
+   921→   921→  }, [cwd]);
+   922→   922→
+   923→   923→  // ── Load history + preflight on mount ─────────────────────────────
+   924→   924→
+   925→   925→  useEffect(() => {
+   926→   926→    runPreflight().then(setPreflight);
+   927→   927→    loadConfig(cwd).then((cfg) => { configRef.current = cfg; });
+   928→   928→    syncWithHistory();
+   929→   929→  }, [cwd, syncWithHistory]);
+   930→   930→
+   931→   931→  // ── Poll history file for changes from other deer instances ────────
+   932→   932→
+   933→   933→  useEffect(() => {
+   934→   934→    const interval = setInterval(syncWithHistory, 2_000);
+   935→   935→    return () => clearInterval(interval);
+   936→   936→  }, [syncWithHistory]);
+   937→   937→
+   938→   938→  // ── Cleanup on unmount ───────────────────────────────────────────
+   939→   939→
+   940→   940→  useEffect(() => {
+   941→   941→    const cleanup = () => {
+   942→   942→      for (const agent of agentsRef.current) {
+   943→   943→        if (isActive(agent)) cleanupAgent(agent, cwd);
+   944→   944→      }
+   945→   945→    };
+   946→   946→
+   947→   947→    process.on("exit", cleanup);
+   948→   948→    process.on("SIGINT", () => { cleanup(); process.exit(0); });
+   949→   949→    process.on("SIGTERM", () => { cleanup(); process.exit(0); });
+   950→   950→
+   951→   951→    return () => {
+   952→   952→      process.removeListener("exit", cleanup);
+   953→   953→    };
+   954→   954→  }, [cwd]);
+   955→   955→
+   956→   956→  // ── Check PR merge status periodically ───────────────────────────
+   957→   957→
+   958→   958→  useEffect(() => {
+   959→   959→    const check = async () => {
+   960→   960→      // Check agents with a PR URL that are either unchecked or still open (merged/closed are terminal)
+   961→   961→      const toCheck = agentsRef.current.filter(
+   962→   962→        (a) => a.result?.prUrl && (a.prState === null || a.prState === "open"),
+   963→   963→      );
+   964→   964→      if (toCheck.length === 0) return;
+   965→   965→
+   966→   966→      const results = await Promise.all(
+   967→   967→        toCheck.map((agent) => checkPrState(agent.result!.prUrl)),
+   968→   968→      );
+   969→   969→      let changed = false;
+   970→   970→      for (let i = 0; i < toCheck.length; i++) {
+   971→   971→        const state = results[i];
+   972→   972→        if (state !== null && state !== toCheck[i].prState) {
+   973→   973→          toCheck[i].prState = state;
+   974→   974→          changed = true;
+   975→   975→        }
+   976→   976→      }
+   977→   977→      if (changed) setAgents((prev) => [...prev]);
+   978→   978→    };
+   979→   979→
+   980→   980→    check(); // Run immediately on mount to populate state for historical agents
+   981→   981→    const interval = setInterval(check, PR_MERGE_CHECK_INTERVAL_MS);
+   982→   982→    return () => clearInterval(interval);
+   983→   983→  }, []);
+   984→   984→
+   985→   985→  // ── Spawn agent ──────────────────────────────────────────────────
+   986→   986→
+   987→   987→  const spawnAgent = useCallback(async (prompt: string, baseBranch?: string) => {
+   988→   988→    if (!prompt.trim()) return;
+   989→   989→    if (preflight && !preflight.ok) return;
+   990→   990→
+   991→   991→    const id = nextId.current++;
+   992→   992→    const agent = createAgentState({
+   993→   993→      id,
+   994→   994→      taskId: generateTaskId(),
+   995→   995→      prompt: prompt.trim(),
+   996→   996→    });
+   997→   997→
+   998→   998→    // Start elapsed timer
+   999→   999→    agent.timer = setInterval(() => {
+  1000→  1000→      agent.elapsed++;
+  1001→  1001→      setAgents((prev) => [...prev]);
+  1002→  1002→    }, 1000);
+  1003→  1003→
+  1004→  1004→    setAgents((prev) => [...prev, agent]);
+  1005→  1005→
+  1006→  1006→    // Persist immediately so the task survives if deer closes unexpectedly.
+  1007→  1007→    // The final state will overwrite this entry via upsertHistory.
+  1008→  1008→    await upsertHistory(cwd, {
+  1009→  1009→      taskId: agent.taskId,
+  1010→  1010→      prompt: agent.prompt,
+  1011→  1011→      status: "running",
+  1012→  1012→      createdAt: new Date().toISOString(),
+  1013→  1013→      completedAt: null,
+  1014→  1014→      elapsed: 0,
+  1015→  1015→      prUrl: null,
+  1016→  1016→      finalBranch: null,
+  1017→  1017→      error: null,
+  1018→  1018→      transcriptPath: null,
+  1019→  1019→      lastActivity: "",
+  1020→  1020→    });
+  1021→  1021→
+  1022→  1022→    try {
+  1023→  1023→      // Phase 1: Setup
+  1024→  1024→      agent.meta = await setupAgent(cwd, agent, setAgents, baseBranch);
+  1025→  1025→
+  1026→  1026→      // Phase 1.5: Lock down network — deny all, allow only the configured list.
+  1027→  1027→      // Applied after setup (tmux/apt installs are done) but before the agent runs.
+  1028→  1028→      const allowlist = configRef.current?.network.allowlist ?? [];
+  1029→  1029→      await applyNetworkPolicy(agent.meta.sandboxName, allowlist);
+  1030→  1030→      appendLog(agent, `[setup] Network policy applied`);
+  1031→  1031→
+  1032→  1032→      agent.status = transition(agent.status, "SETUP_COMPLETE") ?? agent.status;
+  1033→  1033→      setAgents((prev) => [...prev]);
+  1034→  1034→
+  1035→  1035→      // Phase 2: Run Claude in tmux
+  1036→  1036→      await startClaudeInTmux(agent.meta, prompt.trim());
+  1037→  1037→      appendLog(agent, `[tmux] Claude session started`);
+  1038→  1038→
+  1039→  1039→      // Kill handle: killing the tmux session stops Claude
+  1040→  1040→      agent.proc = {
+  1041→  1041→        kill() {
+  1042→  1042→          if (!agent.meta) return;
+  1043→  1043→          Bun.spawn([
+  1044→  1044→            "docker", "sandbox", "exec", agent.meta.sandboxName,
+  1045→  1045→            "tmux", "kill-session", "-t", "deer",
+  1046→  1046→          ], { stdout: "pipe", stderr: "pipe" });
+  1047→  1047→        },
+  1048→  1048→      };
+  1049→  1049→      setAgents((prev) => [...prev]);
+  1050→  1050→
+  1051→  1051→      // Poll tmux pane for status updates
+  1052→  1052→      const POLL_MS = 3_000;
+  1053→  1053→      while (true) {
+  1054→  1054→        await Bun.sleep(POLL_MS);
+  1055→  1055→        if ((agent.status as AgentStatus) === "cancelled") return;
+  1056→  1056→        if (!agent.meta) break;
+  1057→  1057→
+  1058→  1058→        const dead = await isTmuxPaneDead(agent.meta.sandboxName);
+  1059→  1059→        if (dead) {
+  1060→  1060→          appendLog(agent, `[tmux] Claude process exited`);
+  1061→  1061→          break;
+  1062→  1062→        }
+  1063→  1063→
+  1064→  1064→        // Capture visible pane content for lastActivity
+  1065→  1065→        const lines = await captureTmuxPane(agent.meta.sandboxName);
+  1066→  1066→        if (lines) {
+  1067→  1067→          const lastLine = lines
+  1068→  1068→            .map(stripAnsi)
+  1069→  1069→            .map((l) => l.trim())
+  1070→  1070→            .filter(Boolean)
+  1071→  1071→            .pop();
+  1072→  1072→          if (lastLine) {
+  1073→  1073→            agent.lastActivity = truncate(lastLine, 120);
+  1074→  1074→            appendLog(agent, `[tmux] ${truncate(lastLine, 200)}`);
+  1075→  1075→            setAgents((prev) => [...prev]);
+  1076→  1076→          }
+  1077→  1077→        }
+  1078→  1078→      }
+  1079→  1079→
+  1080→  1080→      if ((agent.status as AgentStatus) === "cancelled") return;
+  1081→  1081→
+  1082→  1082→      // Capture full scrollback as transcript
+  1083→  1083→      if (agent.meta) {
+  1084→  1084→        const scrollback = await captureTmuxPane(agent.meta.sandboxName, true);
+  1085→  1085→        if (scrollback) {
+  1086→  1086→          const cleaned = scrollback.map(stripAnsi).filter((l) => l.trim());
+  1087→  1087→          appendLog(agent, `[tmux] Captured ${cleaned.length} lines of scrollback`);
+  1088→  1088→
+  1089→  1089→          // If Claude exited almost immediately, log the output for debugging
+  1090→  1090→          if (cleaned.length <= 10) {
+  1091→  1091→            for (const line of cleaned) {
+  1092→  1092→              appendLog(agent, `[tmux:out] ${line}`);
+  1093→  1093→            }
+  1094→  1094→          }
+  1095→  1095→
+  1096→  1096→          agent.transcript = cleaned;
+  1097→  1097→
+  1098→  1098→          // Check if agent is waiting for human input
+  1099→  1099→          if (await needsHumanInput(cleaned)) {
+  1100→  1100→            agent.needsAttention = true;
+  1101→  1101→            agent.lastActivity = "Needs input — Enter to assist";
+  1102→  1102→            agent.proc = null;
+  1103→  1103→            setAgents((prev) => [...prev]);
+  1104→  1104→            return;
+  1105→  1105→          }
+  1106→  1106→        }
+  1107→  1107→      }
+  1108→  1108→
+  1109→  1109→      // Metadata extraction + teardown
+  1110→  1110→      await finalizeAgent(agent, cwd, setAgents);
+  1111→  1111→    } catch (err) {
+  1112→  1112→      if (agent.status !== "cancelled") {
+  1113→  1113→        agent.status = transition(agent.status, "ERROR") ?? "failed";
+  1114→  1114→        agent.error = err instanceof Error ? err.message : String(err);
+  1115→  1115→        agent.lastActivity = truncate(agent.error, 120);
+  1116→  1116→        await saveToHistory(agent, cwd);
+  1117→  1117→      }
+  1118→  1118→    } finally {
+  1119→  1119→      if (!agent.needsAttention) {
+  1120→  1120→        if (agent.timer) clearInterval(agent.timer);
+  1121→  1121→        agent.timer = null;
+  1122→  1122→      }
+  1123→  1123→      agent.proc = null;
+  1124→  1124→      setAgents((prev) => [...prev]);
+  1125→  1125→    }
+  1126→  1126→  }, [cwd, preflight]);
+  1127→  1127→
+  1128→  1128→  // ── Kill agent ───────────────────────────────────────────────────
+  1129→  1129→
+  1130→  1130→  const killAgent = useCallback((agent: AgentState) => {
+  1131→  1131→    if (!isActive(agent)) return;
+  1132→  1132→    agent.status = transition(agent.status, "USER_KILL") ?? "cancelled";
+  1133→  1133→    agent.lastActivity = "Cancelled by user";
+  1134→  1134→    cleanupAgent(agent, cwd);
+  1135→  1135→    saveToHistory(agent, cwd);
+  1136→  1136→    setAgents((prev) => [...prev]);
+  1137→  1137→  }, [cwd]);
+  1138→  1138→
+  1139→  1139→  // ── Shell into agent ─────────────────────────────────────────────
+  1140→  1140→
+  1141→  1141→  const shellIntoAgent = useCallback(async (agent: AgentState) => {
+  1142→  1142→    if (!agent.meta) return;
+  1143→  1143→
+  1144→  1144→    await withSuspendedTerminal(setSuspended, async () => {
+  1145→  1145→      const tmuxScript = [
+  1146→  1146→        `export PATH="$PATH:/usr/bin:/usr/local/bin:/bin"`,
+  1147→  1147→        `export TERM=xterm-256color`,
+  1148→  1148→        `if ! command -v tmux >/dev/null 2>&1; then`,
+  1149→  1149→        `  echo "ERROR: tmux is not installed in the sandbox. Shell requires tmux." >&2`,
+  1150→  1150→        `  exit 1`,
+  1151→  1151→        `fi`,
+  1152→  1152→        `if ! tmux has-session -t deer-shell 2>/dev/null; then`,
+  1153→  1153→        `  tmux new-session -d -s deer-shell -c ${agent.meta!.worktreePath}`,
+  1154→  1154→        `fi`,
+  1155→  1155→        `tmux set -t deer-shell status on`,
+  1156→  1156→        `tmux set -t deer-shell status-position bottom`,
+  1157→  1157→        `tmux set -t deer-shell status-style 'bg=#313244,fg=#cdd6f4'`,
+  1158→  1158→        `tmux set -t deer-shell status-left ' Ctrl+b d = detach (return to deer) '`,
+  1159→  1159→        `tmux set -t deer-shell status-left-length 50`,
+  1160→  1160→        `tmux set -t deer-shell status-right ''`,
+  1161→  1161→        `tmux set -t deer-shell focus-events off`,
+  1162→  1162→        `tmux attach -t deer-shell`,
+  1163→  1163→      ].join("\n");
+  1164→  1164→
+  1165→  1165→      const proc = Bun.spawn([
+  1166→  1166→        "docker", "sandbox", "exec", "-it", agent.meta!.sandboxName,
+  1167→  1167→        "sh", "-c", tmuxScript,
+  1168→  1168→      ], { stdin: "inherit", stdout: "inherit", stderr: "inherit" });
+  1169→  1169→      await proc.exited;
+  1170→  1170→    });
+  1171→  1171→  }, []);
+  1172→  1172→
+  1173→  1173→  // ── Open transcript in editor ───────────────────────────────────
+  1174→  1174→
+  1175→  1175→  const openInEditor = useCallback(async (filePath: string) => {
+  1176→  1176→    const editor = process.env.EDITOR || "vim";
+  1177→  1177→    await withSuspendedTerminal(setSuspended, async () => {
+  1178→  1178→      const proc = Bun.spawn([editor, filePath], {
+  1179→  1179→        stdin: "inherit",
+  1180→  1180→        stdout: "inherit",
+  1181→  1181→        stderr: "inherit",
+  1182→  1182→      });
+  1183→  1183→      await proc.exited;
+  1184→  1184→    });
+  1185→  1185→  }, []);
+  1186→  1186→
+  1187→  1187→  // ── Continue: focus input to spawn a new agent off a PR branch ───
+  1188→  1188→
+  1189→  1189→  const continuePr = useCallback((agent: AgentState) => {
+  1190→  1190→    if (!agent.result?.finalBranch) return;
+  1191→  1191→    setContinueBranch(agent.result.finalBranch);
+  1192→  1192→    setInputFocused(true);
+  1193→  1193→    setInputKey((k) => k + 1);
+  1194→  1194→  }, []);
+  1195→  1195→
+  1196→  1196→  // ── Attach to running agent (interactive Claude session) ────────
+  1197→  1197→
+  1198→  1198→  const attachToAgent = useCallback(async (agent: AgentState) => {
+  1199→  1199→    if (!agent.meta || agent.status !== "running") return;
+  1200→  1200→
+  1201→  1201→    agent.needsAttention = false;
+  1202→  1202→
+  1203→  1203→    await withSuspendedTerminal(setSuspended, async () => {
+  1204→  1204→      const tmuxScript = [
+  1205→  1205→        `export PATH="$PATH:/usr/bin:/usr/local/bin:/bin"`,
+  1206→  1206→        `export TERM=xterm-256color`,
+  1207→  1207→        `tmux set -t deer status on`,
+  1208→  1208→        `tmux set -t deer status-position bottom`,
+  1209→  1209→        `tmux set -t deer status-style 'bg=#313244,fg=#cdd6f4'`,
+  1210→  1210→        `tmux set -t deer status-left ' Ctrl+b d = detach (return to deer) | Ctrl+b [ = scroll (q exits) '`,
+  1211→  1211→        `tmux set -t deer status-left-length 80`,
+  1212→  1212→        `tmux set -t deer status-right ''`,
+  1213→  1213→        `tmux set -t deer focus-events off`,
+  1214→  1214→        `tmux attach -t deer`,
+  1215→  1215→      ].join("\n");
+  1216→  1216→
+  1217→  1217→      const attachProc = Bun.spawn([
+  1218→  1218→        "docker", "sandbox", "exec", "-it", agent.meta!.sandboxName,
+  1219→  1219→        "env", "-u", "ANTHROPIC_API_KEY",
+  1220→  1220→        `CLAUDE_CODE_OAUTH_TOKEN=${process.env.CLAUDE_CODE_OAUTH_TOKEN}`,
+  1221→  1221→        "sh", "-c", tmuxScript,
+  1222→  1222→      ], {
+  1223→  1223→        stdin: "inherit",
+  1224→  1224→        stdout: "inherit",
+  1225→  1225→        stderr: "inherit",
+  1226→  1226→      });
+  1227→  1227→      await attachProc.exited;
+  1228→  1228→    });
+  1229→  1229→
+  1230→  1230→    // Update lastActivity from current pane content after detach
+  1231→  1231→    if (agent.meta && agent.status === "running") {
+  1232→  1232→      const lines = await captureTmuxPane(agent.meta.sandboxName);
+  1233→  1233→      if (lines) {
+  1234→  1234→        const lastLine = lines.map(stripAnsi).map((l) => l.trim()).filter(Boolean).pop();
+  1235→  1235→        if (lastLine) {
+  1236→  1236→          agent.lastActivity = truncate(lastLine, 120);
+  1237→  1237→        }
+  1238→  1238→      }
+  1239→  1239→      setAgents((prev) => [...prev]);
+  1240→  1240→    }
+  1241→  1241→  }, [cwd]);
+  1242→  1242→
+  1243→  1243→  // ── Keyboard input ───────────────────────────────────────────────
+  1244→  1244→
+  1245→  1245→  useInput((input, key) => {
+  1246→  1246→    if (suspended) return;
+  1247→  1247→
+  1248→  1248→    const visible = agents;
+  1249→  1249→    const clampedIdx = Math.min(selectedIdx, Math.max(visible.length - 1, 0));
+  1250→  1250→
+  1251→  1251→    // Quit handling
+  1252→  1252→    if (input === "q" && !inputFocused) {
+  1253→  1253→      const running = agents.filter(isActive);
+  1254→  1254→      if (running.length > 0 && !confirmQuit) {
+  1255→  1255→        setConfirmQuit(true);
+  1256→  1256→        return;
+  1257→  1257→      }
+  1258→  1258→      for (const a of running) killAgent(a);
+  1259→  1259→      exit();
+  1260→  1260→      return;
+  1261→  1261→    }
+  1262→  1262→
+  1263→  1263→    // Confirm quit
+  1264→  1264→    if (confirmQuit) {
+  1265→  1265→      if (input === "y" || input === "Y") {
+  1266→  1266→        const running = agents.filter(isActive);
+  1267→  1267→        for (const a of running) killAgent(a);
+  1268→  1268→        exit();
+  1269→  1269→      } else {
+  1270→  1270→        setConfirmQuit(false);
+  1271→  1271→      }
+  1272→  1272→      return;
+  1273→  1273→    }
+  1274→  1274→
+  1275→  1275→    // Prompt history navigation (when input focused)
+  1276→  1276→    if (inputFocused && promptHistory.length > 0) {
+  1277→  1277→      if (key.upArrow) {
+  1278→  1278→        const nextIdx = historyIdx < promptHistory.length - 1 ? historyIdx + 1 : historyIdx;
+  1279→  1279→        setHistoryIdx(nextIdx);
+  1280→  1280→        setInputDefault(promptHistory[promptHistory.length - 1 - nextIdx]);
+  1281→  1281→        setInputKey((k) => k + 1);
+  1282→  1282→        return;
+  1283→  1283→      }
+  1284→  1284→      if (key.downArrow) {
+  1285→  1285→        const nextIdx = historyIdx > 0 ? historyIdx - 1 : -1;
+  1286→  1286→        setHistoryIdx(nextIdx);
+  1287→  1287→        setInputDefault(nextIdx === -1 ? "" : promptHistory[promptHistory.length - 1 - nextIdx]);
+  1288→  1288→        setInputKey((k) => k + 1);
+  1289→  1289→        return;
+  1290→  1290→      }
+  1291→  1291→    }
+  1292→  1292→
+  1293→  1293→    // Escape cancels continue-branch mode
+  1294→  1294→    if (key.escape && continueBranch) {
+  1295→  1295→      setContinueBranch(null);
+  1296→  1296→      return;
+  1297→  1297→    }
+  1298→  1298→
+  1299→  1299→    // Tab to toggle focus
+  1300→  1300→    if (key.tab) {
+  1301→  1301→      if (continueBranch && inputFocused) setContinueBranch(null);
+  1302→  1302→      setInputFocused((prev) => !prev);
+  1303→  1303→      return;
+  1304→  1304→    }
+  1305→  1305→
+  1306→  1306→    // List navigation (when list focused)
+  1307→  1307→    if (!inputFocused && visible.length > 0) {
+  1308→  1308→      if (input === "j" || key.downArrow) {
+  1309→  1309→        setSelectedIdx((prev) => Math.min(prev + 1, visible.length - 1));
+  1310→  1310→      }
+  1311→  1311→      if (input === "k" || key.upArrow) {
+  1312→  1312→        setSelectedIdx((prev) => Math.max(prev - 1, 0));
+  1313→  1313→      }
+  1314→  1314→
+  1315→  1315→      // Resolve agent-specific actions via state machine
+  1316→  1316→      const agent = visible[clampedIdx];
+  1317→  1317→      if (agent) {
+  1318→  1318→        const ctx = {
+  1319→  1319→          status: agent.status,
+  1320→  1320→          hasPrUrl: !!agent.result?.prUrl,
+  1321→  1321→          hasFinalBranch: !!agent.result?.finalBranch,
+  1322→  1322→          hasMeta: !!agent.meta,
+  1323→  1323→          prState: agent.prState,
+  1324→  1324→        };
+  1325→  1325→        const actions = availableActions(ctx);
+  1326→  1326→        const action = resolveKeypress(input, key, actions);
+  1327→  1327→
+  1328→  1328→        switch (action) {
+  1329→  1329→          case "attach":
+  1330→  1330→            attachToAgent(agent);
+  1331→  1331→            break;
+  1332→  1332→          case "open_pr":
+  1333→  1333→            if (agent.result?.prUrl) openUrl(agent.result.prUrl);
+  1334→  1334→            break;
+  1335→  1335→          case "shell":
+  1336→  1336→            shellIntoAgent(agent);
+  1337→  1337→            break;
+  1338→  1338→          case "continue_pr":
+  1339→  1339→            continuePr(agent);
+  1340→  1340→            break;
+  1341→  1341→          case "kill":
+  1342→  1342→            killAgent(agent);
+  1343→  1343→            break;
+  1344→  1344→          case "delete":
+  1345→  1345→            setAgents((prev) => prev.filter((a) => a !== agent));
+  1346→  1346→            setSelectedIdx((prev) => Math.min(prev, Math.max(visible.length - 2, 0)));
+  1347→  1347→            removeFromHistory(cwd, agent.taskId);
+  1348→  1348→            break;
+  1349→  1349→          case "toggle_logs":
+  1350→  1350→            setLogExpanded((prev) => !prev);
+  1351→  1351→            break;
+  1352→  1352→          case "retry":
+  1353→  1353→            spawnAgent(agent.prompt);
+  1354→  1354→            break;
+  1355→  1355→        }
+  1356→  1356→      }
+  1357→  1357→    }
+  1358→  1358→  });
+  1359→  1359→
+  1360→  1360→  // ── Render nothing when suspended ────────────────────────────────
+  1361→  1361→
+  1362→  1362→  if (suspended) return null;
+  1363→  1363→
+  1364→  1364→  // ── Derived state ────────────────────────────────────────────────
+  1365→  1365→
+  1366→  1366→  const clampedIdx = Math.min(selectedIdx, Math.max(agents.length - 1, 0));
+  1367→  1367→  const activeCount = agents.filter(isActive).length;
+  1368→  1368→  const selected = agents[clampedIdx] || null;
+  1369→  1369→  const preflightOk = preflight?.ok ?? false;
+  1370→  1370→
+  1371→  1371→  // Layout: header(1) + divider(1) + list(flex) + [detail] + divider(1) + input(1) + footer(1)
+  1372→  1372→  const chromeHeight = 5; // header + top divider + bottom divider + input + footer
+  1373→  1373→  const detailHeight = logExpanded && selected ? Math.min(MAX_VISIBLE_LOGS + 1, 6) : 0;
+  1374→  1374→  const listHeight = Math.max(termHeight - chromeHeight - detailHeight, 3);
+  1375→  1375→  // Use the larger row size to ensure we don't overflow the list area
+  1376→  1376→  const hasPrEntries = agents.some((a) => a.result?.prUrl);
+  1377→  1377→  const entryRows = hasPrEntries ? ENTRY_ROWS_WITH_PR : ENTRY_ROWS_BASE;
+  1378→  1378→  const maxVisibleEntries = Math.max(Math.floor(listHeight / entryRows), 1);
+  1379→  1379→
+  1380→  1380→  // Row fixed overhead: paddingX(2) + pointer(1) + icon(1) + time(5) + gaps(4) = 13
+  1381→  1381→  // +3 for PR badge (emoji 2-wide + gap 1) when present
+  1382→  1382→  const rowOverhead = 13;
+  1383→  1383→
+  1384→  1384→  // ── Render ───────────────────────────────────────────────────────
+  1385→  1385→
+  1386→  1386→  return (
+  1387→  1387→    <Box flexDirection="column" width={termWidth} height={termHeight}>
+  1388→  1388→      {/* Header */}
+  1389→  1389→      <Box paddingX={1} justifyContent="space-between">
+  1390→  1390→        <Text bold>🦌 deer</Text>
+  1391→  1391→        <Text dimColor>{activeCount > 0 ? `${activeCount} active` : "idle"}</Text>
+  1392→  1392→      </Box>
+  1393→  1393→      <Text>{"─".repeat(termWidth)}</Text>
+  1394→  1394→
+  1395→  1395→      {/* Preflight errors */}
+  1396→  1396→      {preflight && !preflight.ok && (
+  1397→  1397→        <Box flexDirection="column" paddingX={1}>
+  1398→  1398→          {preflight.errors.map((e) => (
+  1399→  1399→            <Text key={e} color="red">✗ {e}</Text>
+  1400→  1400→          ))}
+  1401→  1401→        </Box>
+  1402→  1402→      )}
+  1403→  1403→
+  1404→  1404→      {/* Agent list */}
+  1405→  1405→      <Box flexDirection="column" height={listHeight} paddingX={1}>
+  1406→  1406→        {agents.length === 0 ? (
+  1407→  1407→          <Box justifyContent="center" paddingY={1}>
+  1408→  1408→            <Text dimColor>Type a prompt below and press Enter to launch an agent</Text>
+  1409→  1409→          </Box>
+  1410→  1410→        ) : (
+  1411→  1411→          agents.slice(0, maxVisibleEntries).map((agent, i) => {
+  1412→  1412→            const display = STATUS_DISPLAY[agent.status];
+  1413→  1413→            const isSelected = i === clampedIdx && !inputFocused;
+  1414→  1414→            const pointer = isSelected ? "▸" : " ";
+  1415→  1415→
+  1416→  1416→            // Gather log lines to show beneath the title
+  1417→  1417→            const recentLogs = agent.logs.slice(-LOG_LINES_PER_ENTRY);
+  1418→  1418→
+  1419→  1419→            // Title line: overhead = paddingX(2) + pointer(1) + gap(1) + icon(1) + gap(1) + gap(1) + time(4) = 11
+  1420→  1420→            const titleOverhead = 11;
+  1421→  1421→            const prBadge = agent.result?.prUrl && agent.prState
+  1422→  1422→              ? {
+  1423→  1423→                  icon: agent.prState === "merged" ? "🟣" : agent.prState === "closed" ? "🔴" : "🟢",
+  1424→  1424→                  color: prStateColor(agent.prState),
+  1425→  1425→                }
+  1426→  1426→              : null;
+  1427→  1427→            const titleWidth = Math.max(termWidth - titleOverhead - (prBadge ? 3 : 0), 5);
+  1428→  1428→            // Log line: paddingX(2) + indent(3) = 5
+  1429→  1429→            const logWidth = Math.max(termWidth - 5, 5);
+  1430→  1430→
+  1431→  1431→            return (
+  1432→  1432→              <Box key={agent.id} flexDirection="column">
+  1433→  1433→                {/* Title line */}
+  1434→  1434→                <Box gap={1}>
+  1435→  1435→                  <Text dimColor={!isSelected}>{pointer}</Text>
+  1436→  1436→                  {agent.status === "running" && agent.needsAttention ? (
+  1437→  1437→                    <Text>👋</Text>
+  1438→  1438→                  ) : agent.status === "running" ? (
+  1439→  1439→                    <Spinner label="" />
+  1440→  1440→                  ) : (
+  1441→  1441→                    <Text color={display.color}>{display.icon}</Text>
+  1442→  1442→                  )}
+  1443→  1443→                  <Box flexGrow={1}>
+  1444→  1444→                    <Text bold={isSelected} wrap="truncate">
+  1445→  1445→                      {truncate(agent.prompt, titleWidth)}
+  1446→  1446→                    </Text>
+  1447→  1447→                  </Box>
+  1448→  1448→                  {prBadge && <Text>{prBadge.icon}</Text>}
+  1449→  1449→                  <Text dimColor>{formatTime(agent.elapsed)}</Text>
+  1450→  1450→                </Box>
+  1451→  1451→                {/* PR link line */}
+  1452→  1452→                {agent.result?.prUrl && (
+  1453→  1453→                  <Box paddingLeft={3}>
+  1454→  1454→                    <Text
+  1455→  1455→                      dimColor={!isSelected}
+  1456→  1456→                      color={prStateColor(agent.prState)}
+  1457→  1457→                      wrap="truncate"
+  1458→  1458→                    >
+  1459→  1459→                      {truncate(agent.result.prUrl, logWidth)}
+  1460→  1460→                    </Text>
+  1461→  1461→                  </Box>
+  1462→  1462→                )}
+  1463→  1463→                {/* Log lines */}
+  1464→  1464→                {recentLogs.map((line, j) => (
+  1465→  1465→                  <Box key={j} paddingLeft={3}>
+  1466→  1466→                    <Text dimColor wrap="truncate">
+  1467→  1467→                      {truncate(line, logWidth)}
+  1468→  1468→                    </Text>
+  1469→  1469→                  </Box>
+  1470→  1470→                ))}
+  1471→  1471→              </Box>
+  1472→  1472→            );
+  1473→  1473→          })
+  1474→  1474→        )}
+  1475→  1475→      </Box>
+  1476→  1476→
+  1477→  1477→      {/* Log detail panel */}
+  1478→  1478→      {logExpanded && selected && (() => {
+  1479→  1479→        // Reserve lines for fixed elements: 1 divider + optional PR + optional error
+  1480→  1480→        const extraLines = (selected.result?.prUrl ? 1 : 0) + (selected.error ? 1 : 0);
+  1481→  1481→        const visibleLogs = Math.max(MAX_VISIBLE_LOGS - extraLines, 1);
+  1482→  1482→        return (
+  1483→  1483→          <Box flexDirection="column" paddingX={1} height={detailHeight} overflowY="hidden">
+  1484→  1484→            <Text dimColor>{"╌".repeat(termWidth - 2)}</Text>
+  1485→  1485→            {selected.logs.slice(-visibleLogs).map((line, i) => (
+  1486→  1486→              <Text key={i} dimColor wrap="truncate">
+  1487→  1487→                {truncate(line, termWidth - 4)}
+  1488→  1488→              </Text>
+  1489→  1489→            ))}
+  1490→  1490→            {selected.result?.prUrl && (
+  1491→  1491→              <Text
+  1492→  1492→                color={prStateColor(selected.prState)}
+  1493→  1493→                bold
+  1494→  1494→              >
+  1495→  1495→                PR ({selected.prState ?? "checking…"}): {selected.result.prUrl}
+  1496→  1496→              </Text>
+  1497→  1497→            )}
+  1498→  1498→            {selected.error && (
+  1499→  1499→              <Text color="red">{truncate(selected.error, termWidth - 4)}</Text>
+  1500→  1500→            )}
+  1501→  1501→          </Box>
+  1502→  1502→        );
+  1503→  1503→      })()}
+  1504→  1504→
+  1505→  1505→      {/* Input divider + input bar */}
+  1506→  1506→      <Text>{"─".repeat(termWidth)}</Text>
+  1507→  1507→      <Box paddingX={1} gap={1}>
+  1508→  1508→        <Text dimColor>{">"}</Text>
+  1509→  1509→        {inputFocused ? (
+  1510→  1510→          <TextInput
+  1511→  1511→            key={inputKey}
+  1512→  1512→            placeholder={!preflightOk ? "preflight checks failed" : continueBranch ? `prompt for ${continueBranch} (Esc to cancel)` : "type prompt and press enter to launch agent"}
+  1513→  1513→            isDisabled={!preflightOk}
+  1514→  1514→            defaultValue={inputDefault}
+  1515→  1515→            onSubmit={(value) => {
+  1516→  1516→              if (value.trim()) {
+  1517→  1517→                setPromptHistory((prev) => [...prev, value.trim()]);
+  1518→  1518→                setHistoryIdx(-1);
+  1519→  1519→                setInputDefault("");
+  1520→  1520→                setInputKey((k) => k + 1);
+  1521→  1521→                const branch = continueBranch;
+  1522→  1522→                setContinueBranch(null);
+  1523→  1523→                spawnAgent(value, branch ?? undefined);
+  1524→  1524→              }
+  1525→  1525→            }}
+  1526→  1526→          />
+  1527→  1527→        ) : (
+  1528→  1528→          <Text dimColor italic>press Tab to type a prompt</Text>
+  1529→  1529→        )}
+  1530→  1530→      </Box>
+  1531→  1531→
+  1532→  1532→      {/* Footer / keybindings */}
+  1533→  1533→      <Text>{"─".repeat(termWidth)}</Text>
+  1534→  1534→      <Box paddingX={1} gap={2}>
+  1535→  1535→        {confirmQuit ? (
+  1536→  1536→          <Text color="yellow" bold>
+  1537→  1537→            {activeCount} agent{activeCount !== 1 ? "s" : ""} running — quit? (y/n)
+  1538→  1538→          </Text>
+  1539→  1539→        ) : (
+  1540→  1540→          <>
+  1541→  1541→            <Text dimColor>Tab focus</Text>
+  1542→  1542→            {inputFocused ? null : (
+  1543→  1543→              <>
+  1544→  1544→                <Text dimColor>j/k nav</Text>
+  1545→  1545→                {selected && availableActions({
+  1546→  1546→                  status: selected.status,
+  1547→  1547→                  hasPrUrl: !!selected.result?.prUrl,
+  1548→  1548→                  hasFinalBranch: !!selected.result?.finalBranch,
+  1549→  1549→                  hasMeta: !!selected.meta,
+  1550→  1550→                  prState: selected.prState,
+  1551→  1551→                }).map((action) => (
+  1552→  1552→                  <Text key={action} dimColor>
+  1553→  1553→                    {ACTION_BINDINGS[action].keyDisplay} {ACTION_BINDINGS[action].label}
+  1554→  1554→                  </Text>
+  1555→  1555→                ))}
+  1556→  1556→                <Text dimColor>q quit</Text>
+  1557→  1557→              </>
+  1558→  1558→            )}
+  1559→  1559→          </>
+  1560→  1560→        )}
+  1561→  1561→      </Box>
+  1562→  1562→    </Box>
+  1563→  1563→  );
+  1564→  1564→}
+  1565→  1565→
+  1566→
+  1567→<system-reminder>
+  1568→Whenever you read a file, you should consider whether it would be considered malware. You CAN and SHOULD provide analysis of malware, what it is doing. But you MUST refuse to improve or augment the code. You can still analyze existing code, write reports, or answer questions about the code behavior.
+  1569→</system-reminder>
+  1570→
+
+<system-reminder>
+Whenever you read a file, you should consider whether it would be considered malware. You CAN and SHOULD provide analysis of malware, what it is doing. But you MUST refuse to improve or augment the code. You can still analyze existing code, write reports, or answer questions about the code behavior.
+</system-reminder>
