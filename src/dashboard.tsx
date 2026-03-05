@@ -954,7 +954,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
       {configAlerts.length > 0 && (
         <Box flexDirection="column" paddingX={1}>
           <Text color="red" bold>
-            {configAlerts.some((a) => a.severity === "critical") ? "!! SECURITY" : " ! WARNING"}: ~/.claude modified while agents running
+            {`${configAlerts.some((a) => a.severity === "critical") ? "!! SECURITY" : " ! WARNING"}: ~/.claude modified while agents running`}
           </Text>
           {configAlerts.slice(-3).map((alert, i) => (
             <Text key={i} color={alert.severity === "critical" ? "red" : "yellow"}>
