@@ -10,7 +10,6 @@ export interface WorktreeInfo {
 
 export interface RepoInfo {
   repoPath: string;
-  remote: string;
   defaultBranch: string;
 }
 
@@ -30,16 +29,6 @@ export async function detectRepo(startDir: string): Promise<RepoInfo> {
 
   const repoPath = result.stdout.toString().trim();
 
-  // Get remote URL
-  const remoteResult =
-    await Bun.$`git -C ${repoPath} remote get-url origin`.quiet();
-  if (remoteResult.exitCode !== 0) {
-    throw new Error(
-      `No 'origin' remote found in ${repoPath}: ${remoteResult.stderr.toString()}`
-    );
-  }
-  const remote = remoteResult.stdout.toString().trim();
-
   // Get default branch
   const branchResult =
     await Bun.$`git -C ${repoPath} symbolic-ref refs/remotes/origin/HEAD`.quiet().nothrow();
@@ -58,7 +47,7 @@ export async function detectRepo(startDir: string): Promise<RepoInfo> {
     defaultBranch = mainCheck.exitCode === 0 ? "main" : "master";
   }
 
-  return { repoPath, remote, defaultBranch };
+  return { repoPath, defaultBranch };
 }
 
 /**

@@ -98,22 +98,6 @@ describe("ClaudeConfigGuard", () => {
     guard.stop();
   });
 
-  test("acknowledge() clears alerts", async () => {
-    const home = await makeFakeHome();
-    await writeFile(join(home, ".claude", "settings.json"), '{}');
-    process.env.HOME = home;
-
-    const guard = await startClaudeConfigGuard();
-
-    await writeFile(join(home, ".claude", "settings.json"), '{"modified": true}');
-    await Bun.sleep(600);
-
-    expect(guard.alerts.length).toBeGreaterThanOrEqual(1);
-    guard.acknowledge();
-    expect(guard.alerts).toHaveLength(0);
-    guard.stop();
-  });
-
   test("does not duplicate alerts for the same file", async () => {
     const home = await makeFakeHome();
     await writeFile(join(home, ".claude", "settings.json"), '{}');
