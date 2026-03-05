@@ -528,7 +528,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
       let changed = false;
       for (let i = 0; i < toCheck.length; i++) {
         const state = results[i];
-        if (state !== null && state !== toCheck[i].prState) {
+        if (state !== toCheck[i].prState) {
           toCheck[i].prState = state;
           changed = true;
         }
