@@ -105,10 +105,10 @@ export async function launchSandbox(options: SandboxOptions): Promise<SandboxSes
     // Status bar with detach instructions
     ["status", "on"],
     ["status-position", "bottom"],
-    ["status-style", "bg=#1a1a2e,fg=#e0e0e0"],
+    ["status-style", "#{?client_prefix,bg=#4a4a6e fg=#ffffff,bg=#1a1a2e fg=#e0e0e0}"],
     ["status-left", ""],
     ["status-right", " 🦌 deer | Ctrl+b [ to scroll | Ctrl+b d to detach "],
-    ["status-right-style", "bg=#1a1a2e,fg=#888888"],
+    ["status-right-style", "#{?client_prefix,bg=#4a4a6e fg=#ffffff,bg=#1a1a2e fg=#888888}"],
     ["status-justify", "left"],
   ];
   for (const [key, value] of tmuxSettings) {
