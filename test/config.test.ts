@@ -139,4 +139,57 @@ describe("DEFAULT_CONFIG", () => {
       "objects.githubusercontent.com",
     ]);
   });
+
+  test("has default env_passthrough list", () => {
+    expect(DEFAULT_CONFIG.sandbox.envPassthrough).toBeArray();
+    expect(DEFAULT_CONFIG.sandbox.envPassthrough).toContain("CLAUDE_CODE_OAUTH_TOKEN");
+    // GH_TOKEN is intentionally NOT in the default list — agents don't need
+    // it because deer handles git push/PR creation outside the sandbox.
+    expect(DEFAULT_CONFIG.sandbox.envPassthrough).not.toContain("GH_TOKEN");
+  });
+});
+
+describe("env_passthrough config", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "deer-config-test-"));
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  test("repo-local deer.toml can add extra env vars to passthrough", async () => {
+    await Bun.write(
+      join(tmpDir, "deer.toml"),
+      `
+[sandbox]
+env_passthrough_extra = ["CUSTOM_API_KEY", "MY_SECRET"]
+`
+    );
+
+    const config = await loadConfig(tmpDir);
+
+    // Default vars still present
+    expect(config.sandbox.envPassthrough).toContain("CLAUDE_CODE_OAUTH_TOKEN");
+    // Extra vars appended
+    expect(config.sandbox.envPassthrough).toContain("CUSTOM_API_KEY");
+    expect(config.sandbox.envPassthrough).toContain("MY_SECRET");
+  });
+
+  test("global config can override the full passthrough list", async () => {
+    const globalDir = join(tmpDir, ".config", "deer");
+    await Bun.write(
+      join(globalDir, "config.toml"),
+      `
+[sandbox]
+env_passthrough = ["ONLY_THIS_VAR"]
+`
+    );
+
+    const config = await loadConfig(tmpDir, undefined, join(tmpDir, ".config", "deer", "config.toml"));
+
+    expect(config.sandbox.envPassthrough).toEqual(["ONLY_THIS_VAR"]);
+  });
 });

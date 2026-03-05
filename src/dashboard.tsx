@@ -110,13 +110,13 @@ interface PreflightResult {
 async function runPreflight(): Promise<PreflightResult> {
   const errors: string[] = [];
 
-  // Check bwrap
+  // Check nono
   try {
-    const p = Bun.spawn(["bwrap", "--version"], { stdout: "pipe", stderr: "pipe" });
+    const p = Bun.spawn(["nono", "--version"], { stdout: "pipe", stderr: "pipe" });
     const code = await p.exited;
-    if (code !== 0) errors.push("bubblewrap (bwrap) not available — install it with your package manager");
+    if (code !== 0) errors.push("nono not available — install from https://nono.sh");
   } catch {
-    errors.push("bubblewrap (bwrap) not available — install it with your package manager");
+    errors.push("nono not available — install from https://nono.sh");
   }
 
   // Check tmux

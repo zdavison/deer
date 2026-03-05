@@ -14,6 +14,14 @@ export interface DeerConfig {
   network: {
     allowlist: string[];
   };
+  sandbox: {
+    /**
+     * Environment variable names to forward from the host into the sandbox.
+     * Only these vars (plus PATH, HOME, TERM) reach the sandboxed process.
+     * @default ["CLAUDE_CODE_OAUTH_TOKEN", "GH_TOKEN"]
+     */
+    envPassthrough: string[];
+  };
 }
 
 export const DEFAULT_CONFIG: DeerConfig = {
@@ -31,6 +39,11 @@ export const DEFAULT_CONFIG: DeerConfig = {
       "pypi.org",
       "github.com",
       "objects.githubusercontent.com",
+    ],
+  },
+  sandbox: {
+    envPassthrough: [
+      "CLAUDE_CODE_OAUTH_TOKEN",
     ],
   },
 };
@@ -100,7 +113,13 @@ function applyRepoLocal(config: DeerConfig, repoLocal: Record<string, unknown>):
     ];
   }
 
-  // env is handled at task build time, not merged into config defaults
+  const sandbox = repoLocal.sandbox as Record<string, unknown> | undefined;
+  if (sandbox?.env_passthrough_extra && Array.isArray(sandbox.env_passthrough_extra)) {
+    result.sandbox.envPassthrough = [
+      ...result.sandbox.envPassthrough,
+      ...(sandbox.env_passthrough_extra as string[]),
+    ];
+  }
 
   return result;
 }
@@ -167,6 +186,13 @@ function tomlToConfig(toml: Record<string, unknown>): Partial<DeerConfig> {
   if (network) {
     result.network = {
       ...(network.allowlist !== undefined && { allowlist: network.allowlist }),
+    };
+  }
+
+  const sandbox = toml.sandbox as Record<string, unknown> | undefined;
+  if (sandbox) {
+    result.sandbox = {
+      ...(sandbox.env_passthrough !== undefined && { envPassthrough: sandbox.env_passthrough }),
     };
   }
 

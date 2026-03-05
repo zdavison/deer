@@ -1,7 +1,7 @@
 /**
  * Agent lifecycle: worktree → sandbox → poll → finalize.
  *
- * Each agent runs Claude Code interactively inside a bwrap sandbox
+ * Each agent runs Claude Code interactively inside a nono sandbox
  * within a tmux session. The user can attach at any time via tmux.
  */
 
@@ -51,67 +51,19 @@ export type AgentStatus =
 const POLL_INTERVAL_MS = 3_000;
 const DEFAULT_MODEL = "sonnet";
 
-// ── Sandbox Claude Config ────────────────────────────────────────────
-
-interface SandboxClaudeConfigResult {
-  /** Paths to bind read-write into the sandbox */
-  rwBinds: string[];
-}
-
 /**
- * Create sandbox-local copies of Claude config files (~/.claude.json, ~/.claude/)
- * so Claude can persist dialog acceptances without modifying the host.
- *
- * The copies are stored inside the worktree under `.deer-claude-config/` and
- * bind-mounted read-write over the real paths inside the sandbox.
- *
- * Pre-accepts the trust dialog and bypass permissions dialog so Claude
- * starts without blocking prompts.
+ * Build an env object containing only the vars from the passthrough list.
+ * Vars not set in the host environment are omitted.
  */
-async function createSandboxClaudeConfig(worktreePath: string): Promise<SandboxClaudeConfigResult> {
-  const home = process.env.HOME ?? "/root";
-  const configDir = join(worktreePath, ".deer-claude-config");
-  await Bun.$`mkdir -p ${configDir}`.quiet();
-
-  const rwBinds: string[] = [];
-
-  // Copy and patch ~/.claude.json
-  const claudeJsonPath = join(home, ".claude.json");
-  const sandboxJsonPath = join(configDir, "claude.json");
-  const claudeJsonFile = Bun.file(claudeJsonPath);
-
-  let config: Record<string, unknown> = {};
-  if (await claudeJsonFile.exists()) {
-    try {
-      config = await claudeJsonFile.json();
-    } catch {
-      // Malformed — start fresh
+function buildPassthroughEnv(passthrough: string[]): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const name of passthrough) {
+    const value = process.env[name];
+    if (value !== undefined) {
+      env[name] = value;
     }
   }
-
-  // Pre-accept both the trust dialog and bypass permissions for this worktree
-  const projects = (config.projects ?? {}) as Record<string, Record<string, unknown>>;
-  const entry = projects[worktreePath] ?? {};
-  entry.hasTrustDialogAccepted = true;
-  projects[worktreePath] = entry;
-  config.projects = projects;
-
-  await Bun.write(sandboxJsonPath, JSON.stringify(config, null, 2));
-
-  // Bind the sandbox copy over ~/.claude.json (rw so Claude can update it)
-  rwBinds.push(sandboxJsonPath + ":" + claudeJsonPath);
-
-  // Create writable directories that Claude needs inside the read-only ~/.claude.
-  // Claude writes to session-env/ (Bash tool shell setup), projects/ (session state), etc.
-  const claudeDir = join(home, ".claude");
-  const writableDirs = ["session-env", "projects", "telemetry", "debug"];
-  for (const sub of writableDirs) {
-    const sandboxSub = join(configDir, sub);
-    await Bun.$`mkdir -p ${sandboxSub}`.quiet();
-    rwBinds.push(sandboxSub + ":" + join(claudeDir, sub));
-  }
-
-  return { rwBinds };
+  return env;
 }
 
 /**
@@ -180,10 +132,6 @@ export async function startAgent(options: AgentRunOptions): Promise<AgentHandle>
   const promptPath = `${worktree.worktreePath}/.deer-prompt`;
   await Bun.write(promptPath, prompt);
 
-  // Create sandbox-local copies of Claude config so Claude can persist
-  // dialog acceptances (trust, bypass permissions) without modifying host files.
-  const sandboxClaudeConfig = await createSandboxClaudeConfig(worktree.worktreePath);
-
   // Build the Claude command — interactive mode (no -p) so users can
   // attach to the tmux session and observe/intervene.
   const claudeCmd = [
@@ -200,17 +148,7 @@ export async function startAgent(options: AgentRunOptions): Promise<AgentHandle>
       worktreePath: worktree.worktreePath,
       repoGitDir: resolve(repoPath, ".git"),
       allowlist: config.network.allowlist,
-      env: {
-        // Pass through OAuth token for Claude API access
-        ...(process.env.CLAUDE_CODE_OAUTH_TOKEN
-          ? { CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN }
-          : {}),
-        // Pass through GH_TOKEN for gh CLI
-        ...(process.env.GH_TOKEN
-          ? { GH_TOKEN: process.env.GH_TOKEN }
-          : {}),
-      },
-      extraRwBinds: sandboxClaudeConfig.rwBinds,
+      env: buildPassthroughEnv(config.sandbox.envPassthrough),
       command: claudeCmd,
     });
   } catch (err) {
@@ -303,7 +241,7 @@ export async function destroyAgent(
 
 /**
  * Delete a task and clean up all associated resources: tmux session,
- * bwrap process, git worktree, branch, and task directory on disk.
+ * sandbox process, git worktree, branch, and task directory on disk.
  *
  * Works regardless of whether a live handle is available, so it correctly
  * cleans up historical/interrupted tasks that have no active sandbox.
@@ -318,7 +256,7 @@ export async function deleteTask(
   const branch = handle?.branch ?? `deer/${taskId}`;
 
   if (handle) {
-    // Stop the proxy and kill the tmux session via the handle
+    // Kill the tmux session via the handle
     await handle.kill().catch(() => {});
   } else {
     // No handle — kill the tmux session by its conventional name

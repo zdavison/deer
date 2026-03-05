@@ -1,18 +1,13 @@
-import { startProxy, type ProxyHandle } from "./proxy";
-import { buildBwrapArgs, type BwrapOptions } from "./bwrap";
+import { buildNonoArgs, type NonoOptions } from "./nono";
 
-export { startProxy, type ProxyHandle } from "./proxy";
-export { buildBwrapArgs, type BwrapOptions } from "./bwrap";
-export { matchesAllowlist } from "./proxy";
+export { buildNonoArgs, type NonoOptions } from "./nono";
 
 export interface SandboxSession {
   /** The tmux session name */
   sessionName: string;
   /** The worktree path (only writable dir in the sandbox) */
   worktreePath: string;
-  /** The proxy handle (for cleanup) */
-  proxy: ProxyHandle;
-  /** Stop the proxy and kill the tmux session */
+  /** Stop the sandbox and kill the tmux session */
   stop: () => Promise<void>;
 }
 
@@ -31,10 +26,10 @@ export interface SandboxOptions {
   allowlist: string[];
   /** Extra environment variables */
   env?: Record<string, string>;
-  /** Extra read-only bind mounts */
-  extraRoBinds?: string[];
-  /** Extra read-write bind mounts (overlays ro-binds for the same paths) */
-  extraRwBinds?: string[];
+  /** Additional paths to grant read-only access */
+  extraReadPaths?: string[];
+  /** Additional paths to grant read-write access */
+  extraWritePaths?: string[];
   /** Command + args to run inside the sandbox (default: interactive shell) */
   command: string[];
 }
@@ -42,9 +37,8 @@ export interface SandboxOptions {
 /**
  * Launch a sandboxed process inside a tmux session.
  *
- * 1. Starts the filtering CONNECT proxy
- * 2. Builds the bwrap command with the worktree as the only writable mount
- * 3. Starts a tmux session running the bwrap'd command
+ * 1. Builds the nono command with sandbox capabilities
+ * 2. Starts a tmux session running the nono-sandboxed command
  *
  * The caller gets back a handle to stop everything.
  */
@@ -55,45 +49,66 @@ export async function launchSandbox(options: SandboxOptions): Promise<SandboxSes
     repoGitDir,
     allowlist,
     env = {},
-    extraRoBinds,
-    extraRwBinds,
+    extraReadPaths,
+    extraWritePaths,
     command,
   } = options;
 
-  // Start the proxy
-  const proxy = await startProxy({ allowlist });
-
-  // Build the bwrap command
-  const bwrapArgs = buildBwrapArgs({
+  // Build the nono command
+  const nonoArgs = buildNonoArgs({
     worktreePath,
     repoGitDir,
-    proxyPort: proxy.port,
-    env,
-    extraRoBinds,
-    extraRwBinds,
+    allowlist,
+    extraReadPaths,
+    extraWritePaths,
   });
 
-  // The full command: bwrap [...] <command>
-  const fullCommand = [...bwrapArgs, ...command];
+  // The full command: nono run [...] -- sh -c 'cd <worktree> && exec <command>'
+  // nono's --workdir only affects profile $WORKDIR expansion, not the actual CWD.
+  // We wrap the command in a shell that cd's into the worktree first.
+  const innerCmd = command
+    .map((arg) => `'${arg.replace(/'/g, "'\\''")}'`)
+    .join(" ");
+  const fullCommand = [...nonoArgs, "sh", "-c", `cd '${worktreePath.replace(/'/g, "'\\''")}' && exec ${innerCmd}`];
 
-  // Build a shell command string for tmux's initial command.
-  // This runs bwrap directly as the session process — when it exits,
-  // the tmux pane dies (with remain-on-exit keeping scrollback available).
-  const shellCmd = fullCommand
+  const nonoCmd = fullCommand
     .map((arg) => `'${arg.replace(/'/g, "'\\''")}'`)
     .join(" ");
 
-  // Create tmux session with the bwrap command as the initial program.
-  // remain-on-exit is set via environment so the session config takes
-  // effect before the command runs.
+  // Build a minimal environment for the tmux session.
+  // Only system essentials + explicitly passthrough'd vars reach the sandbox.
+  // This prevents leaking host secrets (AWS keys, DB URLs, etc.) into the
+  // sandboxed process via /proc/self/environ.
+  const sandboxEnv: Record<string, string> = {
+    PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
+    HOME: process.env.HOME ?? "/root",
+    TERM: process.env.TERM ?? "xterm-256color",
+    // tmux needs TMUX/TMUX_PANE unset to create new sessions,
+    // so we intentionally do NOT propagate them.
+    ...env,
+  };
+
+  // Build env exports for the shell preamble
+  const envExports = Object.entries(sandboxEnv)
+    .map(([k, v]) => `export ${k}='${v.replace(/'/g, "'\\''")}'`)
+    .join("; ");
+
+  const preamble = `${envExports}; unset CLAUDECODE; exec ${nonoCmd}`;
+
+  // Create tmux session with a clean environment (env -i).
+  // The preamble re-exports only the allowed vars.
   const createProc = Bun.spawn([
+    "env", "-i",
+    // tmux itself needs minimal env to function
+    `PATH=${process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin"}`,
+    `HOME=${process.env.HOME ?? "/root"}`,
+    `TERM=${process.env.TERM ?? "xterm-256color"}`,
     "tmux", "new-session", "-d", "-s", sessionName,
     "-x", "200", "-y", "50",
-    "sh", "-c", shellCmd,
+    "sh", "-c", preamble,
   ], { stdout: "pipe", stderr: "pipe" });
   const createCode = await createProc.exited;
   if (createCode !== 0) {
-    proxy.stop();
     const stderr = await new Response(createProc.stderr).text();
     throw new Error(`Failed to create tmux session: ${stderr.trim()}`);
   }
@@ -120,9 +135,7 @@ export async function launchSandbox(options: SandboxOptions): Promise<SandboxSes
   return {
     sessionName,
     worktreePath,
-    proxy,
     async stop() {
-      proxy.stop();
       await Bun.spawn([
         "tmux", "kill-session", "-t", sessionName,
       ], { stdout: "pipe", stderr: "pipe" }).exited;

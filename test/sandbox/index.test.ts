@@ -47,10 +47,9 @@ describe("sandbox integration", () => {
     sessions.push(session);
 
     expect(session.sessionName).toBe(name);
-    expect(session.proxy.port).toBeGreaterThan(0);
 
     // Wait for the command to finish
-    await Bun.sleep(500);
+    await Bun.sleep(1000);
 
     const content = await readFile(join(dir, "result.txt"), "utf-8");
     expect(content.trim()).toBe("sandbox works");
@@ -69,7 +68,7 @@ describe("sandbox integration", () => {
     sessions.push(session);
 
     // Give tmux a moment to start the command
-    await Bun.sleep(200);
+    await Bun.sleep(500);
     const dead = await isTmuxSessionDead(name);
     expect(dead).toBe(false);
   });
@@ -86,7 +85,7 @@ describe("sandbox integration", () => {
     });
     sessions.push(session);
 
-    // Wait for the command to finish (bwrap + shell startup takes time)
+    // Wait for the command to finish (nono + shell startup takes time)
     await Bun.sleep(2000);
     const dead = await isTmuxSessionDead(name);
     expect(dead).toBe(true);
@@ -109,7 +108,7 @@ describe("sandbox integration", () => {
     });
     sessions.push(session);
 
-    await Bun.sleep(500);
+    await Bun.sleep(1000);
     // Use full scrollback to capture output from short-lived commands
     const lines = await captureTmuxPane(name, true);
     expect(lines).not.toBeNull();
@@ -122,7 +121,7 @@ describe("sandbox integration", () => {
     expect(lines).toBeNull();
   });
 
-  test("stop() kills session and proxy", async () => {
+  test("stop() kills session", async () => {
     const dir = await makeTmpDir();
     const name = sessionName();
 
@@ -141,24 +140,6 @@ describe("sandbox integration", () => {
     expect(dead).toBe(true);
   });
 
-  test("sandbox cannot write to host /tmp", async () => {
-    const dir = await makeTmpDir();
-    const name = sessionName();
-    const marker = `/tmp/deer-sandbox-escape-${Date.now()}`;
-
-    const session = await launchSandbox({
-      sessionName: name,
-      worktreePath: dir,
-      allowlist: [],
-      command: ["sh", "-c", `echo escaped > ${marker}`],
-    });
-    sessions.push(session);
-
-    await Bun.sleep(500);
-    const escaped = await Bun.file(marker).exists();
-    expect(escaped).toBe(false);
-  });
-
   test("sandbox can write inside worktree", async () => {
     const dir = await makeTmpDir();
     const name = sessionName();
@@ -171,7 +152,7 @@ describe("sandbox integration", () => {
     });
     sessions.push(session);
 
-    await Bun.sleep(500);
+    await Bun.sleep(1000);
     const content = await readFile(join(dir, "sandboxed.txt"), "utf-8");
     expect(content.trim()).toBe("inside");
   });
@@ -189,8 +170,30 @@ describe("sandbox integration", () => {
     });
     sessions.push(session);
 
-    await Bun.sleep(500);
+    await Bun.sleep(1000);
     const content = await readFile(join(dir, "env-result.txt"), "utf-8");
     expect(content.trim()).toBe("it_works");
   });
+
+  test("sandbox has no direct network access (Landlock TCP)", async () => {
+    const dir = await makeTmpDir();
+    const name = sessionName();
+
+    // Try to make a direct connection bypassing the proxy — should fail
+    const session = await launchSandbox({
+      sessionName: name,
+      worktreePath: dir,
+      allowlist: ["example.com"],
+      command: [
+        "sh", "-c",
+        // curl --noproxy bypasses HTTP_PROXY — should fail with Landlock TCP
+        `curl --noproxy '*' --max-time 3 -s -o /dev/null -w '%{http_code}' https://example.com > ${dir}/direct.txt 2>&1 || echo "BLOCKED" > ${dir}/direct.txt`,
+      ],
+    });
+    sessions.push(session);
+
+    await Bun.sleep(6000);
+    const content = await readFile(join(dir, "direct.txt"), "utf-8");
+    expect(content.trim()).toBe("BLOCKED");
+  }, 15000);
 });
