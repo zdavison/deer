@@ -1,13 +1,13 @@
 import { Box, Text, useInput, useApp, useStdout } from "ink";
 import { Spinner } from "@inkjs/ui";
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { loadHistory, upsertHistory, removeFromHistory } from "./task";
+import { loadHistory, upsertHistory, removeFromHistory, dataDir } from "./task";
 import type { PersistedTask } from "./task";
 import { loadConfig } from "./config";
 import type { DeerConfig } from "./config";
 import { transition, availableActions, resolveKeypress, ACTION_BINDINGS } from "./state-machine";
 import type { AgentState as AgentStatus } from "./state-machine";
-import { startAgent, destroyAgent, createAgentPR } from "./agent";
+import { startAgent, destroyAgent, createAgentPR, tryReacquireAgent } from "./agent";
 import type { AgentHandle } from "./agent";
 import { isTmuxSessionDead, captureTmuxPane } from "./sandbox/index";
 import { detectRepo } from "./git/worktree";
@@ -541,79 +541,18 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     return () => clearInterval(interval);
   }, []);
 
-  // ── Spawn agent ───────────────────────────────────────────────────
+  // ── Poll agent to completion ───────────────────────────────────────
 
-  const spawnAgent = useCallback(async (prompt: string, baseBranch?: string) => {
-    if (!prompt.trim()) return;
-    if (preflight && !preflight.ok) return;
-
-    const config = configRef.current;
-    if (!config) return;
-
-    const id = nextId.current++;
-    const effectiveBranch = baseBranch ?? baseBranchRef.current;
-    const agent = createAgentState({
-      id,
-      prompt: prompt.trim(),
-      baseBranch: effectiveBranch,
-    });
-
-    const abortController = new AbortController();
-    agent.abortController = abortController;
-
-    // Start elapsed timer
-    agent.timer = setInterval(() => {
-      agent.elapsed++;
-      setAgents((prev) => [...prev]);
-    }, 1000);
-
-    setAgents((prev) => [...prev, agent]);
-
+  // Runs the polling loop for an agent that already has a live tmux session.
+  // Handles idle detection, log capture, and final state transition.
+  const pollAgentToCompletion = useCallback(async (
+    agent: AgentState,
+    handle: AgentHandle,
+    abortController: AbortController,
+  ): Promise<void> => {
+    let lastPaneSnapshot = "";
+    let unchangedCount = 0;
     try {
-      // Phase 1: Start the sandboxed agent
-      appendLog(agent, "[setup] Creating worktree and sandbox...");
-      agent.lastActivity = "Setting up sandbox...";
-      setAgents((prev) => [...prev]);
-
-      const handle = await startAgent({
-        repoPath: cwd,
-        prompt: prompt.trim(),
-        baseBranch: effectiveBranch,
-        config,
-        model: MODEL,
-        onStatus: (status) => {
-          const detail = "message" in status ? status.message : status.phase;
-          appendLog(agent, `[setup] ${detail}`);
-          agent.lastActivity = detail;
-          setAgents((prev) => [...prev]);
-        },
-      });
-
-      agent.handle = handle;
-      agent.taskId = handle.taskId;
-
-      // Persist immediately so the task survives if deer closes
-      await upsertHistory(cwd, {
-        taskId: agent.taskId,
-        prompt: agent.prompt,
-        status: "running",
-        createdAt: new Date().toISOString(),
-        completedAt: null,
-        elapsed: 0,
-        prUrl: null,
-        finalBranch: null,
-        error: null,
-            lastActivity: "",
-      });
-
-      agent.status = transition(agent.status, "SETUP_COMPLETE") ?? agent.status;
-      appendLog(agent, `[running] Claude started in tmux session: ${handle.sessionName}`);
-      agent.lastActivity = "Claude running...";
-      setAgents((prev) => [...prev]);
-
-      // Phase 2: Poll for completion (process exit or idle detection)
-      let lastPaneSnapshot = "";
-      let unchangedCount = 0;
       while (true) {
         await Bun.sleep(POLL_MS);
         if (abortController.signal.aborted) return;
@@ -669,7 +608,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
       // Process exited — mark completed, user decides what to do next
       agent.idle = false;
       agent.status = "completed";
-      agent.result = { finalBranch: handle.branch, prUrl: "" };
+      agent.result = { finalBranch: handle.branch, prUrl: agent.result?.prUrl ?? "" };
       agent.lastActivity = "Task complete — press p to create PR, ⏎ to attach";
     } catch (err) {
       if (!abortController.signal.aborted) {
@@ -683,7 +622,94 @@ export default function Dashboard({ cwd }: { cwd: string }) {
       await saveToHistory(agent, cwd);
       setAgents((prev) => [...prev]);
     }
-  }, [cwd, preflight]);
+  }, [cwd]);
+
+  // ── Spawn agent ───────────────────────────────────────────────────
+
+  const spawnAgent = useCallback(async (prompt: string, baseBranch?: string) => {
+    if (!prompt.trim()) return;
+    if (preflight && !preflight.ok) return;
+
+    const config = configRef.current;
+    if (!config) return;
+
+    const id = nextId.current++;
+    const effectiveBranch = baseBranch ?? baseBranchRef.current;
+    const agent = createAgentState({
+      id,
+      prompt: prompt.trim(),
+      baseBranch: effectiveBranch,
+    });
+
+    const abortController = new AbortController();
+    agent.abortController = abortController;
+
+    // Start elapsed timer
+    agent.timer = setInterval(() => {
+      agent.elapsed++;
+      setAgents((prev) => [...prev]);
+    }, 1000);
+
+    setAgents((prev) => [...prev, agent]);
+
+    let handle: AgentHandle;
+    try {
+      // Phase 1: Start the sandboxed agent
+      appendLog(agent, "[setup] Creating worktree and sandbox...");
+      agent.lastActivity = "Setting up sandbox...";
+      setAgents((prev) => [...prev]);
+
+      handle = await startAgent({
+        repoPath: cwd,
+        prompt: prompt.trim(),
+        baseBranch: effectiveBranch,
+        config,
+        model: MODEL,
+        onStatus: (status) => {
+          const detail = "message" in status ? status.message : status.phase;
+          appendLog(agent, `[setup] ${detail}`);
+          agent.lastActivity = detail;
+          setAgents((prev) => [...prev]);
+        },
+      });
+
+      agent.handle = handle;
+      agent.taskId = handle.taskId;
+
+      // Persist immediately so the task survives if deer closes
+      await upsertHistory(cwd, {
+        taskId: agent.taskId,
+        prompt: agent.prompt,
+        status: "running",
+        createdAt: new Date().toISOString(),
+        completedAt: null,
+        elapsed: 0,
+        prUrl: null,
+        finalBranch: null,
+        error: null,
+        lastActivity: "",
+      });
+
+      agent.status = transition(agent.status, "SETUP_COMPLETE") ?? agent.status;
+      appendLog(agent, `[running] Claude started in tmux session: ${handle.sessionName}`);
+      agent.lastActivity = "Claude running...";
+      setAgents((prev) => [...prev]);
+    } catch (err) {
+      if (!abortController.signal.aborted) {
+        agent.status = transition(agent.status, "ERROR") ?? "failed";
+        agent.error = err instanceof Error ? err.message : String(err);
+        agent.lastActivity = truncate(agent.error, 120);
+      }
+      if (agent.timer) clearInterval(agent.timer);
+      agent.timer = null;
+      await saveToHistory(agent, cwd);
+      setAgents((prev) => [...prev]);
+      return;
+    }
+
+    // Phase 2: Poll for completion (process exit or idle detection)
+    await pollAgentToCompletion(agent, handle, abortController);
+  }, [cwd, preflight, pollAgentToCompletion]);
 
   // ── Kill agent ────────────────────────────────────────────────────
 
@@ -756,6 +782,99 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     setAgents((prev) => [...prev]);
   }, [cwd]);
 
+
+  // ── Refresh agent ─────────────────────────────────────────────────
+
+  // Re-acquire a task's tmux session and worktree, resuming polling if alive.
+  // For failed/cancelled tasks with no live session, re-spawns a new agent.
+  const refreshAgent = useCallback(async (agent: AgentState) => {
+    appendLog(agent, "[refresh] Checking agent state...");
+    agent.lastActivity = "Refreshing...";
+    setAgents((prev) => [...prev]);
+
+    const handle = await tryReacquireAgent(agent.taskId);
+
+    if (handle && (agent.status === "interrupted" || agent.status === "running")) {
+      // Session is still alive — re-acquire handle and resume polling
+      agent.handle = handle;
+      agent.status = "running";
+      agent.lastActivity = `Reconnected to session ${handle.sessionName}`;
+      appendLog(agent, `[refresh] Reconnected to tmux session: ${handle.sessionName}`);
+
+      const abortController = new AbortController();
+      agent.abortController = abortController;
+
+      if (!agent.timer) {
+        agent.timer = setInterval(() => {
+          agent.elapsed++;
+          setAgents((prev) => [...prev]);
+        }, 1000);
+      }
+
+      await upsertHistory(cwd, {
+        taskId: agent.taskId,
+        prompt: agent.prompt,
+        status: "running",
+        createdAt: new Date(Date.now() - agent.elapsed * 1000).toISOString(),
+        completedAt: null,
+        elapsed: agent.elapsed,
+        prUrl: agent.result?.prUrl ?? null,
+        finalBranch: agent.result?.finalBranch ?? null,
+        error: null,
+        lastActivity: agent.lastActivity,
+      });
+      setAgents((prev) => [...prev]);
+
+      await pollAgentToCompletion(agent, handle, abortController);
+      return;
+    }
+
+    if (handle) {
+      // Session alive but agent is already in a terminal state — report it
+      appendLog(agent, `[refresh] Session ${handle.sessionName} is still alive`);
+      agent.lastActivity = `Session still running: ${handle.sessionName}`;
+      setAgents((prev) => [...prev]);
+      return;
+    }
+
+    // No live session found
+    if (agent.status === "interrupted") {
+      appendLog(agent, "[refresh] Session not found — task may have completed while deer was closed");
+      agent.lastActivity = "Session no longer running";
+      setAgents((prev) => [...prev]);
+      return;
+    }
+
+    if (agent.status === "failed" || agent.status === "cancelled") {
+      // Re-spawn with the same prompt
+      appendLog(agent, "[refresh] Re-spawning agent...");
+      setAgents((prev) => [...prev]);
+      spawnAgent(agent.prompt, agent.baseBranch);
+      return;
+    }
+
+    if (agent.status === "running") {
+      // Session ended unexpectedly while deer was polling — treat as completed
+      appendLog(agent, "[refresh] Session not found — process exited");
+      agent.idle = false;
+      agent.status = "completed";
+      agent.result = {
+        finalBranch: agent.handle?.branch ?? `deer/${agent.taskId}`,
+        prUrl: agent.result?.prUrl ?? "",
+      };
+      agent.lastActivity = "Task complete — press p to create PR, ⏎ to attach";
+      if (agent.timer) clearInterval(agent.timer);
+      agent.timer = null;
+      await saveToHistory(agent, cwd);
+      setAgents((prev) => [...prev]);
+      return;
+    }
+
+    // Completed/teardown/setup — nothing to re-acquire
+    appendLog(agent, "[refresh] State refreshed");
+    agent.lastActivity = `Refreshed (${agent.status})`;
+    setAgents((prev) => [...prev]);
+  }, [cwd, spawnAgent, pollAgentToCompletion]);
 
   // ── Keyboard input ────────────────────────────────────────────────
 
@@ -860,8 +979,8 @@ export default function Dashboard({ cwd }: { cwd: string }) {
           case "toggle_logs":
             setLogExpanded((prev) => !prev);
             break;
-          case "retry":
-            spawnAgent(agent.prompt);
+          case "refresh":
+            refreshAgent(agent);
             break;
         }
       }

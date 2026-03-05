@@ -29,7 +29,7 @@ export type AgentAction =
   | "kill"
   | "delete"
   | "toggle_logs"
-  | "retry";
+  | "refresh";
 
 export interface AgentContext {
   status: AgentState;
@@ -68,13 +68,13 @@ export function transition(current: AgentState, event: AgentEvent): AgentState |
 // ── Action Map per State ─────────────────────────────────────────────
 
 const ACTIONS_BY_STATE: Record<AgentState, AgentAction[]> = {
-  setup:       ["kill", "toggle_logs"],
-  running:     ["attach", "kill", "toggle_logs"],
-  teardown:    ["toggle_logs"],
-  completed:   ["attach", "create_pr", "open_pr", "delete", "toggle_logs"],
-  failed:      ["retry", "delete", "toggle_logs"],
-  cancelled:   ["delete", "toggle_logs"],
-  interrupted: ["delete", "toggle_logs"],
+  setup:       ["kill", "toggle_logs", "refresh"],
+  running:     ["attach", "kill", "toggle_logs", "refresh"],
+  teardown:    ["toggle_logs", "refresh"],
+  completed:   ["attach", "create_pr", "open_pr", "delete", "toggle_logs", "refresh"],
+  failed:      ["delete", "toggle_logs", "refresh"],
+  cancelled:   ["delete", "toggle_logs", "refresh"],
+  interrupted: ["delete", "toggle_logs", "refresh"],
 };
 
 // ── Action Bindings ──────────────────────────────────────────────────
@@ -86,7 +86,7 @@ export const ACTION_BINDINGS: Record<AgentAction, ActionBinding> = {
   kill:         { keyDisplay: "x", label: "kill" },
   delete:       { keyDisplay: "⌫", label: "delete" },
   toggle_logs:  { keyDisplay: "l", label: "logs" },
-  retry:        { keyDisplay: "r", label: "retry" },
+  refresh:      { keyDisplay: "r", label: "refresh" },
 };
 
 // ── Runtime Filtering ────────────────────────────────────────────────
@@ -158,7 +158,7 @@ export function resolveKeypress(
   const charMap: Record<string, AgentAction> = {
     x: "kill",
     l: "toggle_logs",
-    r: "retry",
+    r: "refresh",
   };
 
   const action = charMap[input];

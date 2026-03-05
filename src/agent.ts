@@ -11,7 +11,7 @@ import { createPullRequest, cleanupWorktree } from "./git/finalize";
 import type { CreatePRResult } from "./git/finalize";
 import { launchSandbox, isTmuxSessionDead, captureTmuxPane } from "./sandbox/index";
 import type { SandboxSession } from "./sandbox/index";
-import { generateTaskId } from "./task";
+import { generateTaskId, dataDir } from "./task";
 import type { DeerConfig } from "./config";
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -277,6 +277,35 @@ export async function createAgentPR(
     baseBranch,
     prompt,
   });
+}
+
+/**
+ * Try to re-acquire a handle for a previously-running agent.
+ *
+ * Checks if the expected tmux session (`deer-<taskId>`) is still alive and
+ * returns a reconstructed handle if so. Returns null if the session is dead
+ * or has already exited.
+ */
+export async function tryReacquireAgent(taskId: string): Promise<AgentHandle | null> {
+  const sessionName = `deer-${taskId}`;
+  const worktreePath = join(dataDir(), "tasks", taskId, "worktree");
+  const branch = `deer/${taskId}`;
+
+  const dead = await isTmuxSessionDead(sessionName);
+  if (dead) return null;
+
+  return {
+    taskId,
+    sessionName,
+    worktreePath,
+    branch,
+    async kill() {
+      await Bun.spawn(["tmux", "kill-session", "-t", sessionName], {
+        stdout: "pipe",
+        stderr: "pipe",
+      }).exited;
+    },
+  };
 }
 
 /**

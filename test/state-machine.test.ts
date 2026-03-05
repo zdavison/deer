@@ -103,9 +103,12 @@ describe("availableActions", () => {
     expect(actions).toContain("toggle_logs");
   });
 
-  test("teardown state has only toggle_logs", () => {
+  test("teardown state has toggle_logs and refresh", () => {
     const actions = availableActions(baseCtx({ status: "teardown" }));
-    expect(actions).toEqual(["toggle_logs"]);
+    expect(actions).toContain("toggle_logs");
+    expect(actions).toContain("refresh");
+    expect(actions).not.toContain("attach");
+    expect(actions).not.toContain("kill");
   });
 
   test("completed state has attach, create_pr, delete, toggle_logs", () => {
@@ -162,20 +165,20 @@ describe("availableActions", () => {
     expect(actions).toContain("delete");
   });
 
-  test("failed state has retry, delete, toggle_logs", () => {
+  test("failed state has refresh, delete, toggle_logs", () => {
     const actions = availableActions(baseCtx({
       status: "failed",
       hasHandle: true,
     }));
-    expect(actions).toContain("retry");
+    expect(actions).toContain("refresh");
     expect(actions).toContain("delete");
     expect(actions).toContain("toggle_logs");
   });
 
-  test("retry is not available in non-failed states", () => {
-    for (const status of ["setup", "running", "teardown", "completed", "cancelled", "interrupted"] as const) {
+  test("refresh is available in all states", () => {
+    for (const status of ["setup", "running", "teardown", "completed", "failed", "cancelled", "interrupted"] as const) {
       const actions = availableActions(baseCtx({ status }));
-      expect(actions).not.toContain("retry");
+      expect(actions).toContain("refresh");
     }
   });
 
@@ -264,12 +267,22 @@ describe("resolveKeypress", () => {
     expect(resolveKeypress("z", {}, ["kill", "toggle_logs"])).toBeNull();
   });
 
-  test("resolves 'r' to retry when available", () => {
-    expect(resolveKeypress("r", {}, ["retry", "delete"])).toBe("retry");
+  test("resolves 'r' to refresh when available", () => {
+    expect(resolveKeypress("r", {}, ["refresh", "delete"])).toBe("refresh");
   });
 
-  test("does not resolve 'r' when retry is unavailable", () => {
-    expect(resolveKeypress("r", {}, ["delete", "toggle_logs"])).toBeNull();
+  test("resolves 'r' to refresh in all states", () => {
+    for (const status of ["setup", "running", "teardown", "completed", "failed", "cancelled", "interrupted"] as const) {
+      const actions = availableActions({
+        status,
+        hasPrUrl: false,
+        hasFinalBranch: false,
+        hasHandle: false,
+        isIdle: false,
+        prState: null,
+      });
+      expect(resolveKeypress("r", {}, actions)).toBe("refresh");
+    }
   });
 
   test("resolves 'p' to create_pr when available", () => {
@@ -294,7 +307,7 @@ describe("resolveKeypress", () => {
 describe("ACTION_BINDINGS", () => {
   test("every action has a keyDisplay and label", () => {
     const actions: AgentAction[] = [
-      "attach", "create_pr", "open_pr", "kill", "delete", "toggle_logs", "retry",
+      "attach", "create_pr", "open_pr", "kill", "delete", "toggle_logs", "refresh",
     ];
     for (const action of actions) {
       const binding = ACTION_BINDINGS[action];
