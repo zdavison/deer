@@ -68,9 +68,9 @@ export function transition(current: AgentState, event: AgentEvent): AgentState |
 // ── Action Map per State ─────────────────────────────────────────────
 
 const ACTIONS_BY_STATE: Record<AgentState, AgentAction[]> = {
-  setup:       ["kill", "toggle_logs"],
-  running:     ["attach", "kill", "toggle_logs"],
-  teardown:    ["toggle_logs"],
+  setup:       ["kill", "delete", "toggle_logs"],
+  running:     ["attach", "kill", "delete", "toggle_logs"],
+  teardown:    ["delete", "toggle_logs"],
   completed:   ["attach", "create_pr", "open_pr", "delete", "toggle_logs"],
   failed:      ["retry", "delete", "toggle_logs"],
   cancelled:   ["delete", "toggle_logs"],
@@ -111,7 +111,7 @@ export function availableActions(ctx: AgentContext): AgentAction[] {
       case "open_pr":
         return ctx.hasPrUrl;
       case "delete":
-        return ctx.prState !== "open";
+        return true;
       default:
         return true;
     }

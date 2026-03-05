@@ -88,24 +88,27 @@ describe("availableActions", () => {
     ...overrides,
   });
 
-  test("setup state has kill and toggle_logs", () => {
+  test("setup state has kill, delete and toggle_logs", () => {
     const actions = availableActions(baseCtx({ status: "setup" }));
     expect(actions).toContain("kill");
+    expect(actions).toContain("delete");
     expect(actions).toContain("toggle_logs");
     expect(actions).not.toContain("attach");
     expect(actions).not.toContain("open_pr");
   });
 
-  test("running state has attach, kill, toggle_logs", () => {
+  test("running state has attach, kill, delete, toggle_logs", () => {
     const actions = availableActions(baseCtx({ status: "running" }));
     expect(actions).toContain("attach");
     expect(actions).toContain("kill");
+    expect(actions).toContain("delete");
     expect(actions).toContain("toggle_logs");
   });
 
-  test("teardown state has only toggle_logs", () => {
+  test("teardown state has delete and toggle_logs", () => {
     const actions = availableActions(baseCtx({ status: "teardown" }));
-    expect(actions).toEqual(["toggle_logs"]);
+    expect(actions).toContain("delete");
+    expect(actions).toContain("toggle_logs");
   });
 
   test("completed state has attach, create_pr, delete, toggle_logs", () => {
@@ -142,14 +145,14 @@ describe("availableActions", () => {
     expect(actions).not.toContain("open_pr");
   });
 
-  test("completed state: delete blocked when prState is open", () => {
+  test("completed state: delete allowed when prState is open", () => {
     const actions = availableActions(baseCtx({
       status: "completed",
       hasPrUrl: true,
       hasFinalBranch: true,
       prState: "open",
     }));
-    expect(actions).not.toContain("delete");
+    expect(actions).toContain("delete");
   });
 
   test("completed state: delete allowed when prState is merged", () => {
