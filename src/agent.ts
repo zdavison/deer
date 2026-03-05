@@ -11,7 +11,7 @@ import { createPullRequest, cleanupWorktree } from "./git/finalize";
 import type { CreatePRResult } from "./git/finalize";
 import { launchSandbox, isTmuxSessionDead, captureTmuxPane } from "./sandbox/index";
 import type { SandboxSession } from "./sandbox/index";
-import { generateTaskId } from "./task";
+import { generateTaskId, dataDir } from "./task";
 import type { DeerConfig } from "./config";
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -299,4 +299,38 @@ export async function destroyAgent(
 ): Promise<void> {
   await handle.kill().catch(() => {});
   await cleanupWorktree(repoPath, handle.worktreePath, handle.branch);
+}
+
+/**
+ * Delete a task and clean up all associated resources: tmux session,
+ * bwrap process, git worktree, branch, and task directory on disk.
+ *
+ * Works regardless of whether a live handle is available, so it correctly
+ * cleans up historical/interrupted tasks that have no active sandbox.
+ */
+export async function deleteTask(
+  taskId: string,
+  repoPath: string,
+  handle?: AgentHandle | null,
+): Promise<void> {
+  const worktreePath = join(dataDir(), "tasks", taskId, "worktree");
+  const taskDir = join(dataDir(), "tasks", taskId);
+  const branch = handle?.branch ?? `deer/${taskId}`;
+
+  if (handle) {
+    // Stop the proxy and kill the tmux session via the handle
+    await handle.kill().catch(() => {});
+  } else {
+    // No handle — kill the tmux session by its conventional name
+    await Bun.spawn(
+      ["tmux", "kill-session", "-t", `deer-${taskId}`],
+      { stdout: "pipe", stderr: "pipe" },
+    ).exited;
+  }
+
+  // Remove the git worktree and branch
+  await cleanupWorktree(repoPath, worktreePath, branch);
+
+  // Remove the task directory (worktree subdir is gone; remove parent)
+  await Bun.$`rm -rf ${taskDir}`.quiet().nothrow();
 }

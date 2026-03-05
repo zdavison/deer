@@ -7,7 +7,7 @@ import { loadConfig } from "./config";
 import type { DeerConfig } from "./config";
 import { transition, availableActions, resolveKeypress, ACTION_BINDINGS } from "./state-machine";
 import type { AgentState as AgentStatus } from "./state-machine";
-import { startAgent, destroyAgent, createAgentPR } from "./agent";
+import { startAgent, destroyAgent, deleteTask, createAgentPR } from "./agent";
 import { isTmuxSessionDead, captureTmuxPane } from "./sandbox/index";
 import { detectRepo } from "./git/worktree";
 import { AgentState, createAgentState, historicalAgent, crossInstanceAgent } from "./agent-state";
@@ -877,9 +877,9 @@ export default function Dashboard({ cwd }: { cwd: string }) {
             killAgent(agent);
             break;
           case "delete":
-            if (agent.handle) {
-              destroyAgent(agent.handle, cwd).catch(() => {});
-            }
+            agent.abortController?.abort();
+            if (agent.timer) clearInterval(agent.timer);
+            deleteTask(agent.taskId, cwd, agent.handle).catch(() => {});
             setAgents((prev) => prev.filter((a) => a !== agent));
             setSelectedIdx((prev) => Math.min(prev, Math.max(visible.length - 2, 0)));
             removeFromHistory(cwd, agent.taskId);
