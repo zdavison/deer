@@ -1,8 +1,9 @@
 import { test, expect, describe, afterEach, setDefaultTimeout } from "bun:test";
 
 setDefaultTimeout(30_000);
-import { startAgent, waitForCompletion, getAgentOutput, destroyAgent } from "../src/agent";
+import { startAgent, waitForCompletion, getAgentOutput, destroyAgent, deleteTask } from "../src/agent";
 import type { AgentHandle, AgentStatus } from "../src/agent";
+import { dataDir } from "../src/task";
 import { DEFAULT_CONFIG } from "../src/config";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -140,6 +141,69 @@ describe("agent lifecycle", () => {
     // Worktree should be removed
     const exists = await Bun.file(join(handle.worktreePath, "README.md")).exists();
     expect(exists).toBe(false);
+  });
+
+  test("deleteTask with handle kills session, removes worktree and task directory", async () => {
+    const repo = await createTestRepo();
+    repos.push(repo);
+
+    const handle = await startAgent({
+      repoPath: repo,
+      prompt: "test",
+      baseBranch: "main",
+      config: testConfig,
+    });
+
+    await deleteTask(handle.taskId, repo, handle);
+
+    // tmux session should be gone
+    const proc = Bun.spawn(["tmux", "has-session", "-t", handle.sessionName], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(await proc.exited).not.toBe(0);
+
+    // Worktree should be removed
+    expect(await Bun.file(join(handle.worktreePath, "README.md")).exists()).toBe(false);
+
+    // Task directory should be removed
+    const taskDir = join(dataDir(), "tasks", handle.taskId);
+    const { statSync } = await import("node:fs");
+    let dirExists = false;
+    try { statSync(taskDir); dirExists = true; } catch { /* gone */ }
+    expect(dirExists).toBe(false);
+  });
+
+  test("deleteTask without handle kills session, removes worktree and task directory", async () => {
+    const repo = await createTestRepo();
+    repos.push(repo);
+
+    const handle = await startAgent({
+      repoPath: repo,
+      prompt: "test",
+      baseBranch: "main",
+      config: testConfig,
+    });
+
+    // Simulate the "no handle" case — deleteTask should still clean everything up
+    await deleteTask(handle.taskId, repo, null);
+
+    // tmux session should be gone
+    const proc = Bun.spawn(["tmux", "has-session", "-t", handle.sessionName], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(await proc.exited).not.toBe(0);
+
+    // Worktree should be removed
+    expect(await Bun.file(join(handle.worktreePath, "README.md")).exists()).toBe(false);
+
+    // Task directory should be removed
+    const taskDir = join(dataDir(), "tasks", handle.taskId);
+    const { statSync } = await import("node:fs");
+    let dirExists = false;
+    try { statSync(taskDir); dirExists = true; } catch { /* gone */ }
+    expect(dirExists).toBe(false);
   });
 
   test("waitForCompletion respects AbortSignal", async () => {
