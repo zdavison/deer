@@ -14,23 +14,6 @@ export interface DeerConfig {
   network: {
     allowlist: string[];
   };
-  repos: Record<string, RepoConfig>;
-}
-
-export interface RepoConfig {
-  baseBranch?: string;
-  setupCommand?: string;
-  env?: Record<string, string>;
-  networkAllowlistExtra?: string[];
-}
-
-export interface RepoLocalConfig {
-  baseBranch?: string;
-  setupCommand?: string;
-  network?: {
-    allowlistExtra?: string[];
-  };
-  env?: Record<string, string>;
 }
 
 export const DEFAULT_CONFIG: DeerConfig = {
@@ -50,7 +33,6 @@ export const DEFAULT_CONFIG: DeerConfig = {
       "objects.githubusercontent.com",
     ],
   },
-  repos: {},
 };
 
 /**
@@ -141,34 +123,27 @@ export async function loadConfig(
   cliOverrides?: Partial<DeerConfig>,
   globalConfigPath?: string
 ): Promise<DeerConfig> {
-  let config = structuredClone(DEFAULT_CONFIG);
+  let config: unknown = structuredClone(DEFAULT_CONFIG);
 
   // 1. Global config
   const globalPath = globalConfigPath ?? join(process.env.HOME ?? "", ".config", "deer", "config.toml");
   const globalToml = await readTomlFile(globalPath);
   if (globalToml) {
-    const globalConfig = tomlToConfig(globalToml);
-    config = deepMerge(
-      config as unknown as Record<string, unknown>,
-      globalConfig as Record<string, unknown>
-    ) as unknown as DeerConfig;
+    config = deepMerge(config as Record<string, unknown>, tomlToConfig(globalToml) as Record<string, unknown>);
   }
 
   // 2. Repo-local config
   const repoToml = await readTomlFile(join(repoPath, "deer.toml"));
   if (repoToml) {
-    config = applyRepoLocal(config, repoToml);
+    config = applyRepoLocal(config as DeerConfig, repoToml);
   }
 
   // 3. CLI overrides
   if (cliOverrides) {
-    config = deepMerge(
-      config as unknown as Record<string, unknown>,
-      cliOverrides as Record<string, unknown>
-    ) as unknown as DeerConfig;
+    config = deepMerge(config as Record<string, unknown>, cliOverrides as Record<string, unknown>);
   }
 
-  return config;
+  return config as DeerConfig;
 }
 
 /**
@@ -193,10 +168,6 @@ function tomlToConfig(toml: Record<string, unknown>): Partial<DeerConfig> {
     result.network = {
       ...(network.allowlist !== undefined && { allowlist: network.allowlist }),
     };
-  }
-
-  if (toml.repos) {
-    result.repos = toml.repos;
   }
 
   return result as Partial<DeerConfig>;

@@ -24,7 +24,6 @@ describe("loadConfig", () => {
     expect(config.network.allowlist).toContain("api.anthropic.com");
     expect(config.network.allowlist).toContain("github.com");
     expect(config.network.allowlist).toContain("registry.npmjs.org");
-    expect(config.repos).toEqual({});
   });
 
   test("TOML repo config (deer.toml) parses correctly", async () => {
@@ -139,6 +138,5 @@ describe("DEFAULT_CONFIG", () => {
       "github.com",
       "objects.githubusercontent.com",
     ]);
-    expect(DEFAULT_CONFIG.repos).toEqual({});
   });
 });

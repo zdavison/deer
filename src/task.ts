@@ -104,19 +104,6 @@ export async function removeFromHistory(repoPath: string, taskId: string): Promi
 }
 
 /**
- * Append a completed/failed/cancelled task to the repo's history file.
- */
-export async function appendToHistory(repoPath: string, task: PersistedTask): Promise<void> {
-  const path = historyPath(repoPath);
-  const dir = `${dataDir()}/history`;
-  await mkdir(dir, { recursive: true });
-
-  const file = Bun.file(path);
-  const existing = (await file.exists()) ? await file.text() : "";
-  await Bun.write(path, existing + JSON.stringify(task) + "\n");
-}
-
-/**
  * Insert or replace a task in the repo's history file by taskId.
  * If a task with the same taskId already exists, it is replaced in-place.
  * Otherwise the task is appended. Use this instead of appendToHistory when
