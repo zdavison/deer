@@ -1,4 +1,4 @@
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { dataDir } from "../task";
 
@@ -88,35 +88,6 @@ export async function createWorktree(
   }
 
   return { repoPath, worktreePath, branch };
-}
-
-/**
- * Finalize a worktree: stage all changes, commit if any, and push.
- * No-op if there are no changes to commit.
- */
-export async function finalizeWorktree(worktreePath: string): Promise<void> {
-  // Stage all changes
-  await Bun.$`git -C ${worktreePath} add -A`.quiet();
-
-  // Check if there are staged changes
-  const status =
-    await Bun.$`git -C ${worktreePath} status --porcelain`.quiet();
-  const hasChanges = status.stdout.toString().trim().length > 0;
-
-  if (!hasChanges) {
-    return;
-  }
-
-  // Commit
-  await Bun.$`git -C ${worktreePath} commit -m "deer: automated changes"`.quiet();
-
-  // Get the current branch name
-  const branchResult =
-    await Bun.$`git -C ${worktreePath} rev-parse --abbrev-ref HEAD`.quiet();
-  const branch = branchResult.stdout.toString().trim();
-
-  // Push
-  await Bun.$`git -C ${worktreePath} push origin ${branch}`.quiet();
 }
 
 /**

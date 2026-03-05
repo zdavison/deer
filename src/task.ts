@@ -1,37 +1,5 @@
 import { mkdir } from "node:fs/promises";
 
-export interface Task {
-  /** @example "deer_01jm8k3nxa7f" */
-  id: string;
-  status: "pending" | "running" | "success" | "failed" | "cancelled";
-  /** @example "/home/user/repos/my-project" */
-  repo: string;
-  /** @example "github.com/org/repo" */
-  repoRemote: string;
-  /** @example "main" */
-  baseBranch: string;
-  /** @example "deer/deer_01jm8k3n" */
-  workBranch: string;
-  /** @example "~/.local/share/deer/tasks/deer_01jm8k3n/worktree" */
-  worktreePath: string;
-  /** Full task markdown */
-  instruction: string;
-  /** @example "https://github.com/org/repo/issues/42" */
-  instructionSource: string;
-  env: Record<string, string>;
-  networkAllowlist: string[];
-  /**
-   * @default 1800000 (30 minutes)
-   */
-  timeoutMs: number;
-  setupCommand?: string;
-  createdAt: Date;
-  startedAt: Date | null;
-  completedAt: Date | null;
-  prUrl: string | null;
-  error: string | null;
-}
-
 /**
  * Generate a unique, sortable, URL-safe task ID.
  *
@@ -59,14 +27,6 @@ export function dataDir(): string {
   return `${home}/.local/share/deer`;
 }
 
-/**
- * Returns the directory for persisted Q&A transcripts.
- * @example "/home/user/.local/share/deer/transcripts"
- */
-export function transcriptsDir(): string {
-  return `${dataDir()}/transcripts`;
-}
-
 // ── Task History Persistence ──────────────────────────────────────────
 
 export interface PersistedTask {
@@ -85,8 +45,6 @@ export interface PersistedTask {
   /** @example "deer/fix-login-bug" */
   finalBranch: string | null;
   error: string | null;
-  /** Path to persisted Q&A transcript markdown file */
-  transcriptPath: string | null;
   lastActivity: string;
 }
 

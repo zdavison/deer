@@ -24,9 +24,8 @@ export type AgentEvent =
 
 export type AgentAction =
   | "attach"
+  | "create_pr"
   | "open_pr"
-  | "shell"
-  | "continue_pr"
   | "kill"
   | "delete"
   | "toggle_logs"
@@ -36,7 +35,8 @@ export interface AgentContext {
   status: AgentState;
   hasPrUrl: boolean;
   hasFinalBranch: boolean;
-  hasMeta: boolean;
+  hasHandle: boolean;
+  isIdle: boolean;
   prState: "open" | "merged" | "closed" | null;
 }
 
@@ -69,11 +69,11 @@ export function transition(current: AgentState, event: AgentEvent): AgentState |
 
 const ACTIONS_BY_STATE: Record<AgentState, AgentAction[]> = {
   setup:       ["kill", "toggle_logs"],
-  running:     ["attach", "shell", "kill", "toggle_logs"],
+  running:     ["attach", "kill", "toggle_logs"],
   teardown:    ["toggle_logs"],
-  completed:   ["open_pr", "shell", "continue_pr", "delete", "toggle_logs"],
-  failed:      ["retry", "shell", "delete", "toggle_logs"],
-  cancelled:   ["shell", "delete", "toggle_logs"],
+  completed:   ["attach", "create_pr", "open_pr", "delete", "toggle_logs"],
+  failed:      ["retry", "delete", "toggle_logs"],
+  cancelled:   ["delete", "toggle_logs"],
   interrupted: ["delete", "toggle_logs"],
 };
 
@@ -81,9 +81,8 @@ const ACTIONS_BY_STATE: Record<AgentState, AgentAction[]> = {
 
 export const ACTION_BINDINGS: Record<AgentAction, ActionBinding> = {
   attach:       { keyDisplay: "⏎", label: "attach" },
-  open_pr:      { keyDisplay: "⏎", label: "open PR" },
-  shell:        { keyDisplay: "s", label: "shell" },
-  continue_pr:  { keyDisplay: "c", label: "continue PR" },
+  create_pr:    { keyDisplay: "p", label: "create PR" },
+  open_pr:      { keyDisplay: "p", label: "open PR" },
   kill:         { keyDisplay: "x", label: "kill" },
   delete:       { keyDisplay: "⌫", label: "delete" },
   toggle_logs:  { keyDisplay: "l", label: "logs" },
@@ -94,19 +93,23 @@ export const ACTION_BINDINGS: Record<AgentAction, ActionBinding> = {
 
 /**
  * Returns the actions available for an agent given its current context.
- * Filters the base action list by secondary conditions (e.g. open_pr
- * requires a PR URL, delete is blocked when PR is open).
+ * Filters the base action list by secondary conditions (e.g. create_pr
+ * requires a finalBranch, open_pr requires a PR URL).
  */
 export function availableActions(ctx: AgentContext): AgentAction[] {
-  const base = ACTIONS_BY_STATE[ctx.status];
+  const base = [...ACTIONS_BY_STATE[ctx.status]];
+  // Idle agents can create PRs (Claude is alive but waiting for input)
+  if (ctx.isIdle && !base.includes("create_pr")) {
+    base.push("create_pr", "open_pr");
+  }
   return base.filter((action) => {
     switch (action) {
+      case "attach":
+        return ctx.hasHandle;
+      case "create_pr":
+        return ctx.hasFinalBranch && !ctx.hasPrUrl;
       case "open_pr":
         return ctx.hasPrUrl;
-      case "shell":
-        return ctx.hasMeta;
-      case "continue_pr":
-        return ctx.hasFinalBranch;
       case "delete":
         return ctx.prState !== "open";
       default:
@@ -133,10 +136,9 @@ export function resolveKeypress(
   key: KeyInfo,
   actions: AgentAction[],
 ): AgentAction | null {
-  // Enter key: attach takes priority over open_pr
+  // Enter key: attach
   if (key.return) {
     if (actions.includes("attach")) return "attach";
-    if (actions.includes("open_pr")) return "open_pr";
     return null;
   }
 
@@ -146,10 +148,15 @@ export function resolveKeypress(
   }
 
   // Character keys
+  // 'p' key: create_pr takes priority over open_pr (they're mutually exclusive)
+  if (input === "p") {
+    if (actions.includes("create_pr")) return "create_pr";
+    if (actions.includes("open_pr")) return "open_pr";
+    return null;
+  }
+
   const charMap: Record<string, AgentAction> = {
     x: "kill",
-    s: "shell",
-    c: "continue_pr",
     l: "toggle_logs",
     r: "retry",
   };

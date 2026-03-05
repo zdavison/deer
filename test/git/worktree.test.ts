@@ -2,7 +2,6 @@ import { test, expect, describe, beforeEach, afterEach } from "bun:test";
 import {
   detectRepo,
   createWorktree,
-  finalizeWorktree,
   removeWorktree,
 } from "../../src/git/worktree";
 import { generateTaskId, dataDir } from "../../src/task";
@@ -135,63 +134,6 @@ describe("createWorktree", () => {
     expect(info.worktreePath).toContain(taskId);
     expect(info.worktreePath).toEndWith("/worktree");
     expect(info.worktreePath).toStartWith(dataDir());
-  });
-});
-
-describe("finalizeWorktree", () => {
-  let tmpDir: string;
-  const createdWorktrees: Array<{ repoPath: string; worktreePath: string }> = [];
-
-  beforeEach(async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "deer-fin-test-"));
-    createdWorktrees.length = 0;
-  });
-
-  afterEach(async () => {
-    for (const wt of createdWorktrees) {
-      await Bun.$`git -C ${wt.repoPath} worktree remove ${wt.worktreePath} --force`
-        .quiet()
-        .nothrow();
-      const taskDir = join(wt.worktreePath, "..");
-      await rm(taskDir, { recursive: true, force: true });
-    }
-    await rm(tmpDir, { recursive: true, force: true });
-  });
-
-  test("commits and pushes changes", async () => {
-    const { repoPath } = await createTestRepo(tmpDir);
-    const taskId = generateTaskId();
-    const info = await createWorktree(repoPath, taskId, "main");
-    createdWorktrees.push({ repoPath, worktreePath: info.worktreePath });
-
-    // Configure committer in worktree
-    await Bun.$`git -C ${info.worktreePath} config user.email "test@deer.dev"`.quiet();
-    await Bun.$`git -C ${info.worktreePath} config user.name "Deer Test"`.quiet();
-
-    // Create a new file in the worktree
-    await Bun.write(join(info.worktreePath, "new-file.txt"), "hello");
-
-    await finalizeWorktree(info.worktreePath);
-
-    // Verify the commit exists
-    const log =
-      await Bun.$`git -C ${info.worktreePath} log --oneline -1`.text();
-    expect(log).toContain("deer");
-  });
-
-  test("is a no-op when there are no changes", async () => {
-    const { repoPath } = await createTestRepo(tmpDir);
-    const taskId = generateTaskId();
-    const info = await createWorktree(repoPath, taskId, "main");
-    createdWorktrees.push({ repoPath, worktreePath: info.worktreePath });
-
-    // Should not throw
-    await finalizeWorktree(info.worktreePath);
-
-    // Log should only have the initial commit
-    const log =
-      await Bun.$`git -C ${info.worktreePath} log --oneline`.text();
-    expect(log.trim().split("\n")).toHaveLength(1);
   });
 });
 

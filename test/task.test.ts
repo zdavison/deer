@@ -100,7 +100,6 @@ describe("history persistence", () => {
       prUrl: "https://github.com/org/repo/pull/1",
       finalBranch: null,
       error: null,
-      transcriptPath: null,
       lastActivity: "PR ready",
       ...overrides,
     };

@@ -1,33 +1,18 @@
 import { Box, Text, useInput, useApp, useStdout } from "ink";
 import { TextInput, Spinner } from "@inkjs/ui";
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { join } from "node:path";
-import { mkdir } from "node:fs/promises";
-import { generateTaskId, transcriptsDir, loadHistory, upsertHistory, removeFromHistory } from "./task";
+import { loadHistory, upsertHistory, removeFromHistory } from "./task";
 import type { PersistedTask } from "./task";
 import { loadConfig } from "./config";
 import type { DeerConfig } from "./config";
 import { transition, availableActions, resolveKeypress, ACTION_BINDINGS } from "./state-machine";
 import type { AgentState as AgentStatus } from "./state-machine";
-
-// The Docker Sandbox proxy reads ANTHROPIC_API_KEY from the host process env
-// on every `docker sandbox exec` call and injects it into API requests,
-// overriding OAuth auth. Remove it from the process so child processes
-// (especially docker sandbox exec) never inherit it.
-delete process.env.ANTHROPIC_API_KEY;
+import { startAgent, destroyAgent, createAgentPR } from "./agent";
+import type { AgentHandle } from "./agent";
+import { isTmuxSessionDead, captureTmuxPane } from "./sandbox/index";
+import { detectRepo } from "./git/worktree";
 
 // ── Types ────────────────────────────────────────────────────────────
-
-interface SandboxMeta {
-  sandboxName: string;
-  worktreePath: string;
-  tempBranch: string;
-  baseBranch: string;
-  sandboxHome: string;
-  model: string;
-  /** Temp dir for deer artifacts (inside GIT_DIR, not tracked by git) */
-  deerTmpDir: string;
-}
 
 interface TeardownResult {
   finalBranch: string;
@@ -40,35 +25,33 @@ export interface AgentState {
   /** Persistent task ID (deer_xxx format) for history storage */
   taskId: string;
   prompt: string;
+  /** @example "main" */
+  baseBranch: string;
   status: AgentStatus;
   /** Elapsed seconds */
   elapsed: number;
   /** Last activity from tmux pane capture */
   lastActivity: string;
-  /** Current tool being used */
-  currentTool: string;
   /** Log lines (capped) */
   logs: string[];
-  /** Sandbox metadata from setup */
-  meta: SandboxMeta | null;
+  /** Agent handle from the sandbox module */
+  handle: AgentHandle | null;
   /** Teardown result */
   result: TeardownResult | null;
   /** Error message on failure */
   error: string;
-  /** Running process handle (or tmux kill handle) */
-  proc: { kill(): void } | null;
   /** Timer handle */
   timer: ReturnType<typeof setInterval> | null;
-  /** PR state on GitHub: null = unchecked, "open" = open, "merged" = merged, "closed" = closed */
+  /** PR state on GitHub */
   prState: "open" | "merged" | "closed" | null;
-  /** Agent is waiting for user input (e.g. AskUserQuestion tool) */
-  needsAttention: boolean;
-  /** Human-readable conversation transcript (terminal output lines) */
-  transcript: string[];
-  /** Path to persisted transcript file (set when completed with no code changes) */
-  transcriptPath: string | null;
   /** True if this agent was loaded from history (not spawned this session) */
   historical: boolean;
+  /** True when Claude is idle (waiting for user input) */
+  idle: boolean;
+  /** True while a PR is being created */
+  creatingPr: boolean;
+  /** AbortController for cancelling the wait loop */
+  abortController: AbortController | null;
 }
 
 // ── Constants ────────────────────────────────────────────────────────
@@ -83,19 +66,18 @@ const STATUS_DISPLAY: Record<AgentStatus, { icon: string; color: string }> = {
   interrupted: { icon: "!",  color: "yellow" },
 };
 
+const UPLOAD_FRAMES = ["⬆", "⇧"];
+
 const MAX_LOG_LINES = 200;
 const MAX_VISIBLE_LOGS = 5;
 const LOG_LINES_PER_ENTRY = 2;
-/** Base rows per entry: title + log lines. Entries with a PR URL add 1 more row. */
 const ENTRY_ROWS_BASE = 1 + LOG_LINES_PER_ENTRY;
 const ENTRY_ROWS_WITH_PR = ENTRY_ROWS_BASE + 1;
 const MODEL = "sonnet";
 const PR_MERGE_CHECK_INTERVAL_MS = 60_000;
-
-/** Timeout for the metadata extraction follow-up invocation */
-const METADATA_TIMEOUT_MS = 60_000;
-
-const SCRIPTS_DIR = join(import.meta.dir, "..", "scripts");
+const POLL_MS = 1_000;
+/** Number of consecutive unchanged pane captures before considering Claude idle */
+const IDLE_THRESHOLD = 3;
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -121,47 +103,36 @@ function isActive(a: AgentState): boolean {
   return a.status === "setup" || a.status === "running" || a.status === "teardown";
 }
 
+/** Strip ANSI escape sequences from terminal output */
+export function stripAnsi(s: string): string {
+  return s.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "")
+          .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "");
+}
+
 /** Suspend the ink alternate screen, run fn, then restore. */
 async function withSuspendedTerminal(
   setSuspended: (v: boolean) => void,
   fn: () => Promise<void>,
 ): Promise<void> {
   setSuspended(true);
+  // Leave Ink's alternate screen
   process.stdout.write("\x1b[?1049l");
+  // Fully release stdin so the child process gets exclusive access
   if (process.stdin.setRawMode) process.stdin.setRawMode(false);
+  process.stdin.pause();
   try {
     await fn();
   } finally {
+    process.stdin.resume();
     if (process.stdin.setRawMode) process.stdin.setRawMode(true);
     process.stdout.write("\x1b[?1049h\x1b[2J\x1b[H");
     setSuspended(false);
   }
 }
 
-/** Spawn a bash script, check exit code, parse JSON from last stdout line. */
-async function runScriptJson<T>(args: string[], cwd: string): Promise<T> {
-  const proc = Bun.spawn(args, { cwd, stdout: "pipe", stderr: "pipe" });
-  const code = await proc.exited;
-  if (code !== 0) {
-    const stderr = await new Response(proc.stderr).text();
-    throw new Error(`Script failed (exit ${code}): ${stderr.trim().split("\n").pop()}`);
-  }
-  const stdout = await new Response(proc.stdout).text();
-  const lines = stdout.trim().split("\n").filter(Boolean);
-  const jsonLine = lines[lines.length - 1];
-  if (!jsonLine) throw new Error("Script produced no output");
-  return JSON.parse(jsonLine) as T;
-}
-
-/** Spawn claude -p inside a docker sandbox with OAuth env. */
-function spawnClaudeInSandbox(meta: SandboxMeta, promptPath: string): ReturnType<typeof Bun.spawn> {
-  return Bun.spawn([
-    "docker", "sandbox", "exec", "--privileged", meta.sandboxName,
-    "env", "-u", "ANTHROPIC_API_KEY",
-    `CLAUDE_CODE_OAUTH_TOKEN=${process.env.CLAUDE_CODE_OAUTH_TOKEN}`,
-    "sh", "-c",
-    `cd ${meta.worktreePath} && cat ${promptPath} | claude -p --output-format stream-json --verbose --dangerously-skip-permissions --model ${MODEL}`,
-  ], { stdout: "pipe", stderr: "pipe" });
+function openUrl(url: string) {
+  const cmd = process.platform === "darwin" ? "open" : "xdg-open";
+  Bun.spawn([cmd, url], { stdout: "pipe", stderr: "pipe" });
 }
 
 function prStateColor(state: "open" | "merged" | "closed" | null): string {
@@ -176,154 +147,22 @@ export function createAgentState(overrides: Partial<AgentState>): AgentState {
     id: 0,
     taskId: "",
     prompt: "",
+    baseBranch: "main",
     status: "setup",
     elapsed: 0,
     lastActivity: "",
-    currentTool: "",
     logs: [],
-    meta: null,
+    handle: null,
     result: null,
     error: "",
-    proc: null,
     timer: null,
     prState: null,
-    needsAttention: false,
-    transcript: [],
-    transcriptPath: null,
     historical: false,
+    idle: false,
+    creatingPr: false,
+    abortController: null,
     ...overrides,
   };
-}
-
-/** Strip ANSI escape sequences from terminal output */
-export function stripAnsi(s: string): string {
-  return s.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "")
-          .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "");
-}
-
-/** Check if the deer tmux pane's command has exited */
-async function isTmuxPaneDead(sandboxName: string): Promise<boolean> {
-  const proc = Bun.spawn([
-    "docker", "sandbox", "exec", sandboxName,
-    "tmux", "list-panes", "-t", "deer", "-F", "#{pane_dead}",
-  ], { stdout: "pipe", stderr: "pipe" });
-  if ((await proc.exited) !== 0) return true; // session gone = dead
-  const result = (await new Response(proc.stdout).text()).trim();
-  return result === "1";
-}
-
-/** Capture tmux pane content. Returns lines or null if session doesn't exist. */
-async function captureTmuxPane(
-  sandboxName: string,
-  fullScrollback = false,
-): Promise<string[] | null> {
-  const args = ["docker", "sandbox", "exec", sandboxName,
-    "tmux", "capture-pane", "-t", "deer", "-p"];
-  if (fullScrollback) args.push("-S", "-");
-
-  const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
-  if ((await proc.exited) !== 0) return null;
-  const text = await new Response(proc.stdout).text();
-  return text.split("\n");
-}
-
-function openUrl(url: string) {
-  const cmd = process.platform === "darwin" ? "open" : "xdg-open";
-  Bun.spawn([cmd, url], { stdout: "pipe", stderr: "pipe" });
-}
-
-/** Timeout for the needs-input classification invocation */
-const NEEDS_INPUT_TIMEOUT_MS = 15_000;
-
-/**
- * Use a fast LLM call to determine if the agent's last transcript message
- * is asking the user for input/clarification/decisions — works across
- * all languages.
- *
- * Returns true if the agent appears to be blocked on human intervention.
- */
-export async function needsHumanInput(transcript: string[]): Promise<boolean> {
-  if (transcript.length === 0) return false;
-  const last = transcript[transcript.length - 1].trim();
-  if (!last) return false;
-
-  const prompt = [
-    "You are a classifier. The following message is the final output from an AI coding agent.",
-    "Is a response from the user expected after this message?",
-    "For example: the agent asked a question, presented options to choose from,",
-    "requested clarification, asked the user to do something, or is otherwise",
-    "waiting for input before it can continue.",
-    "",
-    "Respond with exactly YES or NO. Nothing else.",
-    "",
-    "<agent-message>",
-    last.length > 2000 ? last.slice(-2000) : last,
-    "</agent-message>",
-  ].join("\n");
-
-  try {
-    const { CLAUDECODE: _, ANTHROPIC_API_KEY: __, ...env } = process.env;
-    const proc = Bun.spawn([
-      "claude", "-p", "--output-format", "text", "--model", "haiku",
-    ], {
-      stdin: new Response(prompt),
-      stdout: "pipe",
-      stderr: "pipe",
-      env,
-    });
-
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => {
-        proc.kill();
-        reject(new Error("needs-input classification timed out"));
-      }, NEEDS_INPUT_TIMEOUT_MS),
-    );
-
-    const result = await Promise.race([
-      proc.exited.then(async (code) => {
-        if (code !== 0) return false;
-        const text = (await new Response(proc.stdout).text()).trim().toUpperCase();
-        return text === "YES";
-      }),
-      timeout,
-    ]);
-
-    return result;
-  } catch {
-    // On any failure, assume no — don't block the normal flow
-    return false;
-  }
-}
-
-function buildTranscriptMarkdown(agent: AgentState): string {
-  const date = new Date().toISOString().replace("T", " ").slice(0, 16);
-  const heading = agent.prompt.length > 80 ? agent.prompt.slice(0, 80) + "…" : agent.prompt;
-
-  const sections: string[] = [
-    `# deer — ${heading}`,
-    "",
-    `**Date:** ${date}`,
-    "",
-    "---",
-    "",
-    "## User",
-    "",
-    agent.prompt,
-    "",
-    "## Assistant",
-    "",
-    agent.transcript.join("\n\n"),
-  ];
-
-  return sections.join("\n") + "\n";
-}
-
-async function persistTranscript(agent: AgentState): Promise<string> {
-  const dir = transcriptsDir();
-  await mkdir(dir, { recursive: true });
-  const filePath = join(dir, `${agent.taskId}.md`);
-  await Bun.write(filePath, buildTranscriptMarkdown(agent));
-  return filePath;
 }
 
 // ── Preflight ────────────────────────────────────────────────────────
@@ -336,13 +175,31 @@ interface PreflightResult {
 async function runPreflight(): Promise<PreflightResult> {
   const errors: string[] = [];
 
-  // Check docker sandbox
+  // Check bwrap
   try {
-    const p = Bun.spawn(["docker", "sandbox", "version"], { stdout: "pipe", stderr: "pipe" });
+    const p = Bun.spawn(["bwrap", "--version"], { stdout: "pipe", stderr: "pipe" });
     const code = await p.exited;
-    if (code !== 0) errors.push("docker sandbox not available (Docker Desktop 4.58+ required)");
+    if (code !== 0) errors.push("bubblewrap (bwrap) not available — install it with your package manager");
   } catch {
-    errors.push("docker sandbox not available");
+    errors.push("bubblewrap (bwrap) not available — install it with your package manager");
+  }
+
+  // Check tmux
+  try {
+    const p = Bun.spawn(["tmux", "-V"], { stdout: "pipe", stderr: "pipe" });
+    const code = await p.exited;
+    if (code !== 0) errors.push("tmux not available");
+  } catch {
+    errors.push("tmux not available");
+  }
+
+  // Check claude
+  try {
+    const p = Bun.spawn(["claude", "--version"], { stdout: "pipe", stderr: "pipe" });
+    const code = await p.exited;
+    if (code !== 0) errors.push("claude CLI not available");
+  } catch {
+    errors.push("claude CLI not available");
   }
 
   // Check gh auth
@@ -355,7 +212,7 @@ async function runPreflight(): Promise<PreflightResult> {
   }
 
   // Check OAuth token
-  const tokenFile = join(process.env.HOME || "", ".claude/agent-oauth-token");
+  const tokenFile = `${process.env.HOME ?? ""}/.claude/agent-oauth-token`;
   if (!process.env.CLAUDE_CODE_OAUTH_TOKEN) {
     try {
       const f = Bun.file(tokenFile);
@@ -371,379 +228,41 @@ async function runPreflight(): Promise<PreflightResult> {
   return { ok: errors.length === 0, errors };
 }
 
-// ── Agent Lifecycle ──────────────────────────────────────────────────
+// ── History helpers ──────────────────────────────────────────────────
 
-async function setupAgent(
-  cwd: string,
-  agent: AgentState,
-  setAgents: (updater: (prev: AgentState[]) => AgentState[]) => void,
-  baseBranch?: string,
-): Promise<SandboxMeta> {
-  const args = ["bash", join(SCRIPTS_DIR, "setup-sandbox.sh"), cwd, MODEL];
-  if (baseBranch) args.push(baseBranch);
-
-  const proc = Bun.spawn(args, { cwd, stdout: "pipe", stderr: "pipe" });
-
-  // Stream stderr lines into agent logs in real-time
-  const stderrStream = proc.stderr as ReadableStream;
-  const reader = stderrStream.getReader();
-  const decoder = new TextDecoder();
-  let stderrBuf = "";
-
-  (async () => {
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        stderrBuf += decoder.decode(value, { stream: true });
-        const lines = stderrBuf.split("\n");
-        stderrBuf = lines.pop()!;
-        for (const raw of lines) {
-          const line = stripAnsi(raw).trim();
-          if (line) {
-            appendLog(agent, `[setup] ${line}`);
-            agent.lastActivity = truncate(line, 120);
-            setAgents((prev) => [...prev]);
-          }
-        }
-      }
-      // Flush remaining
-      const last = stripAnsi(stderrBuf).trim();
-      if (last) {
-        appendLog(agent, `[setup] ${last}`);
-        agent.lastActivity = truncate(last, 120);
-        setAgents((prev) => [...prev]);
-      }
-    } catch { /* stream closed */ }
-  })();
-
-  const code = await proc.exited;
-  if (code !== 0) {
-    throw new Error(`Setup failed (exit ${code})`);
-  }
-  const stdout = await new Response(proc.stdout).text();
-  const jsonLines = stdout.trim().split("\n").filter(Boolean);
-  const jsonLine = jsonLines[jsonLines.length - 1];
-  if (!jsonLine) throw new Error("Setup script produced no output");
-  return JSON.parse(jsonLine) as SandboxMeta;
+/** Save a finished agent to the repo's history file. */
+async function saveToHistory(agent: AgentState, repoPath: string): Promise<void> {
+  if (agent.historical) return;
+  const status = agent.status as "completed" | "failed" | "cancelled";
+  const task: PersistedTask = {
+    taskId: agent.taskId,
+    prompt: agent.prompt,
+    status,
+    createdAt: new Date(Date.now() - agent.elapsed * 1000).toISOString(),
+    completedAt: new Date().toISOString(),
+    elapsed: agent.elapsed,
+    prUrl: agent.result?.prUrl ?? null,
+    finalBranch: agent.result?.finalBranch ?? null,
+    error: agent.error || null,
+    lastActivity: agent.lastActivity,
+  };
+  await upsertHistory(repoPath, task);
 }
 
-/**
- * Apply a deny-by-default network policy to the sandbox, allowing only the
- * domains in the config allowlist. Called after sandbox creation but before
- * the agent starts, so tmux/apt installs during setup are unaffected.
- */
-/** Domains that must bypass the MITM proxy so OAuth credentials pass through
- *  unmodified. The `claude` sandbox template's proxy intercepts these and
- *  injects the host's ANTHROPIC_API_KEY, overriding CLAUDE_CODE_OAUTH_TOKEN. */
-const PROXY_BYPASS_HOSTS = [
-  "api.anthropic.com",
-  "claude.ai",
-  "statsig.anthropic.com",
-  "sentry.io",
-];
-
-async function applyNetworkPolicy(sandboxName: string, allowlist: string[]): Promise<void> {
-  const args = [
-    "docker", "sandbox", "network", "proxy", sandboxName,
-    "--policy", "deny",
-    ...allowlist.flatMap((host) => ["--allow-host", host]),
-    ...PROXY_BYPASS_HOSTS.flatMap((host) => ["--bypass-host", host]),
-  ];
-  const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
-  const code = await proc.exited;
-  if (code !== 0) {
-    const stderr = await new Response(proc.stderr).text();
-    throw new Error(`Network policy failed (exit ${code}): ${stderr.trim()}`);
-  }
-}
-
-/**
- * Start Claude inside a tmux session in the sandbox.
- * Writes a launcher script to deerTmpDir (bind-mounted into the sandbox)
- * that bakes in the OAuth token and unsets ANTHROPIC_API_KEY. The script
- * runs as tmux's initial command, so when Claude exits the pane dies
- * (remain-on-exit preserves content for scrollback capture).
- *
- * A script file avoids fragile quoting through multiple shell layers
- * (TypeScript → docker exec → sh → tmux send-keys → tmux shell).
- */
-async function startClaudeInTmux(meta: SandboxMeta, prompt: string): Promise<void> {
-  const promptPath = join(meta.deerTmpDir, ".agent-prompt");
-  await Bun.write(promptPath, prompt);
-
-  // Write launcher script — runs as tmux session's initial command.
-  // The token is written directly into the file, avoiding send-keys quoting.
-  // deerTmpDir is inside GIT_DIR which is bind-mounted into the sandbox.
-  const launcherPath = join(meta.deerTmpDir, ".agent-launcher.sh");
-  await Bun.write(launcherPath, [
-    `#!/bin/sh`,
-    `unset ANTHROPIC_API_KEY`,
-    `export CLAUDE_CODE_OAUTH_TOKEN='${process.env.CLAUDE_CODE_OAUTH_TOKEN}'`,
-    `cd "${meta.worktreePath}"`,
-    `cat "${meta.deerTmpDir}/.agent-prompt" | claude -p --verbose --dangerously-skip-permissions --model ${MODEL}`,
-  ].join("\n") + "\n");
-
-  const script = [
-    `export PATH="$PATH:/usr/bin:/usr/local/bin:/bin"`,
-    `export TERM=xterm-256color`,
-    `chmod +x ${launcherPath}`,
-    `tmux new-session -d -s deer "sh ${launcherPath}"`,
-    `tmux set -t deer remain-on-exit on`,
-  ].join(" && ");
-
-  const proc = Bun.spawn([
-    "docker", "sandbox", "exec", "--privileged", meta.sandboxName,
-    "sh", "-c", script,
-  ], {
-    stdout: "pipe",
-    stderr: "pipe",
+/** Convert a persisted task to a read-only AgentState for display. */
+function historicalAgent(task: PersistedTask, id: number): AgentState {
+  const wasInterrupted = task.status === "running";
+  return createAgentState({
+    id,
+    taskId: task.taskId,
+    prompt: task.prompt,
+    status: wasInterrupted ? "interrupted" : task.status,
+    elapsed: task.elapsed,
+    lastActivity: wasInterrupted ? "Interrupted — deer was closed" : task.lastActivity,
+    result: task.prUrl ? { finalBranch: task.finalBranch ?? "", prUrl: task.prUrl } : null,
+    error: task.error || "",
+    historical: true,
   });
-
-  const code = await proc.exited;
-  if (code !== 0) {
-    const stderr = await new Response(proc.stderr).text();
-    throw new Error(`Failed to start Claude in tmux: ${stderr.trim()}`);
-  }
-}
-
-/**
- * Build the follow-up prompt that asks the agent to write metadata files.
- * Includes the repo's PR template if one exists.
- */
-async function buildMetadataPrompt(worktreePath: string, deerTmpDir: string): Promise<string> {
-  let prTemplate = "";
-
-  const templatePaths = [
-    ".github/PULL_REQUEST_TEMPLATE.md",
-    ".github/pull_request_template.md",
-    "PULL_REQUEST_TEMPLATE.md",
-    "pull_request_template.md",
-  ];
-
-  for (const rel of templatePaths) {
-    const f = Bun.file(join(worktreePath, rel));
-    if (await f.exists()) {
-      prTemplate = await f.text();
-      break;
-    }
-  }
-
-  // Collect the diff so the metadata prompt is self-contained (no --continue needed)
-  const diffProc = Bun.spawn(["git", "-C", worktreePath, "diff", "HEAD"], {
-    stdout: "pipe",
-    stderr: "ignore",
-  });
-  let diff = await new Response(diffProc.stdout).text();
-  await diffProc.exited;
-
-  // If nothing is unstaged, get the diff against the parent commit instead
-  if (!diff.trim()) {
-    const logProc = Bun.spawn(["git", "-C", worktreePath, "diff", "HEAD~1..HEAD"], {
-      stdout: "pipe",
-      stderr: "ignore",
-    });
-    diff = await new Response(logProc.stdout).text();
-    await logProc.exited;
-  }
-
-  // Truncate very large diffs to avoid blowing up the context window
-  const MAX_DIFF_CHARS = 80_000;
-  if (diff.length > MAX_DIFF_CHARS) {
-    diff = diff.slice(0, MAX_DIFF_CHARS) + "\n\n... (diff truncated)";
-  }
-
-  const prSection = prTemplate
-    ? `A pull request description following this template:\n\n<pr-template>\n${prTemplate}\n</pr-template>`
-    : `A pull request description with a summary of the changes.`;
-
-  return [
-    "Below is the git diff of changes made by an automated agent. Based on this diff, write these three files:",
-    "",
-    `1. \`${deerTmpDir}/.agent-branch-name\``,
-    "   A short kebab-case name for a git branch describing the changes.",
-    "   No prefix. Examples: fix-login-validation, add-user-avatar-upload",
-    "",
-    `2. \`${deerTmpDir}/.agent-commit-message\``,
-    "   A conventional git commit message. First line is the subject (<72 chars),",
-    "   then a blank line, then an optional body.",
-    "",
-    `3. \`${deerTmpDir}/.agent-pr-body\``,
-    `   ${prSection}`,
-    "",
-    "Write these three files now. Do nothing else.",
-    "",
-    "<diff>",
-    diff,
-    "</diff>",
-  ].join("\n");
-}
-
-/**
- * Run a follow-up `claude -p` to extract metadata (branch name,
- * commit message, PR body) after the main task finishes. The prompt
- * includes the git diff so it's self-contained.
- *
- * Non-fatal — if this fails or times out, teardown has fallbacks.
- */
-async function startClaudeMetadata(meta: SandboxMeta, agent: AgentState): Promise<void> {
-  const prompt = await buildMetadataPrompt(meta.worktreePath, meta.deerTmpDir);
-  const promptPath = join(meta.deerTmpDir, ".agent-metadata-prompt");
-  await Bun.write(promptPath, prompt);
-
-  const proc = spawnClaudeInSandbox(meta, `${meta.deerTmpDir}/.agent-metadata-prompt`);
-
-  // Drain stdout/stderr to prevent backpressure
-  const stdoutPromise = new Response(proc.stdout as ReadableStream).text();
-  const stderrPromise = new Response(proc.stderr as ReadableStream).text();
-
-  let timeoutId: ReturnType<typeof setTimeout>;
-  const timeout = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      proc.kill();
-      reject(new Error("Metadata extraction timed out"));
-    }, METADATA_TIMEOUT_MS);
-  });
-
-  try {
-    await Promise.race([
-      proc.exited.then(async (code) => {
-        await stdoutPromise;
-        const stderr = await stderrPromise;
-        if (stderr.trim()) appendLog(agent, `[metadata stderr] ${stderr.trim()}`);
-        if (code !== 0) {
-          const hint = stderr.trim().split("\n").pop() || "";
-          throw new Error(`Metadata extraction exited with code ${code}${hint ? `: ${hint}` : ""}`);
-        }
-      }),
-      timeout,
-    ]);
-  } finally {
-    clearTimeout(timeoutId!);
-  }
-}
-
-async function teardownAgent(meta: SandboxMeta, cwd: string): Promise<TeardownResult> {
-  return runScriptJson<TeardownResult>([
-    "bash", join(SCRIPTS_DIR, "teardown-sandbox.sh"),
-    cwd, meta.worktreePath, meta.sandboxName, meta.tempBranch, meta.baseBranch, meta.model, meta.deerTmpDir,
-  ], cwd);
-}
-
-/** Like teardownAgent but captures stderr lines into agent logs. */
-async function teardownAgentWithLogs(meta: SandboxMeta, cwd: string, agent: AgentState): Promise<TeardownResult> {
-  const proc = Bun.spawn([
-    "bash", join(SCRIPTS_DIR, "teardown-sandbox.sh"),
-    cwd, meta.worktreePath, meta.sandboxName, meta.tempBranch, meta.baseBranch, meta.model, meta.deerTmpDir,
-  ], { cwd, stdout: "pipe", stderr: "pipe" });
-
-  const stdoutPromise = new Response(proc.stdout as ReadableStream).text();
-  const stderrPromise = new Response(proc.stderr as ReadableStream).text();
-
-  const code = await proc.exited;
-  const stdout = await stdoutPromise;
-  const stderr = await stderrPromise;
-
-  // Surface the script's progress messages into agent logs
-  for (const line of stderr.trim().split("\n").filter(Boolean)) {
-    appendLog(agent, `[teardown] ${stripAnsi(line).trim()}`);
-  }
-
-  if (code !== 0) {
-    throw new Error(`Teardown failed (exit ${code}): ${stderr.trim().split("\n").pop()}`);
-  }
-
-  const lines = stdout.trim().split("\n").filter(Boolean);
-  const jsonLine = lines[lines.length - 1];
-  if (!jsonLine) throw new Error("Teardown script produced no output");
-  return JSON.parse(jsonLine) as TeardownResult;
-}
-
-function cleanupAgent(agent: AgentState, repoRoot: string) {
-  if (agent.proc) {
-    try { agent.proc.kill(); } catch { /* ignore */ }
-  }
-  if (agent.timer) clearInterval(agent.timer);
-  if (agent.meta) {
-    // Best-effort cleanup — fire-and-forget to avoid blocking the UI
-    const { sandboxName, worktreePath, tempBranch } = agent.meta;
-    (async () => {
-      try { await Bun.spawn(["docker", "sandbox", "rm", sandboxName]).exited; } catch { /* ignore */ }
-      try { await Bun.spawn(["git", "-C", repoRoot, "worktree", "remove", "--force", worktreePath]).exited; } catch { /* ignore */ }
-      try { await Bun.spawn(["git", "-C", repoRoot, "branch", "-D", tempBranch]).exited; } catch { /* ignore */ }
-    })();
-  }
-}
-
-/**
- * Run metadata extraction + teardown for an agent.
- * Handles its own errors — sets agent status to completed or failed.
- */
-async function finalizeAgent(
-  agent: AgentState,
-  cwd: string,
-  setAgents: (updater: (prev: AgentState[]) => AgentState[]) => void,
-): Promise<void> {
-  if (!agent.meta) return;
-
-  // Kill the dead tmux session left over from the main Claude run
-  // (remain-on-exit keeps it alive). Cleaning up avoids stale lock files
-  // or session state that could interfere with the metadata invocation.
-  try {
-    await Bun.spawn([
-      "docker", "sandbox", "exec", agent.meta.sandboxName,
-      "tmux", "kill-session", "-t", "deer",
-    ], { stdout: "pipe", stderr: "pipe" }).exited;
-  } catch { /* ignore */ }
-
-  // Check if Claude wrote any code
-  const statusProc = Bun.spawn(
-    ["git", "-C", agent.meta.worktreePath, "status", "--porcelain"],
-    { stdout: "pipe", stderr: "pipe" },
-  );
-  const statusOut = await new Response(statusProc.stdout).text();
-  await statusProc.exited;
-  const changeCount = statusOut.trim().split("\n").filter(Boolean).length;
-  appendLog(agent, `[teardown] ${changeCount} file(s) changed in worktree`);
-
-  // Metadata extraction (non-fatal)
-  agent.lastActivity = "Generating PR metadata...";
-  setAgents((prev) => [...prev]);
-
-  try {
-    await startClaudeMetadata(agent.meta, agent);
-  } catch (err) {
-    appendLog(agent, `[warn] Metadata extraction failed: ${err instanceof Error ? err.message : String(err)}`);
-  }
-
-  // Teardown
-  agent.status = transition(agent.status, "TEARDOWN_START") ?? agent.status;
-  agent.lastActivity = "Committing and creating PR...";
-  setAgents((prev) => [...prev]);
-
-  try {
-    agent.result = await teardownAgentWithLogs(agent.meta, cwd, agent);
-    agent.status = transition(agent.status, "TEARDOWN_COMPLETE") ?? agent.status;
-
-    if (agent.result.prUrl) {
-      agent.lastActivity = "PR ready";
-    } else if (agent.transcript.length > 0) {
-      agent.transcriptPath = await persistTranscript(agent);
-      agent.lastActivity = "Answer ready — Enter to continue";
-    } else {
-      agent.lastActivity = "No changes";
-    }
-  } catch (err) {
-    agent.status = transition(agent.status, "ERROR") ?? "failed";
-    agent.error = err instanceof Error ? err.message : String(err);
-    agent.lastActivity = truncate(agent.error, 120);
-  } finally {
-    if (agent.timer) clearInterval(agent.timer);
-    agent.timer = null;
-    agent.proc = null;
-    await saveToHistory(agent, cwd);
-    setAgents((prev) => [...prev]);
-  }
 }
 
 /** Check the current state of a PR via `gh pr view`. */
@@ -762,101 +281,6 @@ async function checkPrState(prUrl: string): Promise<"open" | "merged" | "closed"
   } catch {
     return null;
   }
-}
-
-// ── NDJSON Parser ────────────────────────────────────────────────────
-
-/** @internal Exported for testing */
-export function parseNdjsonLine(line: string, agent: AgentState): boolean {
-  if (!line.trim()) return false;
-  let changed = false;
-
-  try {
-    const event = JSON.parse(line);
-
-    // Assistant text content
-    if (event.type === "assistant" && event.message?.content) {
-      for (const block of event.message.content) {
-        if (block.type === "text" && block.text) {
-          agent.lastActivity = truncate(block.text.replace(/\n/g, " ").trim(), 120);
-          appendLog(agent, block.text.trim());
-          agent.transcript.push(block.text);
-          changed = true;
-        }
-        if (block.type === "tool_use") {
-          const name = block.name || "tool";
-          const input = block.input ? JSON.stringify(block.input).slice(0, 100) : "";
-          agent.currentTool = `${name} ${input}`;
-          appendLog(agent, `[tool] ${name} ${input}`);
-          changed = true;
-        }
-      }
-    }
-
-    // Tool result
-    if (event.type === "result" && event.result) {
-      agent.lastActivity = truncate(String(event.result).replace(/\n/g, " ").trim(), 120);
-      changed = true;
-    }
-
-    // Content block delta (streaming)
-    if (event.type === "content_block_delta") {
-      if (event.delta?.type === "text_delta" && event.delta.text) {
-        agent.lastActivity = truncate(event.delta.text.replace(/\n/g, " ").trim(), 120);
-        changed = true;
-      }
-    }
-
-    // System message
-    if (event.type === "system" && event.message) {
-      appendLog(agent, `[system] ${event.message}`);
-    }
-  } catch {
-    // Not valid JSON — treat as plain text log
-    if (line.trim()) {
-      appendLog(agent, line.trim());
-      changed = true;
-    }
-  }
-
-  return changed;
-}
-
-/** Save a finished agent to the repo's history file. */
-async function saveToHistory(agent: AgentState, repoPath: string): Promise<void> {
-  if (agent.historical) return;
-  const status = agent.status as "completed" | "failed" | "cancelled";
-  const task: PersistedTask = {
-    taskId: agent.taskId,
-    prompt: agent.prompt,
-    status,
-    createdAt: new Date(Date.now() - agent.elapsed * 1000).toISOString(),
-    completedAt: new Date().toISOString(),
-    elapsed: agent.elapsed,
-    prUrl: agent.result?.prUrl ?? null,
-    finalBranch: agent.result?.finalBranch ?? null,
-    error: agent.error || null,
-    transcriptPath: agent.transcriptPath,
-    lastActivity: agent.lastActivity,
-  };
-  await upsertHistory(repoPath, task);
-}
-
-/** Convert a persisted task to a read-only AgentState for display. */
-function historicalAgent(task: PersistedTask, id: number): AgentState {
-  const wasInterrupted = task.status === "running";
-  return createAgentState({
-    id,
-    taskId: task.taskId,
-    prompt: task.prompt,
-    status: wasInterrupted ? "interrupted" : task.status,
-    elapsed: task.elapsed,
-    lastActivity: wasInterrupted ? "Interrupted — deer was closed" : task.lastActivity,
-    result: task.prUrl ? { finalBranch: task.finalBranch ?? "", prUrl: task.prUrl } : null,
-    error: task.error || "",
-    transcriptPath: task.transcriptPath,
-    historical: true,
-  });
 }
 
 // ── Main Component ───────────────────────────────────────────────────
@@ -878,15 +302,23 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   const [historyIdx, setHistoryIdx] = useState(-1);
   const [inputDefault, setInputDefault] = useState("");
   const [inputKey, setInputKey] = useState(0);
-  /** When set, the next prompt submission spawns an agent off this branch instead of the current branch. */
-  const [continueBranch, setContinueBranch] = useState<string | null>(null);
+  const [animTick, setAnimTick] = useState(0);
 
   const nextId = useRef(1);
   const agentsRef = useRef(agents);
   agentsRef.current = agents;
   const configRef = useRef<DeerConfig | null>(null);
+  const baseBranchRef = useRef("main");
 
-  // ── Sync state from history file (cross-instance source of truth) ──
+  // ── Detect base branch on mount ────────────────────────────────────
+
+  useEffect(() => {
+    detectRepo(cwd).then((info) => {
+      baseBranchRef.current = info.defaultBranch;
+    }).catch(() => {});
+  }, [cwd]);
+
+  // ── Sync state from history file ──────────────────────────────────
 
   const syncWithHistory = useCallback(async () => {
     const fileTasks = await loadHistory(cwd);
@@ -897,13 +329,12 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     const newAgents: AgentState[] = fileTasks.map(task => {
       const existing = agentByTaskId.get(task.taskId);
       if (existing && !existing.historical) {
-        return existing; // keep live process handle and timer
+        return existing;
       }
       const id = existing?.id ?? nextId.current++;
       return historicalAgent(task, id);
     });
 
-    // Keep owned agents not yet written to the file (edge case: spawned but not yet persisted)
     for (const agent of currentAgents) {
       if (!agent.historical && !fileTaskIds.has(agent.taskId)) {
         newAgents.push(agent);
@@ -935,12 +366,24 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     return () => clearInterval(interval);
   }, [syncWithHistory]);
 
-  // ── Cleanup on unmount ───────────────────────────────────────────
+  // ── Animate upload icon when creating PR ─────────────────────────
+
+  useEffect(() => {
+    const anyCreating = agents.some((a) => a.creatingPr);
+    if (!anyCreating) return;
+    const interval = setInterval(() => setAnimTick((t) => t + 1), 200);
+    return () => clearInterval(interval);
+  }, [agents]);
+
+  // ── Cleanup on unmount ────────────────────────────────────────────
 
   useEffect(() => {
     const cleanup = () => {
       for (const agent of agentsRef.current) {
-        if (isActive(agent)) cleanupAgent(agent, cwd);
+        if (isActive(agent) && agent.handle) {
+          agent.abortController?.abort();
+          agent.handle.kill().catch(() => {});
+        }
       }
     };
 
@@ -953,11 +396,10 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     };
   }, [cwd]);
 
-  // ── Check PR merge status periodically ───────────────────────────
+  // ── Check PR merge status periodically ────────────────────────────
 
   useEffect(() => {
     const check = async () => {
-      // Check agents with a PR URL that are either unchecked or still open (merged/closed are terminal)
       const toCheck = agentsRef.current.filter(
         (a) => a.result?.prUrl && (a.prState === null || a.prState === "open"),
       );
@@ -977,23 +419,30 @@ export default function Dashboard({ cwd }: { cwd: string }) {
       if (changed) setAgents((prev) => [...prev]);
     };
 
-    check(); // Run immediately on mount to populate state for historical agents
+    check();
     const interval = setInterval(check, PR_MERGE_CHECK_INTERVAL_MS);
     return () => clearInterval(interval);
   }, []);
 
-  // ── Spawn agent ──────────────────────────────────────────────────
+  // ── Spawn agent ───────────────────────────────────────────────────
 
   const spawnAgent = useCallback(async (prompt: string, baseBranch?: string) => {
     if (!prompt.trim()) return;
     if (preflight && !preflight.ok) return;
 
+    const config = configRef.current;
+    if (!config) return;
+
     const id = nextId.current++;
+    const effectiveBranch = baseBranch ?? baseBranchRef.current;
     const agent = createAgentState({
       id,
-      taskId: generateTaskId(),
       prompt: prompt.trim(),
+      baseBranch: effectiveBranch,
     });
+
+    const abortController = new AbortController();
+    agent.abortController = abortController;
 
     // Start elapsed timer
     agent.timer = setInterval(() => {
@@ -1003,233 +452,156 @@ export default function Dashboard({ cwd }: { cwd: string }) {
 
     setAgents((prev) => [...prev, agent]);
 
-    // Persist immediately so the task survives if deer closes unexpectedly.
-    // The final state will overwrite this entry via upsertHistory.
-    await upsertHistory(cwd, {
-      taskId: agent.taskId,
-      prompt: agent.prompt,
-      status: "running",
-      createdAt: new Date().toISOString(),
-      completedAt: null,
-      elapsed: 0,
-      prUrl: null,
-      finalBranch: null,
-      error: null,
-      transcriptPath: null,
-      lastActivity: "",
-    });
-
     try {
-      // Phase 1: Setup
-      agent.meta = await setupAgent(cwd, agent, setAgents, baseBranch);
+      // Phase 1: Start the sandboxed agent
+      appendLog(agent, "[setup] Creating worktree and sandbox...");
+      agent.lastActivity = "Setting up sandbox...";
+      setAgents((prev) => [...prev]);
 
-      // Phase 1.5: Lock down network — deny all, allow only the configured list.
-      // Applied after setup (tmux/apt installs are done) but before the agent runs.
-      const allowlist = configRef.current?.network.allowlist ?? [];
-      await applyNetworkPolicy(agent.meta.sandboxName, allowlist);
-      appendLog(agent, `[setup] Network policy applied`);
+      const handle = await startAgent({
+        repoPath: cwd,
+        prompt: prompt.trim(),
+        baseBranch: effectiveBranch,
+        config,
+        model: MODEL,
+        onStatus: (status) => {
+          const detail = "message" in status ? status.message : status.phase;
+          appendLog(agent, `[setup] ${detail}`);
+          agent.lastActivity = detail;
+          setAgents((prev) => [...prev]);
+        },
+      });
+
+      agent.handle = handle;
+      agent.taskId = handle.taskId;
+
+      // Persist immediately so the task survives if deer closes
+      await upsertHistory(cwd, {
+        taskId: agent.taskId,
+        prompt: agent.prompt,
+        status: "running",
+        createdAt: new Date().toISOString(),
+        completedAt: null,
+        elapsed: 0,
+        prUrl: null,
+        finalBranch: null,
+        error: null,
+            lastActivity: "",
+      });
 
       agent.status = transition(agent.status, "SETUP_COMPLETE") ?? agent.status;
+      appendLog(agent, `[running] Claude started in tmux session: ${handle.sessionName}`);
+      agent.lastActivity = "Claude running...";
       setAgents((prev) => [...prev]);
 
-      // Phase 2: Run Claude in tmux
-      await startClaudeInTmux(agent.meta, prompt.trim());
-      appendLog(agent, `[tmux] Claude session started`);
-
-      // Kill handle: killing the tmux session stops Claude
-      agent.proc = {
-        kill() {
-          if (!agent.meta) return;
-          Bun.spawn([
-            "docker", "sandbox", "exec", agent.meta.sandboxName,
-            "tmux", "kill-session", "-t", "deer",
-          ], { stdout: "pipe", stderr: "pipe" });
-        },
-      };
-      setAgents((prev) => [...prev]);
-
-      // Poll tmux pane for status updates
-      const POLL_MS = 3_000;
+      // Phase 2: Poll for completion (process exit or idle detection)
+      let lastPaneSnapshot = "";
+      let unchangedCount = 0;
       while (true) {
         await Bun.sleep(POLL_MS);
-        if ((agent.status as AgentStatus) === "cancelled") return;
-        if (!agent.meta) break;
+        if (abortController.signal.aborted) return;
 
-        const dead = await isTmuxPaneDead(agent.meta.sandboxName);
+        const dead = await isTmuxSessionDead(handle.sessionName);
         if (dead) {
-          appendLog(agent, `[tmux] Claude process exited`);
+          appendLog(agent, "[tmux] Claude process exited");
           break;
         }
 
-        // Capture visible pane content for lastActivity
-        const lines = await captureTmuxPane(agent.meta.sandboxName);
+        // Capture visible pane content and diff against previous frame
+        const lines = await captureTmuxPane(handle.sessionName);
         if (lines) {
-          const lastLine = lines
-            .map(stripAnsi)
-            .map((l) => l.trim())
-            .filter(Boolean)
-            .pop();
-          if (lastLine) {
-            agent.lastActivity = truncate(lastLine, 120);
-            appendLog(agent, `[tmux] ${truncate(lastLine, 200)}`);
-            setAgents((prev) => [...prev]);
-          }
-        }
-      }
+          const snapshot = lines.map(stripAnsi).map((l) => l.trim()).filter(Boolean).join("\n");
 
-      if ((agent.status as AgentStatus) === "cancelled") return;
+          if (snapshot === lastPaneSnapshot) {
+            unchangedCount++;
+          } else {
+            unchangedCount = 0;
+            lastPaneSnapshot = snapshot;
 
-      // Capture full scrollback as transcript
-      if (agent.meta) {
-        const scrollback = await captureTmuxPane(agent.meta.sandboxName, true);
-        if (scrollback) {
-          const cleaned = scrollback.map(stripAnsi).filter((l) => l.trim());
-          appendLog(agent, `[tmux] Captured ${cleaned.length} lines of scrollback`);
-
-          // If Claude exited almost immediately, log the output for debugging
-          if (cleaned.length <= 10) {
-            for (const line of cleaned) {
-              appendLog(agent, `[tmux:out] ${line}`);
+            // Update lastActivity with the latest ● line (Claude's text output)
+            const lastOutput = lines
+              .map(stripAnsi)
+              .map((l) => l.trim())
+              .filter((l) => l.startsWith("●"))
+              .pop();
+            if (lastOutput) {
+              const activity = truncate(lastOutput, 120);
+              if (activity !== agent.lastActivity) {
+                agent.lastActivity = activity;
+                appendLog(agent, `[tmux] ${truncate(lastOutput, 200)}`);
+                setAgents((prev) => [...prev]);
+              }
             }
           }
 
-          agent.transcript = cleaned;
-
-          // Check if agent is waiting for human input
-          if (await needsHumanInput(cleaned)) {
-            agent.needsAttention = true;
-            agent.lastActivity = "Needs input — Enter to assist";
-            agent.proc = null;
+          // Claude is idle when the pane hasn't changed for several consecutive polls
+          if (unchangedCount >= IDLE_THRESHOLD && !agent.idle) {
+            agent.idle = true;
+            agent.lastActivity = "Idle — press ⏎ to attach";
+            appendLog(agent, "[deer] Claude is idle");
             setAgents((prev) => [...prev]);
-            return;
+          } else if (unchangedCount === 0 && agent.idle) {
+            agent.idle = false;
+            setAgents((prev) => [...prev]);
           }
         }
       }
 
-      // Metadata extraction + teardown
-      await finalizeAgent(agent, cwd, setAgents);
+      if (abortController.signal.aborted) return;
+
+      // Process exited — mark completed, user decides what to do next
+      agent.idle = false;
+      agent.status = "completed";
+      agent.result = { finalBranch: handle.branch, prUrl: "" };
+      agent.lastActivity = "Task complete — press p to create PR, ⏎ to attach";
     } catch (err) {
-      if (agent.status !== "cancelled") {
+      if (!abortController.signal.aborted) {
         agent.status = transition(agent.status, "ERROR") ?? "failed";
         agent.error = err instanceof Error ? err.message : String(err);
         agent.lastActivity = truncate(agent.error, 120);
-        await saveToHistory(agent, cwd);
       }
     } finally {
-      if (!agent.needsAttention) {
-        if (agent.timer) clearInterval(agent.timer);
-        agent.timer = null;
-      }
-      agent.proc = null;
+      if (agent.timer) clearInterval(agent.timer);
+      agent.timer = null;
+      await saveToHistory(agent, cwd);
       setAgents((prev) => [...prev]);
     }
   }, [cwd, preflight]);
 
-  // ── Kill agent ───────────────────────────────────────────────────
+  // ── Kill agent ────────────────────────────────────────────────────
 
   const killAgent = useCallback((agent: AgentState) => {
     if (!isActive(agent)) return;
     agent.status = transition(agent.status, "USER_KILL") ?? "cancelled";
     agent.lastActivity = "Cancelled by user";
-    cleanupAgent(agent, cwd);
+    agent.abortController?.abort();
+    if (agent.handle) {
+      agent.handle.kill().catch(() => {});
+    }
+    if (agent.timer) clearInterval(agent.timer);
+    agent.timer = null;
     saveToHistory(agent, cwd);
     setAgents((prev) => [...prev]);
   }, [cwd]);
 
-  // ── Shell into agent ─────────────────────────────────────────────
-
-  const shellIntoAgent = useCallback(async (agent: AgentState) => {
-    if (!agent.meta) return;
-
-    await withSuspendedTerminal(setSuspended, async () => {
-      const tmuxScript = [
-        `export PATH="$PATH:/usr/bin:/usr/local/bin:/bin"`,
-        `export TERM=xterm-256color`,
-        `if ! command -v tmux >/dev/null 2>&1; then`,
-        `  echo "ERROR: tmux is not installed in the sandbox. Shell requires tmux." >&2`,
-        `  exit 1`,
-        `fi`,
-        `if ! tmux has-session -t deer-shell 2>/dev/null; then`,
-        `  tmux new-session -d -s deer-shell -c ${agent.meta!.worktreePath}`,
-        `fi`,
-        `tmux set -t deer-shell status on`,
-        `tmux set -t deer-shell status-position bottom`,
-        `tmux set -t deer-shell status-style 'bg=#313244,fg=#cdd6f4'`,
-        `tmux set -t deer-shell status-left ' Ctrl+b d = detach (return to deer) '`,
-        `tmux set -t deer-shell status-left-length 50`,
-        `tmux set -t deer-shell status-right ''`,
-        `tmux set -t deer-shell focus-events off`,
-        `tmux attach -t deer-shell`,
-      ].join("\n");
-
-      const proc = Bun.spawn([
-        "docker", "sandbox", "exec", "-it", agent.meta!.sandboxName,
-        "sh", "-c", tmuxScript,
-      ], { stdin: "inherit", stdout: "inherit", stderr: "inherit" });
-      await proc.exited;
-    });
-  }, []);
-
-  // ── Open transcript in editor ───────────────────────────────────
-
-  const openInEditor = useCallback(async (filePath: string) => {
-    const editor = process.env.EDITOR || "vim";
-    await withSuspendedTerminal(setSuspended, async () => {
-      const proc = Bun.spawn([editor, filePath], {
-        stdin: "inherit",
-        stdout: "inherit",
-        stderr: "inherit",
-      });
-      await proc.exited;
-    });
-  }, []);
-
-  // ── Continue: focus input to spawn a new agent off a PR branch ───
-
-  const continuePr = useCallback((agent: AgentState) => {
-    if (!agent.result?.finalBranch) return;
-    setContinueBranch(agent.result.finalBranch);
-    setInputFocused(true);
-    setInputKey((k) => k + 1);
-  }, []);
-
-  // ── Attach to running agent (interactive Claude session) ────────
+  // ── Attach to running agent (just tmux attach) ────────────────────
 
   const attachToAgent = useCallback(async (agent: AgentState) => {
-    if (!agent.meta || agent.status !== "running") return;
-
-    agent.needsAttention = false;
+    if (!agent.handle) return;
 
     await withSuspendedTerminal(setSuspended, async () => {
-      const tmuxScript = [
-        `export PATH="$PATH:/usr/bin:/usr/local/bin:/bin"`,
-        `export TERM=xterm-256color`,
-        `tmux set -t deer status on`,
-        `tmux set -t deer status-position bottom`,
-        `tmux set -t deer status-style 'bg=#313244,fg=#cdd6f4'`,
-        `tmux set -t deer status-left ' Ctrl+b d = detach (return to deer) | Ctrl+b [ = scroll (q exits) '`,
-        `tmux set -t deer status-left-length 80`,
-        `tmux set -t deer status-right ''`,
-        `tmux set -t deer focus-events off`,
-        `tmux attach -t deer`,
-      ].join("\n");
-
-      const attachProc = Bun.spawn([
-        "docker", "sandbox", "exec", "-it", agent.meta!.sandboxName,
-        "env", "-u", "ANTHROPIC_API_KEY",
-        `CLAUDE_CODE_OAUTH_TOKEN=${process.env.CLAUDE_CODE_OAUTH_TOKEN}`,
-        "sh", "-c", tmuxScript,
-      ], {
-        stdin: "inherit",
-        stdout: "inherit",
-        stderr: "inherit",
+      // Small delay to let any pending keypress (e.g. the Enter that triggered
+      // attach) flush through before tmux takes over stdin.
+      await Bun.sleep(50);
+      const { spawnSync } = await import("node:child_process");
+      spawnSync("tmux", ["attach", "-t", agent.handle!.sessionName], {
+        stdio: "inherit",
       });
-      await attachProc.exited;
     });
 
-    // Update lastActivity from current pane content after detach
-    if (agent.meta && agent.status === "running") {
-      const lines = await captureTmuxPane(agent.meta.sandboxName);
+    // Update lastActivity after detach
+    if (agent.handle && agent.status === "running") {
+      const lines = await captureTmuxPane(agent.handle.sessionName);
       if (lines) {
         const lastLine = lines.map(stripAnsi).map((l) => l.trim()).filter(Boolean).pop();
         if (lastLine) {
@@ -1238,9 +610,37 @@ export default function Dashboard({ cwd }: { cwd: string }) {
       }
       setAgents((prev) => [...prev]);
     }
+  }, []);
+
+  // ── Continue: focus input to spawn a new agent off a PR branch ────
+
+  const createPr = useCallback(async (agent: AgentState) => {
+    if (!agent.handle || agent.result?.prUrl) return;
+
+    agent.creatingPr = true;
+    agent.lastActivity = "Creating PR...";
+    setAgents((prev) => [...prev]);
+
+    try {
+      const result = await createAgentPR(
+        agent.handle,
+        cwd,
+        agent.baseBranch,
+        agent.prompt,
+      );
+      agent.result = { finalBranch: result.finalBranch, prUrl: result.prUrl };
+      agent.lastActivity = "PR created";
+    } catch (err) {
+      agent.lastActivity = `PR failed: ${err instanceof Error ? err.message : String(err)}`;
+    } finally {
+      agent.creatingPr = false;
+    }
+    await saveToHistory(agent, cwd);
+    setAgents((prev) => [...prev]);
   }, [cwd]);
 
-  // ── Keyboard input ───────────────────────────────────────────────
+
+  // ── Keyboard input ────────────────────────────────────────────────
 
   useInput((input, key) => {
     if (suspended) return;
@@ -1290,15 +690,8 @@ export default function Dashboard({ cwd }: { cwd: string }) {
       }
     }
 
-    // Escape cancels continue-branch mode
-    if (key.escape && continueBranch) {
-      setContinueBranch(null);
-      return;
-    }
-
     // Tab to toggle focus
     if (key.tab) {
-      if (continueBranch && inputFocused) setContinueBranch(null);
       setInputFocused((prev) => !prev);
       return;
     }
@@ -1318,8 +711,9 @@ export default function Dashboard({ cwd }: { cwd: string }) {
         const ctx = {
           status: agent.status,
           hasPrUrl: !!agent.result?.prUrl,
-          hasFinalBranch: !!agent.result?.finalBranch,
-          hasMeta: !!agent.meta,
+          hasFinalBranch: !!agent.result?.finalBranch || !!agent.handle?.branch,
+          hasHandle: !!agent.handle,
+          isIdle: agent.idle,
           prState: agent.prState,
         };
         const actions = availableActions(ctx);
@@ -1329,19 +723,19 @@ export default function Dashboard({ cwd }: { cwd: string }) {
           case "attach":
             attachToAgent(agent);
             break;
+          case "create_pr":
+            createPr(agent);
+            break;
           case "open_pr":
             if (agent.result?.prUrl) openUrl(agent.result.prUrl);
-            break;
-          case "shell":
-            shellIntoAgent(agent);
-            break;
-          case "continue_pr":
-            continuePr(agent);
             break;
           case "kill":
             killAgent(agent);
             break;
           case "delete":
+            if (agent.handle) {
+              destroyAgent(agent.handle, cwd).catch(() => {});
+            }
             setAgents((prev) => prev.filter((a) => a !== agent));
             setSelectedIdx((prev) => Math.min(prev, Math.max(visible.length - 2, 0)));
             removeFromHistory(cwd, agent.taskId);
@@ -1357,37 +751,31 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     }
   });
 
-  // ── Render nothing when suspended ────────────────────────────────
+  // ── Render nothing when suspended ─────────────────────────────────
 
   if (suspended) return null;
 
-  // ── Derived state ────────────────────────────────────────────────
+  // ── Derived state ─────────────────────────────────────────────────
 
   const clampedIdx = Math.min(selectedIdx, Math.max(agents.length - 1, 0));
   const activeCount = agents.filter(isActive).length;
   const selected = agents[clampedIdx] || null;
   const preflightOk = preflight?.ok ?? false;
 
-  // Layout: header(1) + divider(1) + list(flex) + [detail] + divider(1) + input(1) + footer(1)
-  const chromeHeight = 5; // header + top divider + bottom divider + input + footer
+  const chromeHeight = 5;
   const detailHeight = logExpanded && selected ? Math.min(MAX_VISIBLE_LOGS + 1, 6) : 0;
   const listHeight = Math.max(termHeight - chromeHeight - detailHeight, 3);
-  // Use the larger row size to ensure we don't overflow the list area
   const hasPrEntries = agents.some((a) => a.result?.prUrl);
   const entryRows = hasPrEntries ? ENTRY_ROWS_WITH_PR : ENTRY_ROWS_BASE;
   const maxVisibleEntries = Math.max(Math.floor(listHeight / entryRows), 1);
 
-  // Row fixed overhead: paddingX(2) + pointer(1) + icon(1) + time(5) + gaps(4) = 13
-  // +3 for PR badge (emoji 2-wide + gap 1) when present
-  const rowOverhead = 13;
-
-  // ── Render ───────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────
 
   return (
     <Box flexDirection="column" width={termWidth} height={termHeight}>
       {/* Header */}
       <Box paddingX={1} justifyContent="space-between">
-        <Text bold>🦌 deer</Text>
+        <Text bold>deer</Text>
         <Text dimColor>{activeCount > 0 ? `${activeCount} active` : "idle"}</Text>
       </Box>
       <Text>{"─".repeat(termWidth)}</Text>
@@ -1413,10 +801,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
             const isSelected = i === clampedIdx && !inputFocused;
             const pointer = isSelected ? "▸" : " ";
 
-            // Gather log lines to show beneath the title
             const recentLogs = agent.logs.slice(-LOG_LINES_PER_ENTRY);
-
-            // Title line: overhead = paddingX(2) + pointer(1) + gap(1) + icon(1) + gap(1) + gap(1) + time(4) = 11
             const titleOverhead = 11;
             const prBadge = agent.result?.prUrl && agent.prState
               ? {
@@ -1425,7 +810,6 @@ export default function Dashboard({ cwd }: { cwd: string }) {
                 }
               : null;
             const titleWidth = Math.max(termWidth - titleOverhead - (prBadge ? 3 : 0), 5);
-            // Log line: paddingX(2) + indent(3) = 5
             const logWidth = Math.max(termWidth - 5, 5);
 
             return (
@@ -1433,7 +817,9 @@ export default function Dashboard({ cwd }: { cwd: string }) {
                 {/* Title line */}
                 <Box gap={1}>
                   <Text dimColor={!isSelected}>{pointer}</Text>
-                  {agent.status === "running" && agent.needsAttention ? (
+                  {agent.creatingPr ? (
+                    <Text color="blue">{UPLOAD_FRAMES[animTick % UPLOAD_FRAMES.length]}</Text>
+                  ) : agent.idle ? (
                     <Text>👋</Text>
                   ) : agent.status === "running" ? (
                     <Spinner label="" />
@@ -1476,7 +862,6 @@ export default function Dashboard({ cwd }: { cwd: string }) {
 
       {/* Log detail panel */}
       {logExpanded && selected && (() => {
-        // Reserve lines for fixed elements: 1 divider + optional PR + optional error
         const extraLines = (selected.result?.prUrl ? 1 : 0) + (selected.error ? 1 : 0);
         const visibleLogs = Math.max(MAX_VISIBLE_LOGS - extraLines, 1);
         return (
@@ -1488,10 +873,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
               </Text>
             ))}
             {selected.result?.prUrl && (
-              <Text
-                color={prStateColor(selected.prState)}
-                bold
-              >
+              <Text color={prStateColor(selected.prState)} bold>
                 PR ({selected.prState ?? "checking…"}): {selected.result.prUrl}
               </Text>
             )}
@@ -1509,7 +891,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
         {inputFocused ? (
           <TextInput
             key={inputKey}
-            placeholder={!preflightOk ? "preflight checks failed" : continueBranch ? `prompt for ${continueBranch} (Esc to cancel)` : "type prompt and press enter to launch agent"}
+            placeholder={!preflightOk ? "preflight checks failed" : "type prompt and press enter to launch agent"}
             isDisabled={!preflightOk}
             defaultValue={inputDefault}
             onSubmit={(value) => {
@@ -1518,9 +900,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
                 setHistoryIdx(-1);
                 setInputDefault("");
                 setInputKey((k) => k + 1);
-                const branch = continueBranch;
-                setContinueBranch(null);
-                spawnAgent(value, branch ?? undefined);
+                spawnAgent(value);
               }
             }}
           />
@@ -1545,8 +925,9 @@ export default function Dashboard({ cwd }: { cwd: string }) {
                 {selected && availableActions({
                   status: selected.status,
                   hasPrUrl: !!selected.result?.prUrl,
-                  hasFinalBranch: !!selected.result?.finalBranch,
-                  hasMeta: !!selected.meta,
+                  hasFinalBranch: !!selected.result?.finalBranch || !!selected.handle?.branch,
+                  hasHandle: !!selected.handle,
+                  isIdle: selected.idle,
                   prState: selected.prState,
                 }).map((action) => (
                   <Text key={action} dimColor>

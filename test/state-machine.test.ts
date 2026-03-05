@@ -82,7 +82,8 @@ describe("availableActions", () => {
     status: "running",
     hasPrUrl: false,
     hasFinalBranch: false,
-    hasMeta: true,
+    hasHandle: true,
+    isIdle: false,
     prState: null,
     ...overrides,
   });
@@ -95,17 +96,11 @@ describe("availableActions", () => {
     expect(actions).not.toContain("open_pr");
   });
 
-  test("running state has attach, shell, kill, toggle_logs", () => {
+  test("running state has attach, kill, toggle_logs", () => {
     const actions = availableActions(baseCtx({ status: "running" }));
     expect(actions).toContain("attach");
-    expect(actions).toContain("shell");
     expect(actions).toContain("kill");
     expect(actions).toContain("toggle_logs");
-  });
-
-  test("running state: shell requires hasMeta", () => {
-    const actions = availableActions(baseCtx({ status: "running", hasMeta: false }));
-    expect(actions).not.toContain("shell");
   });
 
   test("teardown state has only toggle_logs", () => {
@@ -113,18 +108,29 @@ describe("availableActions", () => {
     expect(actions).toEqual(["toggle_logs"]);
   });
 
-  test("completed state has open_pr, shell, continue_pr, delete, toggle_logs", () => {
+  test("completed state has attach, create_pr, delete, toggle_logs", () => {
+    const actions = availableActions(baseCtx({
+      status: "completed",
+      hasPrUrl: false,
+      hasFinalBranch: true,
+      hasHandle: true,
+    }));
+    expect(actions).toContain("attach");
+    expect(actions).toContain("create_pr");
+    expect(actions).toContain("delete");
+    expect(actions).toContain("toggle_logs");
+    expect(actions).not.toContain("open_pr");
+  });
+
+  test("completed state: create_pr not available when PR already exists", () => {
     const actions = availableActions(baseCtx({
       status: "completed",
       hasPrUrl: true,
       hasFinalBranch: true,
-      hasMeta: true,
+      hasHandle: true,
     }));
+    expect(actions).not.toContain("create_pr");
     expect(actions).toContain("open_pr");
-    expect(actions).toContain("shell");
-    expect(actions).toContain("continue_pr");
-    expect(actions).toContain("delete");
-    expect(actions).toContain("toggle_logs");
   });
 
   test("completed state: open_pr requires hasPrUrl", () => {
@@ -134,15 +140,6 @@ describe("availableActions", () => {
       hasFinalBranch: true,
     }));
     expect(actions).not.toContain("open_pr");
-  });
-
-  test("completed state: continue_pr requires hasFinalBranch", () => {
-    const actions = availableActions(baseCtx({
-      status: "completed",
-      hasPrUrl: true,
-      hasFinalBranch: false,
-    }));
-    expect(actions).not.toContain("continue_pr");
   });
 
   test("completed state: delete blocked when prState is open", () => {
@@ -165,21 +162,12 @@ describe("availableActions", () => {
     expect(actions).toContain("delete");
   });
 
-  test("completed state: shell requires hasMeta", () => {
-    const actions = availableActions(baseCtx({
-      status: "completed",
-      hasMeta: false,
-    }));
-    expect(actions).not.toContain("shell");
-  });
-
-  test("failed state has retry, shell, delete, toggle_logs", () => {
+  test("failed state has retry, delete, toggle_logs", () => {
     const actions = availableActions(baseCtx({
       status: "failed",
-      hasMeta: true,
+      hasHandle: true,
     }));
     expect(actions).toContain("retry");
-    expect(actions).toContain("shell");
     expect(actions).toContain("delete");
     expect(actions).toContain("toggle_logs");
   });
@@ -191,12 +179,11 @@ describe("availableActions", () => {
     }
   });
 
-  test("cancelled state has shell, delete, toggle_logs", () => {
+  test("cancelled state has delete, toggle_logs", () => {
     const actions = availableActions(baseCtx({
       status: "cancelled",
-      hasMeta: true,
+      hasHandle: true,
     }));
-    expect(actions).toContain("shell");
     expect(actions).toContain("delete");
     expect(actions).toContain("toggle_logs");
   });
@@ -205,8 +192,40 @@ describe("availableActions", () => {
     const actions = availableActions(baseCtx({ status: "interrupted" }));
     expect(actions).toContain("delete");
     expect(actions).toContain("toggle_logs");
-    expect(actions).not.toContain("shell");
     expect(actions).not.toContain("attach");
+  });
+  test("idle running state has create_pr available", () => {
+    const actions = availableActions(baseCtx({
+      status: "running",
+      isIdle: true,
+      hasFinalBranch: true,
+      hasHandle: true,
+    }));
+    expect(actions).toContain("create_pr");
+    expect(actions).toContain("attach");
+    expect(actions).toContain("kill");
+  });
+
+  test("idle running state has open_pr when PR exists", () => {
+    const actions = availableActions(baseCtx({
+      status: "running",
+      isIdle: true,
+      hasPrUrl: true,
+      hasFinalBranch: true,
+      hasHandle: true,
+    }));
+    expect(actions).toContain("open_pr");
+    expect(actions).not.toContain("create_pr");
+  });
+
+  test("non-idle running state does not have create_pr", () => {
+    const actions = availableActions(baseCtx({
+      status: "running",
+      isIdle: false,
+      hasFinalBranch: true,
+      hasHandle: true,
+    }));
+    expect(actions).not.toContain("create_pr");
   });
 });
 
@@ -225,8 +244,8 @@ describe("resolveKeypress", () => {
     expect(resolveKeypress("", { return: true }, ["attach", "kill"])).toBe("attach");
   });
 
-  test("resolves enter to open_pr when attach is not available but open_pr is", () => {
-    expect(resolveKeypress("", { return: true }, ["open_pr", "delete"])).toBe("open_pr");
+  test("enter does not resolve to open_pr", () => {
+    expect(resolveKeypress("", { return: true }, ["open_pr", "delete"])).toBeNull();
   });
 
   test("resolves backspace to delete when available", () => {
@@ -245,20 +264,28 @@ describe("resolveKeypress", () => {
     expect(resolveKeypress("z", {}, ["kill", "toggle_logs"])).toBeNull();
   });
 
-  test("resolves 's' to shell when available", () => {
-    expect(resolveKeypress("s", {}, ["shell", "kill"])).toBe("shell");
-  });
-
-  test("resolves 'c' to continue_pr when available", () => {
-    expect(resolveKeypress("c", {}, ["continue_pr", "delete"])).toBe("continue_pr");
-  });
-
   test("resolves 'r' to retry when available", () => {
     expect(resolveKeypress("r", {}, ["retry", "delete"])).toBe("retry");
   });
 
   test("does not resolve 'r' when retry is unavailable", () => {
     expect(resolveKeypress("r", {}, ["delete", "toggle_logs"])).toBeNull();
+  });
+
+  test("resolves 'p' to create_pr when available", () => {
+    expect(resolveKeypress("p", {}, ["create_pr", "delete"])).toBe("create_pr");
+  });
+
+  test("resolves 'p' to open_pr when create_pr is unavailable but open_pr is", () => {
+    expect(resolveKeypress("p", {}, ["open_pr", "delete"])).toBe("open_pr");
+  });
+
+  test("does not resolve 'p' when neither create_pr nor open_pr is available", () => {
+    expect(resolveKeypress("p", {}, ["delete", "toggle_logs"])).toBeNull();
+  });
+
+  test("'s' is not bound to any action", () => {
+    expect(resolveKeypress("s", {}, ["kill", "toggle_logs"])).toBeNull();
   });
 });
 
@@ -267,7 +294,7 @@ describe("resolveKeypress", () => {
 describe("ACTION_BINDINGS", () => {
   test("every action has a keyDisplay and label", () => {
     const actions: AgentAction[] = [
-      "attach", "open_pr", "shell", "continue_pr", "kill", "delete", "toggle_logs", "retry",
+      "attach", "create_pr", "open_pr", "kill", "delete", "toggle_logs", "retry",
     ];
     for (const action of actions) {
       const binding = ACTION_BINDINGS[action];
