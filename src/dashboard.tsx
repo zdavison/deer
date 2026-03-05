@@ -902,7 +902,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
                   {agent.creatingPr ? (
                     <Text color="blue">{UPLOAD_FRAMES[animTick % UPLOAD_FRAMES.length]}</Text>
                   ) : agent.idle ? (
-                    <Text>👋</Text>
+                    <Text>{agent.result?.prUrl ? "👀" : "👋"}</Text>
                   ) : agent.status === "running" ? (
                     <Spinner label="" />
                   ) : (
