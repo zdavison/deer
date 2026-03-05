@@ -8,51 +8,9 @@ import type { DeerConfig } from "./config";
 import { transition, availableActions, resolveKeypress, ACTION_BINDINGS } from "./state-machine";
 import type { AgentState as AgentStatus } from "./state-machine";
 import { startAgent, destroyAgent, createAgentPR } from "./agent";
-import type { AgentHandle } from "./agent";
 import { isTmuxSessionDead, captureTmuxPane } from "./sandbox/index";
 import { detectRepo } from "./git/worktree";
-
-// ── Types ────────────────────────────────────────────────────────────
-
-interface TeardownResult {
-  finalBranch: string;
-  prUrl: string;
-}
-
-/** @internal Exported for testing */
-export interface AgentState {
-  id: number;
-  /** Persistent task ID (deer_xxx format) for history storage */
-  taskId: string;
-  prompt: string;
-  /** @example "main" */
-  baseBranch: string;
-  status: AgentStatus;
-  /** Elapsed seconds */
-  elapsed: number;
-  /** Last activity from tmux pane capture */
-  lastActivity: string;
-  /** Log lines (capped) */
-  logs: string[];
-  /** Agent handle from the sandbox module */
-  handle: AgentHandle | null;
-  /** Teardown result */
-  result: TeardownResult | null;
-  /** Error message on failure */
-  error: string;
-  /** Timer handle */
-  timer: ReturnType<typeof setInterval> | null;
-  /** PR state on GitHub */
-  prState: "open" | "merged" | "closed" | null;
-  /** True if this agent was loaded from history (not spawned this session) */
-  historical: boolean;
-  /** True when Claude is idle (waiting for user input) */
-  idle: boolean;
-  /** True while a PR is being created */
-  creatingPr: boolean;
-  /** AbortController for cancelling the wait loop */
-  abortController: AbortController | null;
-}
+import { AgentState, createAgentState, historicalAgent, crossInstanceAgent } from "./agent-state";
 
 // ── Constants ────────────────────────────────────────────────────────
 
@@ -141,30 +99,6 @@ function prStateColor(state: "open" | "merged" | "closed" | null): string {
   return "green";
 }
 
-/** Factory for AgentState with sensible defaults. */
-export function createAgentState(overrides: Partial<AgentState>): AgentState {
-  return {
-    id: 0,
-    taskId: "",
-    prompt: "",
-    baseBranch: "main",
-    status: "setup",
-    elapsed: 0,
-    lastActivity: "",
-    logs: [],
-    handle: null,
-    result: null,
-    error: "",
-    timer: null,
-    prState: null,
-    historical: false,
-    idle: false,
-    creatingPr: false,
-    abortController: null,
-    ...overrides,
-  };
-}
-
 // ── Preflight ────────────────────────────────────────────────────────
 
 interface PreflightResult {
@@ -247,23 +181,6 @@ async function saveToHistory(agent: AgentState, repoPath: string): Promise<void>
     lastActivity: agent.lastActivity,
   };
   await upsertHistory(repoPath, task);
-}
-
-/** Convert a persisted task to a read-only AgentState for display. */
-function historicalAgent(task: PersistedTask, id: number): AgentState {
-  const wasInterrupted = task.status === "running";
-  return createAgentState({
-    id,
-    taskId: task.taskId,
-    prompt: task.prompt,
-    status: wasInterrupted ? "interrupted" : task.status,
-    elapsed: task.elapsed,
-    lastActivity: wasInterrupted ? "Interrupted — deer was closed" : task.lastActivity,
-    result: task.prUrl ? { finalBranch: task.finalBranch ?? "", prUrl: task.prUrl } : null,
-    error: task.error || "",
-    historical: true,
-  });
-
 }
 
 /** Check the current state of a PR via `gh pr view`. */
@@ -443,14 +360,26 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     const agentByTaskId = new Map(currentAgents.map(a => [a.taskId, a]));
     const fileTaskIds = new Set(fileTasks.map(t => t.taskId));
 
-    const newAgents: AgentState[] = fileTasks.map(task => {
+    const newAgents: AgentState[] = await Promise.all(fileTasks.map(async task => {
       const existing = agentByTaskId.get(task.taskId);
       if (existing && !existing.historical) {
         return existing;
       }
       const id = existing?.id ?? nextId.current++;
+
+      // For running tasks not managed by this instance, check if the tmux
+      // session is still alive to distinguish cross-instance tasks from
+      // truly interrupted ones.
+      if (task.status === "running") {
+        const isDead = await isTmuxSessionDead(`deer-${task.taskId}`);
+        if (!isDead) {
+          return crossInstanceAgent(task, id);
+        }
+        // Session is dead — fall through to historicalAgent (shows as interrupted)
+      }
+
       return historicalAgent(task, id);
-    });
+    }));
 
     for (const agent of currentAgents) {
       if (!agent.historical && !fileTaskIds.has(agent.taskId)) {
@@ -646,6 +575,19 @@ export default function Dashboard({ cwd }: { cwd: string }) {
               if (activity !== agent.lastActivity) {
                 agent.lastActivity = activity;
                 appendLog(agent, `[tmux] ${truncate(lastOutput, 200)}`);
+                // Persist progress so other deer instances see the current activity
+                await upsertHistory(cwd, {
+                  taskId: agent.taskId,
+                  prompt: agent.prompt,
+                  status: "running",
+                  createdAt: new Date(Date.now() - agent.elapsed * 1000).toISOString(),
+                  completedAt: null,
+                  elapsed: agent.elapsed,
+                  prUrl: null,
+                  finalBranch: null,
+                  error: null,
+                  lastActivity: agent.lastActivity,
+                });
                 setAgents((prev) => [...prev]);
               }
             }
