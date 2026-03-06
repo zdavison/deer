@@ -52,8 +52,12 @@ export const DEFAULT_CONFIG: DeerConfig = {
     // Using bwrap until nono#220 is resolved (Landlock inode issue with
     // ~/.claude.json backup files causes intermittent EACCES errors).
     runtime: "bwrap",
+    // Both credential env vars are listed; buildPassthroughEnv only forwards
+    // vars that are actually set in the host environment. Since cli.tsx strips
+    // whichever credential is not in use, only one will be present at runtime.
     envPassthrough: [
       "CLAUDE_CODE_OAUTH_TOKEN",
+      "ANTHROPIC_API_KEY",
     ],
   },
 };

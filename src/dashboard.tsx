@@ -1,4 +1,6 @@
 import { Box, Text, useInput, useApp, useStdout } from "ink";
+import { resolveCredentialMode } from "./credentials";
+import type { CredentialMode } from "./credentials";
 import { Spinner } from "@inkjs/ui";
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { loadHistory, upsertHistory, removeFromHistory, loadPromptHistory, savePromptHistory } from "./task";
@@ -107,9 +109,10 @@ function prStateColor(state: "open" | "merged" | "closed" | null): string {
 interface PreflightResult {
   ok: boolean;
   errors: string[];
+  credentialMode: CredentialMode;
 }
 
-async function runPreflight(): Promise<PreflightResult> {
+async function runPreflight(initialCredentialMode: CredentialMode): Promise<PreflightResult> {
   const errors: string[] = [];
 
   // Check nono
@@ -148,21 +151,13 @@ async function runPreflight(): Promise<PreflightResult> {
     errors.push("gh CLI not available");
   }
 
-  // Check OAuth token
-  const tokenFile = `${process.env.HOME ?? ""}/.claude/agent-oauth-token`;
-  if (!process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-    try {
-      const f = Bun.file(tokenFile);
-      if (await f.exists()) {
-        process.env.CLAUDE_CODE_OAUTH_TOKEN = (await f.text()).trim();
-      }
-    } catch { /* ignore */ }
-  }
-  if (!process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-    errors.push("No OAuth token — set CLAUDE_CODE_OAUTH_TOKEN or create ~/.claude/agent-oauth-token");
+  // Check credentials — resolveCredentialMode loads OAuth token from file if needed.
+  const credentialMode = await resolveCredentialMode();
+  if (credentialMode === "none") {
+    errors.push("No credentials — set ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN (or create ~/.claude/agent-oauth-token)");
   }
 
-  return { ok: errors.length === 0, errors };
+  return { ok: errors.length === 0, errors, credentialMode };
 }
 
 // ── History helpers ──────────────────────────────────────────────────
@@ -362,7 +357,7 @@ function PromptInput({
 
 // ── Main Component ───────────────────────────────────────────────────
 
-export default function Dashboard({ cwd }: { cwd: string }) {
+export default function Dashboard({ cwd, initialCredentialMode = "none" }: { cwd: string; initialCredentialMode?: CredentialMode }) {
   const { exit } = useApp();
   const { stdout } = useStdout();
   const termWidth = stdout?.columns || 80;
@@ -374,6 +369,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   const [logExpanded, setLogExpanded] = useState(false);
   const [suspended, setSuspended] = useState(false);
   const [preflight, setPreflight] = useState<PreflightResult | null>(null);
+  const [credentialMode, setCredentialMode] = useState<CredentialMode>(initialCredentialMode);
   const [confirmQuit, setConfirmQuit] = useState(false);
   const [promptHistory, setPromptHistory] = useState<string[]>([]);
   const [historyIdx, setHistoryIdx] = useState(-1);
@@ -448,7 +444,10 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   // ── Load history + preflight on mount ─────────────────────────────
 
   useEffect(() => {
-    runPreflight().then(setPreflight);
+    runPreflight(initialCredentialMode).then((result) => {
+      setPreflight(result);
+      setCredentialMode(result.credentialMode);
+    });
     loadConfig(cwd).then((cfg) => { configRef.current = cfg; });
     syncWithHistory();
     loadPromptHistory().then(setPromptHistory);
@@ -1131,41 +1130,44 @@ export default function Dashboard({ cwd }: { cwd: string }) {
 
       {/* Footer / keybindings */}
       <Text>{"─".repeat(termWidth)}</Text>
-      <Box paddingX={1} gap={2}>
-        {searchMode ? (
-          <>
-            <Text dimColor>j/k nav</Text>
-            <Text dimColor>⏎ select</Text>
-            <Text dimColor>Esc cancel</Text>
-          </>
-        ) : confirmQuit ? (
-          <Text color="yellow" bold>
-            {activeCount} agent{activeCount !== 1 ? "s" : ""} running — quit? (y/n)
-          </Text>
-        ) : (
-          <>
-            <Text dimColor>Tab focus</Text>
-            {inputFocused ? null : (
-              <>
-                <Text dimColor>j/k nav</Text>
-                <Text dimColor>/ search</Text>
-                {selected && availableActions({
-                  status: selected.status,
-                  hasPrUrl: !!selected.result?.prUrl,
-                  hasFinalBranch: !!selected.result?.finalBranch || !!selected.handle?.branch,
-                  hasHandle: !!selected.handle,
-                  isIdle: selected.idle,
-                  prState: selected.prState,
-                }).map((action) => (
-                  <Text key={action} dimColor>
-                    {ACTION_BINDINGS[action].keyDisplay} {ACTION_BINDINGS[action].label}
-                  </Text>
-                ))}
-                <Text dimColor>q quit</Text>
-              </>
-            )}
-          </>
-        )}
+      <Box paddingX={1} gap={2} justifyContent="space-between">
+        <Box gap={2}>
+          {searchMode ? (
+            <>
+              <Text dimColor>j/k nav</Text>
+              <Text dimColor>⏎ select</Text>
+              <Text dimColor>Esc cancel</Text>
+            </>
+          ) : confirmQuit ? (
+            <Text color="yellow" bold>
+              {activeCount} agent{activeCount !== 1 ? "s" : ""} running — quit? (y/n)
+            </Text>
+          ) : (
+            <>
+              <Text dimColor>Tab focus</Text>
+              {inputFocused ? null : (
+                <>
+                  <Text dimColor>j/k nav</Text>
+                  <Text dimColor>/ search</Text>
+                  {selected && availableActions({
+                    status: selected.status,
+                    hasPrUrl: !!selected.result?.prUrl,
+                    hasFinalBranch: !!selected.result?.finalBranch || !!selected.handle?.branch,
+                    hasHandle: !!selected.handle,
+                    isIdle: selected.idle,
+                    prState: selected.prState,
+                  }).map((action) => (
+                    <Text key={action} dimColor>
+                      {ACTION_BINDINGS[action].keyDisplay} {ACTION_BINDINGS[action].label}
+                    </Text>
+                  ))}
+                  <Text dimColor>q quit</Text>
+                </>
+              )}
+            </>
+          )}
+        </Box>
+        <Text dimColor>{credentialMode === "api-key" ? "api key" : credentialMode === "oauth" ? "subscription" : ""}</Text>
       </Box>
     </Box>
   );
