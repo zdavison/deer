@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import type { MutableRefObject, Dispatch, SetStateAction } from "react";
 import type { AgentState } from "../agent-state";
 import { createAgentState } from "../agent-state";
@@ -11,6 +11,8 @@ import { updatePullRequest } from "../git/finalize";
 import { isTmuxSessionDead, captureTmuxPane } from "../sandbox/index";
 import { resolveRuntime } from "../sandbox/resolve";
 import { transition } from "../state-machine";
+import { advancePaneState, isIdleState, seedIdleState } from "../pane-idle";
+import type { PaneState } from "../pane-idle";
 import {
   appendLog,
   isActive,
@@ -60,6 +62,8 @@ export function useAgentActions({
   preflight,
   setSuspended,
 }: AgentActionDeps) {
+  /** Per-task pane snapshot state shared between the poll loop and attachToAgent */
+  const paneStateRef = useRef(new Map<string, PaneState>());
 
   // ── Spawn agent ───────────────────────────────────────────────────
 
@@ -134,8 +138,7 @@ export function useAgentActions({
       setAgents((prev) => [...prev]);
 
       // Phase 2: Poll for completion (process exit or idle detection)
-      let lastPaneSnapshot = "";
-      let unchangedCount = 0;
+      paneStateRef.current.set(agent.taskId, { snapshot: "", unchangedCount: 0 });
       while (true) {
         await Bun.sleep(POLL_MS);
         if (abortController.signal.aborted) return;
@@ -150,13 +153,11 @@ export function useAgentActions({
         const lines = await captureTmuxPane(handle.sessionName);
         if (lines) {
           const snapshot = lines.map(stripAnsi).map((l) => l.trim()).filter(Boolean).join("\n");
+          const prev = paneStateRef.current.get(agent.taskId) ?? { snapshot: "", unchangedCount: 0 };
+          const next = advancePaneState(prev, snapshot);
+          paneStateRef.current.set(agent.taskId, next);
 
-          if (snapshot === lastPaneSnapshot) {
-            unchangedCount++;
-          } else {
-            unchangedCount = 0;
-            lastPaneSnapshot = snapshot;
-
+          if (next.unchangedCount === 0) {
             // Update lastActivity with the latest ● line (Claude's text output)
             const lastOutput = lines
               .map(stripAnsi)
@@ -187,12 +188,12 @@ export function useAgentActions({
           }
 
           // Claude is idle when the pane hasn't changed for several consecutive polls
-          if (unchangedCount >= IDLE_THRESHOLD && !agent.idle) {
+          if (isIdleState(next, IDLE_THRESHOLD) && !agent.idle) {
             agent.idle = true;
             agent.lastActivity = "Idle — press ⏎ to attach";
             appendLog(agent, "[deer] Claude is idle");
             setAgents((prev) => [...prev]);
-          } else if (unchangedCount === 0 && agent.idle) {
+          } else if (next.unchangedCount === 0 && agent.idle) {
             agent.idle = false;
             setAgents((prev) => [...prev]);
           }
@@ -214,6 +215,7 @@ export function useAgentActions({
     } finally {
       if (agent.timer) clearInterval(agent.timer);
       agent.timer = null;
+      paneStateRef.current.delete(agent.taskId);
       if (!agent.deleted) {
         await saveToHistory(agent, cwd);
       }
@@ -252,13 +254,29 @@ export function useAgentActions({
       });
     });
 
-    // Update lastActivity after detach
+    // After detach, eagerly check whether Claude is still idle rather than
+    // waiting for the poll loop to accumulate IDLE_THRESHOLD stable polls.
     if (agent.handle && agent.status === "running") {
-      const lines = await captureTmuxPane(agent.handle.sessionName);
-      if (lines) {
-        const lastLine = lines.map(stripAnsi).map((l) => l.trim()).filter(Boolean).pop();
-        if (lastLine) {
-          agent.lastActivity = truncate(lastLine, 120);
+      // Let the pane settle after the detach event
+      await Bun.sleep(POLL_MS);
+      const linesA = await captureTmuxPane(agent.handle.sessionName);
+      await Bun.sleep(POLL_MS);
+      const linesB = await captureTmuxPane(agent.handle.sessionName);
+
+      if (linesA && linesB) {
+        const snapA = linesA.map(stripAnsi).map((l) => l.trim()).filter(Boolean).join("\n");
+        const snapB = linesB.map(stripAnsi).map((l) => l.trim()).filter(Boolean).join("\n");
+
+        if (snapA === snapB) {
+          // Pane is stable — seed the poll loop's counter so idle is recognised
+          // on the very next tick, and update the UI immediately.
+          paneStateRef.current.set(agent.taskId, seedIdleState(snapB));
+          agent.idle = true;
+          agent.lastActivity = "Idle — press ⏎ to attach";
+        } else {
+          // Pane is changing — Claude started working; let poll loop handle it.
+          const lastLine = linesB.map(stripAnsi).map((l) => l.trim()).filter(Boolean).pop();
+          if (lastLine) agent.lastActivity = truncate(lastLine, 120);
         }
       }
       setAgents((prev) => [...prev]);
