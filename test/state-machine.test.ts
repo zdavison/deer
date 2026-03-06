@@ -85,6 +85,7 @@ describe("availableActions", () => {
     hasHandle: true,
     isIdle: false,
     prState: null,
+    hasWorktreePath: true,
     ...overrides,
   });
 

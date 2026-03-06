@@ -1,7 +1,7 @@
 import { Box, Text, useInput, useApp, useStdout } from "ink";
 import { Spinner } from "@inkjs/ui";
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { loadHistory, upsertHistory, removeFromHistory, loadPromptHistory, savePromptHistory } from "./task";
+import { loadHistory, upsertHistory, removeFromHistory, loadPromptHistory, savePromptHistory, dataDir } from "./task";
 import type { PersistedTask } from "./task";
 import { loadConfig } from "./config";
 import type { DeerConfig } from "./config";
@@ -761,6 +761,20 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     }
   }, []);
 
+  // ── Open shell in worktree ────────────────────────────────────────
+
+  const openShell = useCallback(async (agent: AgentState) => {
+    if (!agent.taskId) return;
+    const worktreePath = `${dataDir()}/tasks/${agent.taskId}/worktree`;
+    const shell = process.env.SHELL ?? "/bin/sh";
+
+    await withSuspendedTerminal(setSuspended, async () => {
+      await Bun.sleep(50);
+      const { spawnSync } = await import("node:child_process");
+      spawnSync(shell, [], { stdio: "inherit", cwd: worktreePath });
+    });
+  }, []);
+
   // ── Continue: focus input to spawn a new agent off a PR branch ────
 
   const createPr = useCallback(async (agent: AgentState) => {
@@ -942,6 +956,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
           hasHandle: !!agent.handle,
           isIdle: agent.idle,
           prState: agent.prState,
+          hasWorktreePath: !!agent.taskId,
         };
         const actions = availableActions(ctx);
         const action = resolveKeypress(input, key, actions);
@@ -978,6 +993,9 @@ export default function Dashboard({ cwd }: { cwd: string }) {
             break;
           case "retry":
             spawnAgent(agent.prompt);
+            break;
+          case "open_shell":
+            openShell(agent);
             break;
         }
       }
@@ -1221,6 +1239,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
                   hasHandle: !!selected.handle,
                   isIdle: selected.idle,
                   prState: selected.prState,
+                  hasWorktreePath: !!selected.taskId,
                 }).map((action) => (
                   <Text key={action} dimColor>
                     {ACTION_BINDINGS[action].keyDisplay} {ACTION_BINDINGS[action].label}
