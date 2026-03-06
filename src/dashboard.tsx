@@ -1,406 +1,31 @@
-import { join } from "node:path";
-import { Box, Text, useInput, useApp, useStdout } from "ink";
-import { applyKittyData } from "./kitty-input";
+import { Box, Text, useApp, useStdout } from "ink";
 import { Spinner } from "@inkjs/ui";
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { loadHistory, upsertHistory, removeFromHistory, loadPromptHistory, savePromptHistory, dataDir } from "./task";
-import type { PersistedTask } from "./task";
+import React, { useState, useEffect, useRef } from "react";
 import { loadConfig } from "./config";
 import type { DeerConfig } from "./config";
-import { transition, availableActions, resolveKeypress, ACTION_BINDINGS } from "./state-machine";
-import type { AgentState as AgentStatus } from "./state-machine";
-import { startAgent, destroyAgent, deleteTask, createAgentPR, updateAgentPR } from "./agent";
-import { isTmuxSessionDead, captureTmuxPane } from "./sandbox/index";
-import type { SandboxCleanup } from "./sandbox/index";
-import { resolveRuntime } from "./sandbox/resolve";
-import { detectRepo } from "./git/worktree";
-import { AgentState, createAgentState, historicalAgent, crossInstanceAgent } from "./agent-state";
-import { fuzzyMatch } from "./fuzzy";
+import { availableActions, ACTION_BINDINGS } from "./state-machine";
 import { startClaudeConfigGuard, type ClaudeConfigGuard, type ConfigAlert } from "./sandbox/claude-config-guard";
+import { runPreflight, type PreflightResult } from "./preflight";
+import { PromptInput } from "./components/PromptInput";
+import { useAgentSync } from "./hooks/useAgentSync";
+import { usePrPoller } from "./hooks/usePrPoller";
+import { useAgentActions } from "./hooks/useAgentActions";
+import { usePromptHistory } from "./hooks/usePromptHistory";
+import { useKeyboardInput } from "./hooks/useKeyboardInput";
+import {
+  STATUS_DISPLAY,
+  UPLOAD_FRAMES,
+  MAX_VISIBLE_LOGS,
+  LOG_LINES_PER_ENTRY,
+  ENTRY_ROWS_BASE,
+  ENTRY_ROWS_WITH_PR,
+  truncate,
+  formatTime,
+  isActive,
+  prStateColor,
+} from "./dashboard-utils";
 
-// ── Constants ────────────────────────────────────────────────────────
-
-const STATUS_DISPLAY: Record<AgentStatus, { icon: string; color: string }> = {
-  setup:       { icon: "⏳", color: "yellow" },
-  running:     { icon: "●",  color: "cyan" },
-  teardown:    { icon: "⬆",  color: "blue" },
-  completed:   { icon: "✓",  color: "green" },
-  failed:      { icon: "✗",  color: "red" },
-  cancelled:   { icon: "⊘",  color: "gray" },
-  interrupted: { icon: "!",  color: "yellow" },
-};
-
-const UPLOAD_FRAMES = ["⬆", "⇧"];
-
-const MAX_LOG_LINES = 200;
-const MAX_VISIBLE_LOGS = 5;
-const LOG_LINES_PER_ENTRY = 2;
-const ENTRY_ROWS_BASE = 1 + LOG_LINES_PER_ENTRY;
-const ENTRY_ROWS_WITH_PR = ENTRY_ROWS_BASE + 1;
-const MODEL = "sonnet";
-const PR_MERGE_CHECK_INTERVAL_MS = 10_000;
-const POLL_MS = 1_000;
-/** Number of consecutive unchanged pane captures before considering Claude idle */
-const IDLE_THRESHOLD = 3;
-
-// ── Helpers ──────────────────────────────────────────────────────────
-
-function truncate(s: string, max: number): string {
-  if (max <= 0) return "";
-  return s.length > max ? s.slice(0, max - 1) + "…" : s;
-}
-
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
-
-function appendLog(agent: AgentState, line: string) {
-  agent.logs.push(line);
-  if (agent.logs.length > MAX_LOG_LINES) {
-    agent.logs.splice(0, agent.logs.length - MAX_LOG_LINES);
-  }
-}
-
-function isActive(a: AgentState): boolean {
-  return a.status === "setup" || a.status === "running" || a.status === "teardown";
-}
-
-/** Strip ANSI escape sequences from terminal output */
-export function stripAnsi(s: string): string {
-  return s.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "")
-          .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "");
-}
-
-/** Suspend the ink alternate screen, run fn, then restore. */
-async function withSuspendedTerminal(
-  setSuspended: (v: boolean) => void,
-  fn: () => Promise<void>,
-): Promise<void> {
-  setSuspended(true);
-  // Leave Ink's alternate screen
-  process.stdout.write("\x1b[?1049l");
-  // Fully release stdin so the child process gets exclusive access
-  if (process.stdin.setRawMode) process.stdin.setRawMode(false);
-  process.stdin.pause();
-  try {
-    await fn();
-  } finally {
-    process.stdin.resume();
-    if (process.stdin.setRawMode) process.stdin.setRawMode(true);
-    process.stdout.write("\x1b[?1049h\x1b[2J\x1b[H");
-    setSuspended(false);
-  }
-}
-
-function openUrl(url: string) {
-  const cmd = process.platform === "darwin" ? "open" : "xdg-open";
-  Bun.spawn([cmd, url], { stdout: "pipe", stderr: "pipe" });
-}
-
-function prStateColor(state: "open" | "merged" | "closed" | null): string {
-  if (state === "merged") return "magenta";
-  if (state === "closed") return "red";
-  return "green";
-}
-
-// ── Preflight ────────────────────────────────────────────────────────
-
-interface PreflightResult {
-  ok: boolean;
-  errors: string[];
-  credentialType: "subscription" | "api-token" | "none";
-}
-
-async function runPreflight(): Promise<PreflightResult> {
-  const errors: string[] = [];
-
-  // Check nono
-  try {
-    const p = Bun.spawn(["nono", "--version"], { stdout: "pipe", stderr: "pipe" });
-    const code = await p.exited;
-    if (code !== 0) errors.push("nono not available — install from https://nono.sh");
-  } catch {
-    errors.push("nono not available — install from https://nono.sh");
-  }
-
-  // Check tmux
-  try {
-    const p = Bun.spawn(["tmux", "-V"], { stdout: "pipe", stderr: "pipe" });
-    const code = await p.exited;
-    if (code !== 0) errors.push("tmux not available");
-  } catch {
-    errors.push("tmux not available");
-  }
-
-  // Check claude
-  try {
-    const p = Bun.spawn(["claude", "--version"], { stdout: "pipe", stderr: "pipe" });
-    const code = await p.exited;
-    if (code !== 0) errors.push("claude CLI not available");
-  } catch {
-    errors.push("claude CLI not available");
-  }
-
-  // Check gh auth
-  try {
-    const p = Bun.spawn(["gh", "auth", "token"], { stdout: "pipe", stderr: "pipe" });
-    const code = await p.exited;
-    if (code !== 0) errors.push("gh auth not configured — run 'gh auth login'");
-  } catch {
-    errors.push("gh CLI not available");
-  }
-
-  // Check credentials — OAuth token preferred, API key accepted as fallback
-  const tokenFile = `${process.env.HOME ?? ""}/.claude/agent-oauth-token`;
-  if (!process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-    try {
-      const f = Bun.file(tokenFile);
-      if (await f.exists()) {
-        process.env.CLAUDE_CODE_OAUTH_TOKEN = (await f.text()).trim();
-      }
-    } catch { /* ignore */ }
-  }
-  // Strip API key if OAuth is now available (OAuth always wins)
-  if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-    delete process.env.ANTHROPIC_API_KEY;
-  }
-  let credentialType: PreflightResult["credentialType"] = "none";
-  if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-    credentialType = "subscription";
-  } else if (process.env.ANTHROPIC_API_KEY) {
-    credentialType = "api-token";
-  } else {
-    errors.push("No credentials — set CLAUDE_CODE_OAUTH_TOKEN, create ~/.claude/agent-oauth-token, or set ANTHROPIC_API_KEY");
-  }
-
-  return { ok: errors.length === 0, errors, credentialType };
-}
-
-// ── History helpers ──────────────────────────────────────────────────
-
-/** Save a finished agent to the repo's history file. */
-async function saveToHistory(agent: AgentState, repoPath: string): Promise<void> {
-  if (agent.historical) return;
-  const status = agent.status as "completed" | "failed" | "cancelled";
-  const task: PersistedTask = {
-    taskId: agent.taskId,
-    prompt: agent.prompt,
-    status,
-    createdAt: new Date(Date.now() - agent.elapsed * 1000).toISOString(),
-    completedAt: new Date().toISOString(),
-    elapsed: agent.elapsed,
-    prUrl: agent.result?.prUrl ?? null,
-    finalBranch: agent.result?.finalBranch ?? null,
-    error: agent.error || null,
-    lastActivity: agent.lastActivity,
-  };
-  await upsertHistory(repoPath, task);
-}
-
-let _ghToken: string | null | undefined = undefined;
-
-/** Get the GitHub auth token, cached after first call. */
-async function getGitHubToken(): Promise<string | null> {
-  if (_ghToken !== undefined) return _ghToken;
-  try {
-    const proc = Bun.spawn(["gh", "auth", "token"], { stdout: "pipe", stderr: "pipe" });
-    const code = await proc.exited;
-    _ghToken = code === 0 ? (await new Response(proc.stdout).text()).trim() : null;
-  } catch {
-    _ghToken = null;
-  }
-  return _ghToken;
-}
-
-/** Parse a GitHub PR URL into owner, repo, and PR number. */
-function parsePrUrl(prUrl: string): { owner: string; repo: string; number: number } | null {
-  const match = prUrl.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
-  if (!match) return null;
-  return { owner: match[1], repo: match[2], number: parseInt(match[3], 10) };
-}
-
-/** Check the current state of a PR via the GitHub REST API. */
-async function checkPrState(prUrl: string): Promise<"open" | "merged" | "closed" | null> {
-  try {
-    const token = await getGitHubToken();
-    const parsed = parsePrUrl(prUrl);
-    if (!parsed) return null;
-    const { owner, repo, number } = parsed;
-    const res = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/pulls/${number}`,
-      {
-        headers: {
-          Accept: "application/vnd.github+json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      },
-    );
-    if (!res.ok) return null;
-    const data = await res.json() as { state: string; merged: boolean };
-    if (data.merged) return "merged";
-    if (data.state === "closed") return "closed";
-    return "open";
-  } catch {
-    return null;
-  }
-}
-
-// ── Prompt Input ─────────────────────────────────────────────────────
-
-/** Text input that supports Shift+Enter or /↵ to insert newlines and Enter to submit. */
-function PromptInput({
-  defaultValue = "",
-  placeholder = "",
-  isDisabled = false,
-  onSubmit,
-}: {
-  defaultValue?: string;
-  placeholder?: string;
-  isDisabled?: boolean;
-  onSubmit?: (value: string) => void;
-}) {
-  const [value, setValue] = useState(defaultValue);
-  const [cursorOffset, setCursorOffset] = useState(defaultValue.length);
-
-  // Refs kept in sync with state for use in event handlers to avoid stale closures.
-  const valueRef = useRef(value);
-  const cursorOffsetRef = useRef(cursorOffset);
-  valueRef.current = value;
-  cursorOffsetRef.current = cursorOffset;
-
-  // Handle Shift+Enter via the Kitty keyboard protocol escape sequence (\x1b[13;2u).
-  // Standard terminals send the same \r byte for Enter and Shift+Enter, so Ink's
-  // useInput cannot distinguish them. We explicitly request the Kitty keyboard
-  // protocol (\x1b[>1u) so terminals that support it (kitty, WezTerm, foot, ghostty,
-  // xterm, etc.) send the distinct sequence. On cleanup we pop the mode (\x1b[<u).
-  useEffect(() => {
-    if (isDisabled) return;
-    process.stdout.write("\x1b[>1u");
-    const handleData = (data: Buffer) => {
-      const result = applyKittyData(data.toString(), valueRef.current, cursorOffsetRef.current);
-      if (result) {
-        valueRef.current = result.value;
-        cursorOffsetRef.current = result.cursor;
-        setValue(result.value);
-        setCursorOffset(result.cursor);
-      }
-    };
-    process.stdin.on("data", handleData);
-    return () => {
-      process.stdin.off("data", handleData);
-      process.stdout.write("\x1b[<u");
-    };
-  }, [isDisabled]);
-
-  useInput(
-    (input, key) => {
-      if (
-        key.upArrow ||
-        key.downArrow ||
-        (key.ctrl && input === "c") ||
-        key.tab ||
-        (key.shift && key.tab)
-      ) {
-        return;
-      }
-
-      if (key.return) {
-        if (key.shift) {
-          const cur = cursorOffsetRef.current;
-          const val = valueRef.current;
-          const newValue = val.slice(0, cur) + "\n" + val.slice(cur);
-          const newCursor = cur + 1;
-          valueRef.current = newValue;
-          cursorOffsetRef.current = newCursor;
-          setValue(newValue);
-          setCursorOffset(newCursor);
-        } else {
-          // If the character immediately before the cursor is '/', replace it
-          // with a newline instead of submitting (like Claude Code's \ continuation).
-          const cur = cursorOffsetRef.current;
-          const val = valueRef.current;
-          if (cur > 0 && val[cur - 1] === "/") {
-            const newValue = val.slice(0, cur - 1) + "\n" + val.slice(cur);
-            valueRef.current = newValue;
-            cursorOffsetRef.current = cur;
-            setValue(newValue);
-            setCursorOffset(cur);
-          } else {
-            onSubmit?.(valueRef.current);
-          }
-        }
-        return;
-      }
-
-      if (key.leftArrow) {
-        const newCursor = Math.max(0, cursorOffsetRef.current - 1);
-        cursorOffsetRef.current = newCursor;
-        setCursorOffset(newCursor);
-      } else if (key.rightArrow) {
-        const newCursor = Math.min(valueRef.current.length, cursorOffsetRef.current + 1);
-        cursorOffsetRef.current = newCursor;
-        setCursorOffset(newCursor);
-      } else if (key.backspace || key.delete) {
-        const cur = cursorOffsetRef.current;
-        if (cur > 0) {
-          const val = valueRef.current;
-          const newValue = val.slice(0, cur - 1) + val.slice(cur);
-          const newCursor = cur - 1;
-          valueRef.current = newValue;
-          cursorOffsetRef.current = newCursor;
-          setValue(newValue);
-          setCursorOffset(newCursor);
-        }
-      } else if (input) {
-        const cur = cursorOffsetRef.current;
-        const val = valueRef.current;
-        const newValue = val.slice(0, cur) + input + val.slice(cur);
-        const newCursor = cur + input.length;
-        valueRef.current = newValue;
-        cursorOffsetRef.current = newCursor;
-        setValue(newValue);
-        setCursorOffset(newCursor);
-      }
-    },
-    { isActive: !isDisabled },
-  );
-
-  const parts = useMemo(() => {
-    if (isDisabled) {
-      return [<Text key="val" dimColor>{placeholder}</Text>];
-    }
-    if (value.length === 0) {
-      if (!placeholder) {
-        return [<Text key="cursor" inverse> </Text>];
-      }
-      return [
-        <Text key="cursor" inverse>{placeholder[0]}</Text>,
-        <Text key="rest" dimColor>{placeholder.slice(1)}</Text>,
-      ];
-    }
-    const result: React.ReactNode[] = [];
-    let i = 0;
-    for (const char of value) {
-      const displayChar = char === "\n" ? "↵" : char;
-      if (i === cursorOffset) {
-        result.push(<Text key={i} inverse>{displayChar}</Text>);
-      } else {
-        result.push(displayChar);
-      }
-      i++;
-    }
-    if (cursorOffset === value.length) {
-      result.push(<Text key="end-cursor" inverse> </Text>);
-    }
-    return result;
-  }, [value, cursorOffset, placeholder, isDisabled]);
-
-  return <Text>{parts}</Text>;
-}
-
-// ── Main Component ───────────────────────────────────────────────────
+export { stripAnsi } from "./dashboard-utils";
 
 export default function Dashboard({ cwd }: { cwd: string }) {
   const { exit } = useApp();
@@ -408,132 +33,80 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   const termWidth = stdout?.columns || 80;
   const termHeight = stdout?.rows || 24;
 
-  const [agents, setAgents] = useState<AgentState[]>([]);
-  const [selectedIdx, setSelectedIdx] = useState(0);
-  const [inputFocused, setInputFocused] = useState(true);
-  const [logExpanded, setLogExpanded] = useState(false);
   const [suspended, setSuspended] = useState(false);
   const [preflight, setPreflight] = useState<PreflightResult | null>(null);
-  const [confirmQuit, setConfirmQuit] = useState(false);
-  const [promptHistory, setPromptHistory] = useState<string[]>([]);
-  const [historyIdx, setHistoryIdx] = useState(-1);
-  const [inputDefault, setInputDefault] = useState("");
-  const [inputKey, setInputKey] = useState(0);
+  const [logExpanded, setLogExpanded] = useState(false);
   const [animTick, setAnimTick] = useState(0);
-  const [searchMode, setSearchMode] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchMatchIdx, setSearchMatchIdx] = useState(0);
   const [configAlerts, setConfigAlerts] = useState<ConfigAlert[]>([]);
   const guardRef = useRef<ClaudeConfigGuard | null>(null);
-
-  const nextId = useRef(1);
-  const agentsRef = useRef(agents);
-  agentsRef.current = agents;
-  const deletedTaskIdsRef = useRef(new Set<string>());
   const configRef = useRef<DeerConfig | null>(null);
-  const baseBranchRef = useRef("main");
-  /** Proxy cleanup functions for cross-instance tasks restored after a restart */
-  const restoredProxiesRef = useRef(new Map<string, SandboxCleanup>());
 
-  // ── Detect base branch on mount ────────────────────────────────────
+  const { agents, setAgents, agentsRef, nextId, deletedTaskIdsRef, baseBranchRef, restoredProxiesRef } = useAgentSync(cwd, configRef);
 
-  useEffect(() => {
-    detectRepo(cwd).then((info) => {
-      baseBranchRef.current = info.defaultBranch;
-    }).catch(() => {});
-  }, [cwd]);
+  const {
+    promptHistory,
+    historyIdx,
+    setHistoryIdx,
+    inputDefault,
+    setInputDefault,
+    inputKey,
+    setInputKey,
+    addToHistory,
+  } = usePromptHistory();
 
-  // ── Sync state from history file ──────────────────────────────────
+  usePrPoller(agentsRef, setAgents);
 
-  const syncWithHistory = useCallback(async () => {
-    const allFileTasks = await loadHistory(cwd);
-    const fileTasks = allFileTasks.filter(t => !deletedTaskIdsRef.current.has(t.taskId));
-    const currentAgents = agentsRef.current;
-    const agentByTaskId = new Map(currentAgents.map(a => [a.taskId, a]));
-    const fileTaskIds = new Set(fileTasks.map(t => t.taskId));
+  const { spawnAgent, killAgent, attachToAgent, openShell, createPr, updatePr, deleteAgent } = useAgentActions({
+    cwd,
+    setAgents,
+    nextId,
+    deletedTaskIdsRef,
+    baseBranchRef,
+    configRef,
+    preflight,
+    setSuspended,
+  });
 
-    const newAgents: AgentState[] = await Promise.all(fileTasks.map(async task => {
-      const existing = agentByTaskId.get(task.taskId);
-      if (existing && !existing.historical) {
-        return existing;
-      }
-      const id = existing?.id ?? nextId.current++;
+  const {
+    selectedIdx,
+    inputFocused,
+    setInputFocused,
+    confirmQuit,
+    searchMode,
+    searchQuery,
+    searchMatchIdx,
+    searchMatches,
+  } = useKeyboardInput({
+    suspended,
+    agents,
+    setAgents,
+    setLogExpanded,
+    promptHistory,
+    historyIdx,
+    setHistoryIdx,
+    setInputDefault,
+    setInputKey,
+    spawnAgent,
+    killAgent,
+    attachToAgent,
+    openShell,
+    createPr,
+    updatePr,
+    deleteAgent,
+    exit,
+  });
 
-      // For running tasks not managed by this instance, check if the tmux
-      // session is still alive to distinguish cross-instance tasks from
-      // truly interrupted ones.
-      if (task.status === "running") {
-        const isDead = await isTmuxSessionDead(`deer-${task.taskId}`);
-        if (!isDead) {
-          // Restore the bwrap proxy once per task so the sandbox can reach
-          // the Claude API after a deer restart.
-          if (!restoredProxiesRef.current.has(task.taskId) && configRef.current) {
-            const runtime = resolveRuntime(configRef.current);
-            const worktreePath = join(dataDir(), "tasks", task.taskId, "worktree");
-            const cleanup = await runtime.restoreProxy?.(worktreePath, configRef.current.network.allowlist);
-            if (cleanup) restoredProxiesRef.current.set(task.taskId, cleanup);
-          }
-          return crossInstanceAgent(task, id);
-        }
-        // Session died — stop any proxy we restored for this task
-        const proxyCleanup = restoredProxiesRef.current.get(task.taskId);
-        if (proxyCleanup) {
-          proxyCleanup();
-          restoredProxiesRef.current.delete(task.taskId);
-        }
-        // Fall through to historicalAgent (shows as interrupted)
-      }
-
-      return historicalAgent(task, id);
-    }));
-
-    for (const agent of currentAgents) {
-      if (!agent.historical && !fileTaskIds.has(agent.taskId)) {
-        newAgents.push(agent);
-      }
-    }
-
-    const changed =
-      newAgents.length !== currentAgents.length ||
-      newAgents.some((a, i) => {
-        const cur = currentAgents[i];
-        return !cur || a.taskId !== cur.taskId || a.status !== cur.status || a.lastActivity !== cur.lastActivity;
-      });
-
-    if (changed) setAgents(newAgents);
-  }, [cwd]);
-
-  // ── Load history + preflight on mount ─────────────────────────────
+  // ── Load config + preflight + start config guard ───────────────────
 
   useEffect(() => {
     runPreflight().then(setPreflight);
     loadConfig(cwd).then((cfg) => { configRef.current = cfg; });
-    syncWithHistory();
-    loadPromptHistory().then(setPromptHistory);
-
-    // Start ~/.claude integrity monitor
     startClaudeConfigGuard((alert) => {
       setConfigAlerts((prev) => [...prev, alert]);
     }).then((guard) => {
       guardRef.current = guard;
     }).catch(() => {});
-  }, [cwd, syncWithHistory]);
-
-  // ── Poll history file for changes from other deer instances ────────
-
-  useEffect(() => {
-    const interval = setInterval(syncWithHistory, 2_000);
-    return () => clearInterval(interval);
-  }, [syncWithHistory]);
-
-  // ── Animate upload icon when creating PR ─────────────────────────
-
-  useEffect(() => {
-    const anyCreating = agents.some((a) => a.creatingPr || a.updatingPr);
-    if (!anyCreating) return;
-    const interval = setInterval(() => setAnimTick((t) => t + 1), 200);
-    return () => clearInterval(interval);
-  }, [agents]);
+  }, [cwd]);
 
   // ── Cleanup on unmount ────────────────────────────────────────────
 
@@ -561,515 +134,14 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     };
   }, [cwd]);
 
-  // ── Check PR merge status periodically ────────────────────────────
+  // ── Animate upload icon when creating PR ─────────────────────────
 
   useEffect(() => {
-    const check = async () => {
-      const toCheck = agentsRef.current.filter(
-        (a) => a.result?.prUrl && (a.prState === null || a.prState === "open"),
-      );
-      if (toCheck.length === 0) return;
-
-      const results = await Promise.all(
-        toCheck.map((agent) => checkPrState(agent.result!.prUrl)),
-      );
-      let changed = false;
-      for (let i = 0; i < toCheck.length; i++) {
-        const state = results[i];
-        if (state !== toCheck[i].prState) {
-          toCheck[i].prState = state;
-          changed = true;
-        }
-      }
-      if (changed) setAgents((prev) => [...prev]);
-    };
-
-    check();
-    const interval = setInterval(check, PR_MERGE_CHECK_INTERVAL_MS);
+    const anyCreating = agents.some((a) => a.creatingPr || a.updatingPr);
+    if (!anyCreating) return;
+    const interval = setInterval(() => setAnimTick((t) => t + 1), 200);
     return () => clearInterval(interval);
-  }, []);
-
-  // ── Spawn agent ───────────────────────────────────────────────────
-
-  const spawnAgent = useCallback(async (prompt: string, baseBranch?: string, continueSession?: { taskId: string; worktreePath: string; branch: string }) => {
-    if (!prompt.trim()) return;
-    if (preflight && !preflight.ok) return;
-
-    const config = configRef.current;
-    if (!config) return;
-
-    const id = nextId.current++;
-    const effectiveBranch = baseBranch ?? baseBranchRef.current;
-    const agent = createAgentState({
-      id,
-      prompt: prompt.trim(),
-      baseBranch: effectiveBranch,
-    });
-
-    const abortController = new AbortController();
-    agent.abortController = abortController;
-
-    // Start elapsed timer — pauses while agent is idle
-    agent.timer = setInterval(() => {
-      if (!agent.idle) agent.elapsed++;
-      setAgents((prev) => [...prev]);
-    }, 1000);
-
-    setAgents((prev) => [...prev, agent]);
-
-    try {
-      // Phase 1: Start the sandboxed agent
-      appendLog(agent, continueSession ? "[setup] Resuming session..." : "[setup] Creating worktree and sandbox...");
-      agent.lastActivity = "Setting up sandbox...";
-      setAgents((prev) => [...prev]);
-
-      const handle = await startAgent({
-        repoPath: cwd,
-        prompt: prompt.trim(),
-        baseBranch: effectiveBranch,
-        config,
-        model: MODEL,
-        runtime: resolveRuntime(config),
-        continueSession,
-        onStatus: (status) => {
-          const detail = "message" in status ? status.message : status.phase;
-          appendLog(agent, `[setup] ${detail}`);
-          agent.lastActivity = detail;
-          setAgents((prev) => [...prev]);
-        },
-      });
-
-      agent.handle = handle;
-      agent.taskId = handle.taskId;
-
-      // Persist immediately so the task survives if deer closes
-      await upsertHistory(cwd, {
-        taskId: agent.taskId,
-        prompt: agent.prompt,
-        status: "running",
-        createdAt: new Date().toISOString(),
-        completedAt: null,
-        elapsed: 0,
-        prUrl: null,
-        finalBranch: null,
-        error: null,
-            lastActivity: "",
-      });
-
-      agent.status = transition(agent.status, "SETUP_COMPLETE") ?? agent.status;
-      appendLog(agent, `[running] Claude started in tmux session: ${handle.sessionName}`);
-      agent.lastActivity = "Claude running...";
-      setAgents((prev) => [...prev]);
-
-      // Phase 2: Poll for completion (process exit or idle detection)
-      let lastPaneSnapshot = "";
-      let unchangedCount = 0;
-      while (true) {
-        await Bun.sleep(POLL_MS);
-        if (abortController.signal.aborted) return;
-
-        const dead = await isTmuxSessionDead(handle.sessionName);
-        if (dead) {
-          appendLog(agent, "[tmux] Claude process exited");
-          break;
-        }
-
-        // Capture visible pane content and diff against previous frame
-        const lines = await captureTmuxPane(handle.sessionName);
-        if (lines) {
-          const snapshot = lines.map(stripAnsi).map((l) => l.trim()).filter(Boolean).join("\n");
-
-          if (snapshot === lastPaneSnapshot) {
-            unchangedCount++;
-          } else {
-            unchangedCount = 0;
-            lastPaneSnapshot = snapshot;
-
-            // Update lastActivity with the latest ● line (Claude's text output)
-            const lastOutput = lines
-              .map(stripAnsi)
-              .map((l) => l.trim())
-              .filter((l) => l.startsWith("●"))
-              .pop();
-            if (lastOutput) {
-              const activity = truncate(lastOutput, 120);
-              if (activity !== agent.lastActivity) {
-                agent.lastActivity = activity;
-                appendLog(agent, `[tmux] ${truncate(lastOutput, 200)}`);
-                // Persist progress so other deer instances see the current activity
-                await upsertHistory(cwd, {
-                  taskId: agent.taskId,
-                  prompt: agent.prompt,
-                  status: "running",
-                  createdAt: new Date(Date.now() - agent.elapsed * 1000).toISOString(),
-                  completedAt: null,
-                  elapsed: agent.elapsed,
-                  prUrl: null,
-                  finalBranch: null,
-                  error: null,
-                  lastActivity: agent.lastActivity,
-                });
-                setAgents((prev) => [...prev]);
-              }
-            }
-          }
-
-          // Claude is idle when the pane hasn't changed for several consecutive polls
-          if (unchangedCount >= IDLE_THRESHOLD && !agent.idle) {
-            agent.idle = true;
-            agent.lastActivity = "Idle — press ⏎ to attach";
-            appendLog(agent, "[deer] Claude is idle");
-            setAgents((prev) => [...prev]);
-          } else if (unchangedCount === 0 && agent.idle) {
-            agent.idle = false;
-            setAgents((prev) => [...prev]);
-          }
-        }
-      }
-
-      if (abortController.signal.aborted) return;
-
-      // Process exited — mark completed, user decides what to do next
-      agent.idle = false;
-      agent.status = "completed";
-      agent.result = { finalBranch: handle.branch, prUrl: "" };
-      agent.lastActivity = "Task complete — press p to create PR, ⏎ to attach";
-    } catch (err) {
-      if (!abortController.signal.aborted) {
-        agent.status = transition(agent.status, "ERROR") ?? "failed";
-        agent.error = err instanceof Error ? err.message : String(err);
-        agent.lastActivity = truncate(agent.error, 120);
-      }
-    } finally {
-      if (agent.timer) clearInterval(agent.timer);
-      agent.timer = null;
-      if (!agent.deleted) {
-        await saveToHistory(agent, cwd);
-      }
-      setAgents((prev) => [...prev]);
-    }
-  }, [cwd, preflight]);
-
-  // ── Kill agent ────────────────────────────────────────────────────
-
-  const killAgent = useCallback((agent: AgentState) => {
-    if (!isActive(agent)) return;
-    agent.status = transition(agent.status, "USER_KILL") ?? "cancelled";
-    agent.lastActivity = "Cancelled by user";
-    agent.abortController?.abort();
-    if (agent.handle) {
-      agent.handle.kill().catch(() => {});
-    }
-    if (agent.timer) clearInterval(agent.timer);
-    agent.timer = null;
-    saveToHistory(agent, cwd);
-    setAgents((prev) => [...prev]);
-  }, [cwd]);
-
-  // ── Attach to running agent (just tmux attach) ────────────────────
-
-  const attachToAgent = useCallback(async (agent: AgentState) => {
-    if (!agent.handle) return;
-
-    await withSuspendedTerminal(setSuspended, async () => {
-      // Small delay to let any pending keypress (e.g. the Enter that triggered
-      // attach) flush through before tmux takes over stdin.
-      await Bun.sleep(50);
-      const { spawnSync } = await import("node:child_process");
-      spawnSync("tmux", ["attach", "-t", agent.handle!.sessionName], {
-        stdio: "inherit",
-      });
-    });
-
-    // Update lastActivity after detach
-    if (agent.handle && agent.status === "running") {
-      const lines = await captureTmuxPane(agent.handle.sessionName);
-      if (lines) {
-        const lastLine = lines.map(stripAnsi).map((l) => l.trim()).filter(Boolean).pop();
-        if (lastLine) {
-          agent.lastActivity = truncate(lastLine, 120);
-        }
-      }
-      setAgents((prev) => [...prev]);
-    }
-  }, []);
-
-  // ── Open shell in worktree ────────────────────────────────────────
-
-  const openShell = useCallback(async (agent: AgentState) => {
-    if (!agent.taskId) return;
-    const worktreePath = `${dataDir()}/tasks/${agent.taskId}/worktree`;
-    const shell = process.env.SHELL ?? "/bin/sh";
-    const sessionName = `deer-shell-${agent.taskId}`;
-
-    await withSuspendedTerminal(setSuspended, async () => {
-      await Bun.sleep(50);
-      const { spawnSync } = await import("node:child_process");
-      // Create a tmux session (or reattach if it already exists) so that
-      // ctrl+b d detaches and returns to deer, just like attaching to the agent.
-      spawnSync(
-        "tmux",
-        ["new-session", "-A", "-s", sessionName, "-c", worktreePath, shell],
-        { stdio: "inherit" },
-      );
-    });
-  }, []);
-
-  // ── Continue: focus input to spawn a new agent off a PR branch ────
-
-  const createPr = useCallback(async (agent: AgentState) => {
-    if (!agent.handle || agent.result?.prUrl) return;
-
-    agent.creatingPr = true;
-    agent.lastActivity = "Creating PR...";
-    setAgents((prev) => [...prev]);
-
-    try {
-      const result = await createAgentPR(
-        agent.handle,
-        cwd,
-        agent.baseBranch,
-        agent.prompt,
-      );
-      agent.result = { finalBranch: result.finalBranch, prUrl: result.prUrl };
-      agent.lastActivity = "PR created";
-    } catch (err) {
-      agent.lastActivity = `PR failed: ${err instanceof Error ? err.message : String(err)}`;
-    } finally {
-      agent.creatingPr = false;
-    }
-    await saveToHistory(agent, cwd);
-    setAgents((prev) => [...prev]);
-  }, [cwd]);
-
-
-  const updatePr = useCallback(async (agent: AgentState) => {
-    if (!agent.handle || !agent.result?.prUrl) return;
-
-    agent.creatingPr = true;
-    agent.lastActivity = "Updating PR...";
-    setAgents((prev) => [...prev]);
-
-    try {
-      await updateAgentPR(
-        agent.handle,
-        cwd,
-        agent.baseBranch,
-        agent.prompt,
-        agent.result.prUrl,
-      );
-      agent.lastActivity = "PR updated";
-    } catch (err) {
-      agent.lastActivity = `PR update failed: ${err instanceof Error ? err.message : String(err)}`;
-    } finally {
-      agent.creatingPr = false;
-    }
-    await saveToHistory(agent, cwd);
-    setAgents((prev) => [...prev]);
-  }, [cwd]);
-
-  // ── Keyboard input ────────────────────────────────────────────────
-
-  useInput((input, key) => {
-    if (suspended) return;
-
-    // Search mode: capture all input for the search query
-    if (searchMode) {
-      if (key.escape || (key.ctrl && input === "c")) {
-        setSearchMode(false);
-        setSearchQuery("");
-        setSearchMatchIdx(0);
-        return;
-      }
-      if (key.return) {
-        // Select the currently highlighted search match
-        const matches = agents
-          .map((a, i) => ({ agent: a, idx: i }))
-          .filter(({ agent }) => fuzzyMatch(agent.prompt, searchQuery));
-        const match = matches[searchMatchIdx];
-        if (match) {
-          setSelectedIdx(match.idx);
-          setInputFocused(false);
-        }
-        setSearchMode(false);
-        setSearchQuery("");
-        setSearchMatchIdx(0);
-        return;
-      }
-      if (key.upArrow) {
-        const matchCount = agents.filter((a) => fuzzyMatch(a.prompt, searchQuery)).length;
-        setSearchMatchIdx((prev) => Math.max(prev - 1, 0));
-        return;
-      }
-      if (key.downArrow) {
-        const matchCount = agents.filter((a) => fuzzyMatch(a.prompt, searchQuery)).length;
-        setSearchMatchIdx((prev) => Math.min(prev + 1, Math.max(matchCount - 1, 0)));
-        return;
-      }
-      if (key.backspace || key.delete) {
-        setSearchQuery((prev) => prev.slice(0, -1));
-        setSearchMatchIdx(0);
-        return;
-      }
-      if (input && !key.ctrl && !key.meta) {
-        setSearchQuery((prev) => prev + input);
-        setSearchMatchIdx(0);
-        return;
-      }
-      return;
-    }
-
-    const visible = agents;
-    const clampedIdx = Math.min(selectedIdx, Math.max(visible.length - 1, 0));
-
-    // Quit handling
-    if (input === "q" && !inputFocused) {
-      const running = agents.filter(isActive);
-      if (running.length > 0 && !confirmQuit) {
-        setConfirmQuit(true);
-        return;
-      }
-      for (const a of running) killAgent(a);
-      exit();
-      return;
-    }
-
-    // Confirm quit
-    if (confirmQuit) {
-      if (input === "y" || input === "Y") {
-        const running = agents.filter(isActive);
-        for (const a of running) killAgent(a);
-        exit();
-      } else {
-        setConfirmQuit(false);
-      }
-      return;
-    }
-
-    // Prompt history navigation (when input focused)
-    if (inputFocused && promptHistory.length > 0) {
-      if (key.upArrow) {
-        const nextIdx = historyIdx < promptHistory.length - 1 ? historyIdx + 1 : historyIdx;
-        setHistoryIdx(nextIdx);
-        setInputDefault(promptHistory[promptHistory.length - 1 - nextIdx]);
-        setInputKey((k) => k + 1);
-        return;
-      }
-      if (key.downArrow) {
-        const nextIdx = historyIdx > 0 ? historyIdx - 1 : -1;
-        setHistoryIdx(nextIdx);
-        setInputDefault(nextIdx === -1 ? "" : promptHistory[promptHistory.length - 1 - nextIdx]);
-        setInputKey((k) => k + 1);
-        return;
-      }
-    }
-
-    // Tab to toggle focus
-    if (key.tab) {
-      setInputFocused((prev) => !prev);
-      return;
-    }
-
-    // List navigation (when list focused)
-    if (!inputFocused && visible.length > 0) {
-      if (input === "/") {
-        setSearchMode(true);
-        setSearchQuery("");
-        setSearchMatchIdx(0);
-        return;
-      }
-
-      if (input === "j" || key.downArrow) {
-        setSelectedIdx((prev) => Math.min(prev + 1, visible.length - 1));
-      }
-      if (input === "k" || key.upArrow) {
-        setSelectedIdx((prev) => Math.max(prev - 1, 0));
-      }
-
-      // Resolve agent-specific actions via state machine
-      const agent = visible[clampedIdx];
-      if (agent) {
-        const ctx = {
-          status: agent.status,
-          hasPrUrl: !!agent.result?.prUrl,
-          hasFinalBranch: !!agent.result?.finalBranch || !!agent.handle?.branch,
-          hasHandle: !!agent.handle,
-          isIdle: agent.idle,
-          prState: agent.prState,
-          hasWorktreePath: !!agent.taskId,
-        };
-        const actions = availableActions(ctx);
-        const action = resolveKeypress(input, key, actions);
-
-        switch (action) {
-          case "attach":
-            attachToAgent(agent);
-            break;
-          case "create_pr":
-            createPr(agent);
-            break;
-          case "update_pr":
-            updatePr(agent);
-            break;
-          case "open_pr":
-            if (agent.result?.prUrl) openUrl(agent.result.prUrl);
-            break;
-          case "update_pr":
-            updatePr(agent);
-            break;
-          case "kill":
-            killAgent(agent);
-            break;
-          case "delete":
-            agent.deleted = true;
-            agent.abortController?.abort();
-            if (agent.timer) clearInterval(agent.timer);
-            deleteTask(agent.taskId, cwd, agent.handle).catch(() => {});
-            setAgents((prev) => prev.filter((a) => a !== agent));
-            setSelectedIdx((prev) => Math.min(prev, Math.max(visible.length - 2, 0)));
-            deletedTaskIdsRef.current.add(agent.taskId);
-            removeFromHistory(cwd, agent.taskId).finally(() => {
-              deletedTaskIdsRef.current.delete(agent.taskId);
-            });
-            break;
-          case "toggle_logs":
-            setLogExpanded((prev) => !prev);
-            break;
-          case "retry": {
-            const retryPrompt = agent.prompt;
-            const retryHandle = agent.handle;
-            agent.abortController?.abort();
-            if (agent.timer) clearInterval(agent.timer);
-            setAgents((prev) => prev.filter((a) => a !== agent));
-            setSelectedIdx((prev) => Math.min(prev, Math.max(visible.length - 2, 0)));
-
-            if (retryHandle) {
-              // Kill the tmux session but preserve the worktree so Claude can
-              // continue the same conversation with --continue.
-              retryHandle.kill().catch(() => {});
-              spawnAgent(retryPrompt, agent.baseBranch, {
-                taskId: retryHandle.taskId,
-                worktreePath: retryHandle.worktreePath,
-                branch: retryHandle.branch,
-              });
-            } else {
-              // No live worktree available — fall back to a fresh chat.
-              deleteTask(agent.taskId, cwd, null).catch(() => {});
-              deletedTaskIdsRef.current.add(agent.taskId);
-              removeFromHistory(cwd, agent.taskId).finally(() => {
-                deletedTaskIdsRef.current.delete(agent.taskId);
-              });
-              spawnAgent(retryPrompt, agent.baseBranch);
-            }
-            break;
-          }
-          case "open_shell":
-            openShell(agent);
-            break;
-        }
-      }
-    }
-  });
+  }, [agents]);
 
   // ── Render nothing when suspended ─────────────────────────────────
 
@@ -1081,11 +153,6 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   const activeCount = agents.filter(isActive).length;
   const selected = agents[clampedIdx] || null;
   const preflightOk = preflight?.ok ?? false;
-
-  // Compute search matches for rendering
-  const searchMatches = searchMode
-    ? agents.map((a, i) => ({ agent: a, idx: i })).filter(({ agent }) => fuzzyMatch(agent.prompt, searchQuery))
-    : [];
 
   const chromeHeight = 6;
   const alertHeight = configAlerts.length > 0 ? Math.min(configAlerts.length, 3) + 2 + (configAlerts.length > 3 ? 1 : 0) : 0;
@@ -1262,14 +329,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
                 defaultValue={inputDefault}
                 onSubmit={(value) => {
                   if (value.trim()) {
-                    setPromptHistory((prev) => {
-                      const next = [...prev, value.trim()];
-                      savePromptHistory(next).catch(() => {});
-                      return next;
-                    });
-                    setHistoryIdx(-1);
-                    setInputDefault("");
-                    setInputKey((k) => k + 1);
+                    addToHistory(value);
                     spawnAgent(value);
                   }
                 }}
