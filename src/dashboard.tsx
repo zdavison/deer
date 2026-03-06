@@ -389,6 +389,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   const nextId = useRef(1);
   const agentsRef = useRef(agents);
   agentsRef.current = agents;
+  const deletedTaskIdsRef = useRef(new Set<string>());
   const configRef = useRef<DeerConfig | null>(null);
   const baseBranchRef = useRef("main");
 
@@ -403,7 +404,8 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   // ── Sync state from history file ──────────────────────────────────
 
   const syncWithHistory = useCallback(async () => {
-    const fileTasks = await loadHistory(cwd);
+    const allFileTasks = await loadHistory(cwd);
+    const fileTasks = allFileTasks.filter(t => !deletedTaskIdsRef.current.has(t.taskId));
     const currentAgents = agentsRef.current;
     const agentByTaskId = new Map(currentAgents.map(a => [a.taskId, a]));
     const fileTaskIds = new Set(fileTasks.map(t => t.taskId));
@@ -908,7 +910,10 @@ export default function Dashboard({ cwd }: { cwd: string }) {
             deleteTask(agent.taskId, cwd, agent.handle).catch(() => {});
             setAgents((prev) => prev.filter((a) => a !== agent));
             setSelectedIdx((prev) => Math.min(prev, Math.max(visible.length - 2, 0)));
-            removeFromHistory(cwd, agent.taskId);
+            deletedTaskIdsRef.current.add(agent.taskId);
+            removeFromHistory(cwd, agent.taskId).finally(() => {
+              deletedTaskIdsRef.current.delete(agent.taskId);
+            });
             break;
           case "toggle_logs":
             setLogExpanded((prev) => !prev);
