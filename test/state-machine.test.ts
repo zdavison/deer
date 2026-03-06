@@ -374,11 +374,25 @@ describe("confirmationMessage", () => {
     }))).not.toBeNull();
   });
 
-  // delete: no confirmation when PR already exists
-  test("delete does not require confirmation when PR already exists", () => {
+  // delete: no confirmation when PR already exists (regardless of state)
+  test("delete does not require confirmation when PR exists (completed)", () => {
     expect(confirmationMessage("delete", baseCtx({
       status: "completed",
       hasFinalBranch: true,
+      hasPrUrl: true,
+    }))).toBeNull();
+  });
+
+  test("delete does not require confirmation when PR exists (running)", () => {
+    expect(confirmationMessage("delete", baseCtx({
+      status: "running",
+      hasPrUrl: true,
+    }))).toBeNull();
+  });
+
+  test("delete does not require confirmation when PR exists (setup)", () => {
+    expect(confirmationMessage("delete", baseCtx({
+      status: "setup",
       hasPrUrl: true,
     }))).toBeNull();
   });

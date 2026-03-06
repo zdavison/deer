@@ -137,10 +137,13 @@ export function confirmationMessage(action: AgentAction, ctx: AgentContext): str
     case "kill":
       return "Kill this agent? (y/n)";
     case "delete":
+      if (ctx.hasPrUrl) {
+        return null;
+      }
       if (ACTIVE_STATES.has(ctx.status)) {
         return "Agent is still running — delete? (y/n)";
       }
-      if (ctx.hasFinalBranch && !ctx.hasPrUrl) {
+      if (ctx.hasFinalBranch) {
         return "No PR created — delete and lose work? (y/n)";
       }
       return null;
