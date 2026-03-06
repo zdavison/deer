@@ -128,6 +128,8 @@ ${truncatedDiff}`;
       stdout: "pipe",
       stderr: "pipe",
       timeout: 60_000,
+      // Run in /tmp so this doesn't pollute the user's project history in ~/.claude/projects/
+      cwd: "/tmp",
     });
     const exitCode = await proc.exited;
     if (exitCode !== 0) throw new Error("claude exited with non-zero status");
