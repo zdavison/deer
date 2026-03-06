@@ -587,9 +587,9 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     const abortController = new AbortController();
     agent.abortController = abortController;
 
-    // Start elapsed timer
+    // Start elapsed timer — pauses while agent is idle
     agent.timer = setInterval(() => {
-      agent.elapsed++;
+      if (!agent.idle) agent.elapsed++;
       setAgents((prev) => [...prev]);
     }, 1000);
 
