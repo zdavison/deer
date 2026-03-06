@@ -7,7 +7,6 @@ export const STATUS_DISPLAY: Record<AgentStatus, { icon: string; color: string }
   setup:       { icon: "⏳", color: "yellow" },
   running:     { icon: "●",  color: "cyan" },
   teardown:    { icon: "⬆",  color: "blue" },
-  completed:   { icon: "✓",  color: "green" },
   failed:      { icon: "✗",  color: "red" },
   cancelled:   { icon: "⊘",  color: "gray" },
   interrupted: { icon: "!",  color: "yellow" },

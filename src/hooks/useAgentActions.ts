@@ -24,11 +24,10 @@ import {
 
 async function saveToHistory(agent: AgentState, repoPath: string): Promise<void> {
   if (agent.historical) return;
-  const status = agent.status as "completed" | "failed" | "cancelled";
   const task: PersistedTask = {
     taskId: agent.taskId,
     prompt: agent.prompt,
-    status,
+    status: agent.status as PersistedTask["status"],
     createdAt: new Date(Date.now() - agent.elapsed * 1000).toISOString(),
     completedAt: new Date().toISOString(),
     elapsed: agent.elapsed,
@@ -202,11 +201,10 @@ export function useAgentActions({
 
       if (abortController.signal.aborted) return;
 
-      // Process exited — mark completed, user decides what to do next
-      agent.idle = false;
-      agent.status = "completed";
+      // Process exited — agent is now at rest, idle until deleted
+      agent.idle = true;
       agent.result = { finalBranch: handle.branch, prUrl: "" };
-      agent.lastActivity = "Task complete — press p to create PR, ⏎ to attach";
+      agent.lastActivity = "Idle — press p to create PR, ⏎ to attach";
     } catch (err) {
       if (!abortController.signal.aborted) {
         agent.status = transition(agent.status, "ERROR") ?? "failed";

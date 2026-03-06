@@ -9,7 +9,6 @@ export type AgentState =
   | "setup"
   | "running"
   | "teardown"
-  | "completed"
   | "failed"
   | "cancelled"
   | "interrupted";
@@ -53,8 +52,7 @@ interface ActionBinding {
 const TRANSITIONS: Record<AgentState, Partial<Record<AgentEvent, AgentState>>> = {
   setup:       { SETUP_COMPLETE: "running", ERROR: "failed", USER_KILL: "cancelled" },
   running:     { TEARDOWN_START: "teardown", ERROR: "failed", USER_KILL: "cancelled", SESSION_CLOSE: "interrupted" },
-  teardown:    { TEARDOWN_COMPLETE: "completed", ERROR: "failed" },
-  completed:   {},
+  teardown:    { TEARDOWN_COMPLETE: "running", ERROR: "failed" },
   failed:      {},
   cancelled:   {},
   interrupted: { SETUP_COMPLETE: "running" },
@@ -74,7 +72,6 @@ const ACTIONS_BY_STATE: Record<AgentState, AgentAction[]> = {
   setup:       ["kill", "delete", "toggle_logs"],
   running:     ["attach", "kill", "open_shell", "delete", "toggle_logs", "retry"],
   teardown:    ["open_shell", "delete", "toggle_logs"],
-  completed:   ["attach", "create_pr", "open_pr", "update_pr", "retry", "open_shell", "delete", "toggle_logs"],
   failed:      ["retry", "open_shell", "delete", "toggle_logs"],
   cancelled:   ["retry", "open_shell", "delete", "toggle_logs"],
   interrupted: ["retry", "open_shell", "delete", "toggle_logs"],
@@ -103,9 +100,9 @@ export const ACTION_BINDINGS: Record<AgentAction, ActionBinding> = {
  */
 export function availableActions(ctx: AgentContext): AgentAction[] {
   const base = [...ACTIONS_BY_STATE[ctx.status]];
-  // Idle agents can create or update PRs (Claude is alive but waiting for input)
+  // Idle agents can create/update PRs and retry (Claude is at rest)
   if (ctx.isIdle && !base.includes("create_pr")) {
-    base.push("create_pr", "open_pr", "update_pr");
+    base.push("create_pr", "open_pr", "update_pr", "retry");
   }
   return base.filter((action) => {
     switch (action) {

@@ -93,7 +93,7 @@ describe("history persistence", () => {
     return {
       taskId: generateTaskId(),
       prompt: "fix the login bug",
-      status: "completed",
+      status: "cancelled",
       createdAt: new Date().toISOString(),
       completedAt: new Date().toISOString(),
       elapsed: 45,
@@ -227,18 +227,18 @@ describe("history persistence", () => {
       elapsed: 0,
     }));
 
-    // Simulate completion — upsert should replace the running entry
+    // Upsert should replace the running entry
     await upsertHistory(repoPath, makeTask({
       taskId,
       prompt: "fix the bug",
-      status: "completed",
+      status: "cancelled",
       completedAt: new Date().toISOString(),
       elapsed: 120,
     }));
 
     const loaded = await loadHistory(repoPath);
     expect(loaded).toHaveLength(1);
-    expect(loaded[0].status).toBe("completed");
+    expect(loaded[0].status).toBe("cancelled");
     expect(loaded[0].elapsed).toBe(120);
   });
 
@@ -250,14 +250,14 @@ describe("history persistence", () => {
     await upsertHistory(repoPath, makeTask({ taskId, prompt: "the task", status: "running", completedAt: null, elapsed: 0 }));
     await upsertHistory(repoPath, makeTask({ prompt: "task after" }));
 
-    // Now update the running task to completed
-    await upsertHistory(repoPath, makeTask({ taskId, prompt: "the task", status: "completed" }));
+    // Now update the running task to cancelled
+    await upsertHistory(repoPath, makeTask({ taskId, prompt: "the task", status: "cancelled" }));
 
     const loaded = await loadHistory(repoPath);
     expect(loaded).toHaveLength(3);
     expect(loaded[0].prompt).toBe("task before");
     expect(loaded[1].prompt).toBe("the task");
-    expect(loaded[1].status).toBe("completed");
+    expect(loaded[1].status).toBe("cancelled");
     expect(loaded[2].prompt).toBe("task after");
   });
 

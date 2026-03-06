@@ -86,7 +86,7 @@ export function historicalAgent(task: PersistedTask, id: number): AgentState {
     id,
     taskId: task.taskId,
     prompt: task.prompt,
-    status: wasInterrupted ? "interrupted" : task.status,
+    status: wasInterrupted ? "interrupted" : (task.status as AgentStatus),
     elapsed: task.elapsed,
     lastActivity: wasInterrupted ? "Interrupted — deer was closed" : task.lastActivity,
     result: task.prUrl ? { finalBranch: task.finalBranch ?? "", prUrl: task.prUrl } : null,

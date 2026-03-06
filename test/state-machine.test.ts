@@ -42,8 +42,8 @@ describe("transition", () => {
     expect(transition("running", "SESSION_CLOSE")).toBe("interrupted");
   });
 
-  test("teardown → completed on TEARDOWN_COMPLETE", () => {
-    expect(transition("teardown", "TEARDOWN_COMPLETE")).toBe("completed");
+  test("teardown → running on TEARDOWN_COMPLETE", () => {
+    expect(transition("teardown", "TEARDOWN_COMPLETE")).toBe("running");
   });
 
   test("teardown → failed on ERROR", () => {
@@ -55,7 +55,6 @@ describe("transition", () => {
   });
 
   test("invalid transition returns null", () => {
-    expect(transition("completed", "SETUP_COMPLETE")).toBeNull();
     expect(transition("failed", "TEARDOWN_COMPLETE")).toBeNull();
     expect(transition("cancelled", "ERROR")).toBeNull();
     expect(transition("setup", "TEARDOWN_COMPLETE")).toBeNull();
@@ -63,7 +62,7 @@ describe("transition", () => {
   });
 
   test("terminal states have no transitions", () => {
-    const terminalStates: AgentState[] = ["completed", "failed", "cancelled"];
+    const terminalStates: AgentState[] = ["failed", "cancelled"];
     const events: AgentEvent[] = [
       "SETUP_COMPLETE", "TEARDOWN_START", "TEARDOWN_COMPLETE",
       "ERROR", "USER_KILL", "SESSION_CLOSE",
@@ -113,59 +112,6 @@ describe("availableActions", () => {
     expect(actions).toContain("toggle_logs");
   });
 
-  test("completed state has attach, create_pr, delete, toggle_logs", () => {
-    const actions = availableActions(baseCtx({
-      status: "completed",
-      hasPrUrl: false,
-      hasFinalBranch: true,
-      hasHandle: true,
-    }));
-    expect(actions).toContain("attach");
-    expect(actions).toContain("create_pr");
-    expect(actions).toContain("delete");
-    expect(actions).toContain("toggle_logs");
-    expect(actions).not.toContain("open_pr");
-  });
-
-  test("completed state: create_pr not available when PR already exists", () => {
-    const actions = availableActions(baseCtx({
-      status: "completed",
-      hasPrUrl: true,
-      hasFinalBranch: true,
-      hasHandle: true,
-    }));
-    expect(actions).not.toContain("create_pr");
-    expect(actions).toContain("open_pr");
-  });
-
-  test("completed state: open_pr requires hasPrUrl", () => {
-    const actions = availableActions(baseCtx({
-      status: "completed",
-      hasPrUrl: false,
-      hasFinalBranch: true,
-    }));
-    expect(actions).not.toContain("open_pr");
-  });
-
-  test("completed state: delete allowed when prState is open", () => {
-    const actions = availableActions(baseCtx({
-      status: "completed",
-      hasPrUrl: true,
-      hasFinalBranch: true,
-      prState: "open",
-    }));
-    expect(actions).toContain("delete");
-  });
-
-  test("completed state: delete allowed when prState is merged", () => {
-    const actions = availableActions(baseCtx({
-      status: "completed",
-      hasPrUrl: true,
-      hasFinalBranch: true,
-      prState: "merged",
-    }));
-    expect(actions).toContain("delete");
-  });
 
   test("failed state has retry, delete, toggle_logs", () => {
     const actions = availableActions(baseCtx({
@@ -185,7 +131,7 @@ describe("availableActions", () => {
   });
 
   test("retry is available in all terminal states", () => {
-    for (const status of ["failed", "completed", "cancelled", "interrupted"] as const) {
+    for (const status of ["failed", "cancelled", "interrupted"] as const) {
       const actions = availableActions(baseCtx({ status }));
       expect(actions).toContain("retry");
     }
@@ -208,7 +154,7 @@ describe("availableActions", () => {
     expect(actions).toContain("toggle_logs");
     expect(actions).not.toContain("attach");
   });
-  test("idle running state has create_pr available", () => {
+  test("idle running state has create_pr and retry available", () => {
     const actions = availableActions(baseCtx({
       status: "running",
       isIdle: true,
@@ -216,8 +162,17 @@ describe("availableActions", () => {
       hasHandle: true,
     }));
     expect(actions).toContain("create_pr");
+    expect(actions).toContain("retry");
     expect(actions).toContain("attach");
     expect(actions).toContain("kill");
+  });
+
+  test("non-idle running state does not have retry", () => {
+    const actions = availableActions(baseCtx({
+      status: "running",
+      isIdle: false,
+    }));
+    expect(actions).not.toContain("retry");
   });
 
   test("idle running state has open_pr when PR exists", () => {
@@ -307,12 +262,13 @@ describe("resolveKeypress", () => {
 
 describe("update_pr action", () => {
   const baseCtx = (overrides: Partial<AgentContext>): AgentContext => ({
-    status: "completed",
+    status: "running",
     hasPrUrl: true,
     hasFinalBranch: true,
     hasHandle: true,
-    isIdle: false,
+    isIdle: true,
     prState: "open",
+    hasWorktreePath: true,
     ...overrides,
   });
 
@@ -346,9 +302,9 @@ describe("update_pr action", () => {
     expect(actions).toContain("update_pr");
   });
 
-  test("update_pr not available in non-terminal non-idle states", () => {
+  test("update_pr not available in non-idle states", () => {
     for (const status of ["setup", "teardown", "cancelled", "interrupted"] as const) {
-      const actions = availableActions(baseCtx({ status, hasPrUrl: true }));
+      const actions = availableActions(baseCtx({ status, hasPrUrl: true, isIdle: false }));
       expect(actions).not.toContain("update_pr");
     }
   });
