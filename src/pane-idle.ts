@@ -1,4 +1,4 @@
-import { IDLE_THRESHOLD } from "./dashboard-utils";
+import { IDLE_THRESHOLD } from "./constants";
 
 export interface PaneState {
   snapshot: string;

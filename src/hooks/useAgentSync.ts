@@ -13,7 +13,6 @@ import { TASK_SYNC_DEBOUNCE_MS, TASK_SYNC_SAFETY_POLL_MS } from "../constants";
 
 export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig | null>) {
   const [agents, setAgents] = useState<AgentState[]>([]);
-  const nextId = useRef(1);
   const agentsRef = useRef(agents);
   agentsRef.current = agents;
   const deletedTaskIdsRef = useRef(new Set<string>());
@@ -32,15 +31,18 @@ export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig
   // ── Sync state from state files + history ──────────────────────────
 
   const syncWithHistory = useCallback(async () => {
-    // Live tasks: read state.json files written by owning deer instances
+    // Live tasks: read all state.json files in parallel
     const liveTaskIds = await scanLiveTaskIds();
-    const liveStateFiles = new Map<string, Awaited<ReturnType<typeof readTaskState>>>();
-    for (const taskId of liveTaskIds) {
-      if (!deletedTaskIdsRef.current.has(taskId)) {
-        const state = await readTaskState(taskId);
-        if (state) liveStateFiles.set(taskId, state);
-      }
-    }
+    const liveStateResults = await Promise.all(
+      liveTaskIds
+        .filter(id => !deletedTaskIdsRef.current.has(id))
+        .map(async id => ({ id, state: await readTaskState(id) })),
+    );
+    const liveStateFiles = new Map(
+      liveStateResults
+        .filter((r): r is { id: string; state: NonNullable<typeof r.state> } => r.state !== null)
+        .map(r => [r.id, r.state]),
+    );
 
     // Completed tasks: JSONL history (only non-running entries now that live tasks
     // use state.json; running entries are kept as a fallback for tasks started by
@@ -68,7 +70,6 @@ export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig
         continue;
       }
 
-      const id = existing?.id ?? nextId.current++;
       const stateFile = liveStateFiles.get(taskId);
 
       if (stateFile) {
@@ -82,7 +83,7 @@ export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig
             const cleanup = await runtime.restoreProxy?.(worktreePath, configRef.current.network.allowlist);
             if (cleanup) restoredProxiesRef.current.set(taskId, cleanup);
           }
-          newAgents.push(liveTaskFromStateFile(stateFile, id));
+          newAgents.push(liveTaskFromStateFile(stateFile));
           continue;
         }
 
@@ -92,14 +93,14 @@ export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig
           proxyCleanup();
           restoredProxiesRef.current.delete(taskId);
         }
-        newAgents.push(historicalAgentFromStateFile(stateFile, id));
+        newAgents.push(historicalAgentFromStateFile(stateFile));
         continue;
       }
 
       // No state.json — fall back to JSONL history entry
       const fileTask = fileTasks.find(t => t.taskId === taskId);
       if (fileTask) {
-        newAgents.push(historicalAgent(fileTask, id));
+        newAgents.push(historicalAgent(fileTask));
       }
     }
 
@@ -162,5 +163,5 @@ export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig
     };
   }, [syncWithHistory]);
 
-  return { agents, setAgents, agentsRef, nextId, deletedTaskIdsRef, baseBranchRef, restoredProxiesRef, syncWithHistory };
+  return { agents, setAgents, agentsRef, deletedTaskIdsRef, baseBranchRef, restoredProxiesRef, syncWithHistory };
 }

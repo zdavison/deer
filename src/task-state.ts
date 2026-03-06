@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { dataDir } from "./task";
 import type { TaskMetadata } from "./task";
@@ -20,6 +20,8 @@ export interface TaskStateFile extends TaskMetadata {
   createdAt: string;
   /** PID of the deer process that owns this task */
   ownerPid: number;
+  /** Path to the git worktree for this task */
+  worktreePath: string;
 }
 
 // ── Paths ─────────────────────────────────────────────────────────────
@@ -63,9 +65,8 @@ export async function writeTaskState(state: TaskStateFile): Promise<void> {
  * Called when a task completes, fails, or is deleted.
  */
 export async function removeTaskState(taskId: string): Promise<void> {
-  const path = taskStatePath(taskId);
   try {
-    await Bun.$`rm -f ${path}`.quiet();
+    await unlink(taskStatePath(taskId));
   } catch {
     // Ignore — file may already be gone
   }

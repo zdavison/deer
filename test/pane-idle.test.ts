@@ -1,7 +1,7 @@
 import { test, expect, describe } from "bun:test";
 import { advancePaneState, isIdleState, seedIdleState } from "../src/pane-idle";
 import type { PaneState } from "../src/pane-idle";
-import { IDLE_THRESHOLD } from "../src/dashboard-utils";
+import { IDLE_THRESHOLD } from "../src/constants";
 
 function emptyState(): PaneState {
   return { snapshot: "", unchangedCount: 0 };

@@ -1,35 +1,6 @@
 import type { AgentStatus } from "./state-machine";
 import type { AgentState } from "./agent-state";
-import {
-  MAX_LOG_LINES,
-  DASHBOARD_POLL_MS,
-  IDLE_THRESHOLD,
-  DEFAULT_MODEL,
-  PR_MERGE_CHECK_INTERVAL_MS,
-  MAX_VISIBLE_LOGS,
-  LOG_LINES_PER_ENTRY,
-  ENTRY_ROWS_BASE,
-  ENTRY_ROWS_WITH_PR,
-  UPLOAD_FRAMES,
-} from "./constants";
-
-// ── Re-exports from constants ───────────────────────────────────────
-// Kept for backwards compatibility with existing imports in dashboard.tsx etc.
-
-export {
-  MAX_LOG_LINES,
-  MAX_VISIBLE_LOGS,
-  LOG_LINES_PER_ENTRY,
-  ENTRY_ROWS_BASE,
-  ENTRY_ROWS_WITH_PR,
-  UPLOAD_FRAMES,
-  PR_MERGE_CHECK_INTERVAL_MS,
-  IDLE_THRESHOLD,
-  DEFAULT_MODEL,
-};
-
-export const MODEL = DEFAULT_MODEL;
-export const POLL_MS = DASHBOARD_POLL_MS;
+import { MAX_LOG_LINES } from "./constants";
 
 // ── Constants ────────────────────────────────────────────────────────
 

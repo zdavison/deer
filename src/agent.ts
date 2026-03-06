@@ -7,8 +7,7 @@
 
 import { join, resolve } from "node:path";
 import { createWorktree, removeWorktree } from "./git/worktree";
-import { createPullRequest, cleanupWorktree } from "./git/finalize";
-import type { CreatePRResult } from "./git/finalize";
+import { cleanupWorktree } from "./git/finalize";
 import { launchSandbox, isTmuxSessionDead, captureTmuxPane } from "./sandbox/index";
 import type { SandboxSession, SandboxRuntime } from "./sandbox/index";
 import { generateTaskId, dataDir } from "./task";
@@ -57,6 +56,11 @@ export interface AgentRunOptions {
   runtime: SandboxRuntime;
   /** Callback for status updates */
   onStatus?: (status: AgentStatus) => void;
+  /**
+   * Pre-generated task ID. If not provided, one is generated internally.
+   * Pass this when you need to know the taskId before `startAgent` resolves.
+   */
+  taskId?: string;
   /**
    * If provided, resume an existing Claude conversation instead of starting
    * a fresh one. The worktree and branch are reused; `--continue` is passed
@@ -127,7 +131,7 @@ async function dismissBypassDialog(sessionName: string): Promise<void> {
  * Start an agent: create worktree, launch sandbox, return handle.
  *
  * The agent runs Claude Code interactively in a tmux session.
- * Call `waitForCompletion()` to block until the agent finishes,
+ * Poll `isTmuxSessionDead` to detect when the agent finishes,
  * or use the handle to kill it / attach to it.
  */
 export async function startAgent(options: AgentRunOptions): Promise<AgentHandle> {
@@ -142,7 +146,7 @@ export async function startAgent(options: AgentRunOptions): Promise<AgentHandle>
     continueSession,
   } = options;
 
-  const taskId = continueSession?.taskId ?? generateTaskId();
+  const taskId = options.taskId ?? continueSession?.taskId ?? generateTaskId();
   const sessionName = `deer-${taskId}`;
 
   let worktreePath: string;
@@ -212,46 +216,6 @@ export async function startAgent(options: AgentRunOptions): Promise<AgentHandle>
 }
 
 /**
- * Poll until the agent's tmux session exits.
- * Resolves when the sandboxed Claude process finishes.
- *
- * @param handle - The agent handle from `startAgent()`
- * @param signal - Optional AbortSignal to cancel polling (e.g. on user kill)
- */
-export async function waitForCompletion(
-  handle: AgentHandle,
-  signal?: AbortSignal,
-): Promise<void> {
-  while (true) {
-    if (signal?.aborted) return;
-
-    const dead = await isTmuxSessionDead(handle.sessionName);
-    if (dead) return;
-
-    await Bun.sleep(AGENT_POLL_INTERVAL_MS);
-  }
-}
-
-/**
- * Finalize an agent after it completes: commit, push, create PR.
- */
-export async function createAgentPR(
-  handle: AgentHandle,
-  repoPath: string,
-  baseBranch: string,
-  prompt: string,
-): Promise<CreatePRResult> {
-  return createPullRequest({
-    repoPath,
-    worktreePath: handle.worktreePath,
-    branch: handle.branch,
-    baseBranch,
-    prompt,
-  });
-}
-
-
-/**
  * Get the last N lines of tmux output for an agent.
  */
 export async function getAgentOutput(
@@ -283,22 +247,16 @@ export async function destroyAgent(
 export async function deleteTask(
   taskId: string,
   repoPath: string,
-  handle?: AgentHandle | null,
 ): Promise<void> {
   const worktreePath = join(dataDir(), "tasks", taskId, "worktree");
   const taskDir = join(dataDir(), "tasks", taskId);
-  const branch = handle?.branch ?? `deer/${taskId}`;
+  const branch = `deer/${taskId}`;
 
-  if (handle) {
-    // Kill the tmux session via the handle
-    await handle.kill().catch(() => {});
-  } else {
-    // No handle — kill the tmux session by its conventional name
-    await Bun.spawn(
-      ["tmux", "kill-session", "-t", `deer-${taskId}`],
-      { stdout: "pipe", stderr: "pipe" },
-    ).exited;
-  }
+  // Kill the tmux session by its conventional name
+  await Bun.spawn(
+    ["tmux", "kill-session", "-t", `deer-${taskId}`],
+    { stdout: "pipe", stderr: "pipe" },
+  ).exited;
 
   // Remove the git worktree and branch
   await cleanupWorktree(repoPath, worktreePath, branch);

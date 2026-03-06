@@ -14,16 +14,18 @@ import { usePromptHistory } from "./hooks/usePromptHistory";
 import { useKeyboardInput } from "./hooks/useKeyboardInput";
 import {
   STATUS_DISPLAY,
-  UPLOAD_FRAMES,
-  MAX_VISIBLE_LOGS,
-  LOG_LINES_PER_ENTRY,
-  ENTRY_ROWS_BASE,
-  ENTRY_ROWS_WITH_PR,
   truncate,
   formatTime,
   isActive,
   prStateColor,
 } from "./dashboard-utils";
+import {
+  UPLOAD_FRAMES,
+  MAX_VISIBLE_LOGS,
+  LOG_LINES_PER_ENTRY,
+  ENTRY_ROWS_BASE,
+  ENTRY_ROWS_WITH_PR,
+} from "./constants";
 
 export { stripAnsi } from "./dashboard-utils";
 
@@ -41,7 +43,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   const guardRef = useRef<ClaudeConfigGuard | null>(null);
   const configRef = useRef<DeerConfig | null>(null);
 
-  const { agents, setAgents, agentsRef, nextId, deletedTaskIdsRef, baseBranchRef, restoredProxiesRef, syncWithHistory } = useAgentSync(cwd, configRef);
+  const { agents, setAgents, agentsRef, deletedTaskIdsRef, baseBranchRef, restoredProxiesRef, syncWithHistory } = useAgentSync(cwd, configRef);
 
   const {
     promptHistory,
@@ -56,10 +58,9 @@ export default function Dashboard({ cwd }: { cwd: string }) {
 
   usePrPoller(agentsRef, setAgents);
 
-  const { spawnAgent, killAgent, attachToAgent, openShell, createPr, updatePr, deleteAgent } = useAgentActions({
+  const { spawnAgent, killAgent, abortAllAgents, attachToAgent, openShell, createPr, updatePr, deleteAgent, retryAgent } = useAgentActions({
     cwd,
     setAgents,
-    nextId,
     deletedTaskIdsRef,
     baseBranchRef,
     configRef,
@@ -94,6 +95,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     createPr,
     updatePr,
     deleteAgent,
+    retryAgent,
     exit,
   });
 
@@ -120,11 +122,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     const cleanup = () => {
       // Abort deer's own polling loops so state updates stop, but leave the
       // tmux sessions alive so agents continue running after a restart.
-      for (const agent of agentsRef.current) {
-        if (isActive(agent)) {
-          agent.abortController?.abort();
-        }
-      }
+      abortAllAgents();
       for (const proxyCleanup of restoredProxiesRef.current.values()) {
         proxyCleanup();
       }
@@ -247,7 +245,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
             const logWidth = Math.max(termWidth - 5, 5);
 
             return (
-              <Box key={agent.id} flexDirection="column">
+              <Box key={agent.taskId} flexDirection="column">
                 {/* Title line */}
                 <Box gap={1}>
                   <Box width={2}>
@@ -382,8 +380,8 @@ export default function Dashboard({ cwd }: { cwd: string }) {
                   {selected && availableActions({
                     status: selected.status,
                     hasPrUrl: !!selected.result?.prUrl,
-                    hasFinalBranch: !!selected.result?.finalBranch || !!selected.handle?.branch,
-                    hasHandle: !!selected.handle,
+                    hasFinalBranch: !!selected.result?.finalBranch || !!selected.branch,
+                    hasHandle: selected.status === "running",
                     isIdle: selected.idle,
                     prState: selected.prState,
                     hasWorktreePath: !!selected.taskId,

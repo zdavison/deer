@@ -1,7 +1,7 @@
 import { test, expect, describe, afterEach, setDefaultTimeout } from "bun:test";
 
 setDefaultTimeout(30_000);
-import { startAgent, waitForCompletion, getAgentOutput, destroyAgent, deleteTask } from "../src/agent";
+import { startAgent, getAgentOutput, destroyAgent, deleteTask } from "../src/agent";
 import type { AgentHandle, AgentStatus } from "../src/agent";
 import { dataDir } from "../src/task";
 import { DEFAULT_CONFIG } from "../src/config";
@@ -71,32 +71,22 @@ describe("agent lifecycle", () => {
     expect(statuses[0].phase).toBe("setup");
   });
 
-  test("waitForCompletion resolves when the session is killed", async () => {
+  test("startAgent respects a pre-generated taskId", async () => {
     const repo = await createTestRepo();
     repos.push(repo);
 
+    const preTaskId = "deer_pretestid0abc";
     const handle = await startAgent({
       repoPath: repo,
-      prompt: "test",
+      prompt: "echo hello",
       baseBranch: "main",
       config: testConfig,
       runtime: nonoRuntime,
+      taskId: preTaskId,
     });
     handles.push(handle);
 
-    // Kill the session after a short delay to trigger completion
-    setTimeout(() => handle.kill(), 1_000);
-
-    const timeout = new Promise<"timeout">((resolve) =>
-      setTimeout(() => resolve("timeout"), 25_000),
-    );
-
-    const result = await Promise.race([
-      waitForCompletion(handle).then(() => "completed" as const),
-      timeout,
-    ]);
-
-    expect(result).toBe("completed");
+    expect(handle.taskId).toBe(preTaskId);
   });
 
   test("getAgentOutput returns tmux pane content", async () => {
@@ -148,7 +138,7 @@ describe("agent lifecycle", () => {
     expect(exists).toBe(false);
   });
 
-  test("deleteTask with handle kills session, removes worktree and task directory", async () => {
+  test("deleteTask kills session, removes worktree and task directory", async () => {
     const repo = await createTestRepo();
     repos.push(repo);
 
@@ -160,7 +150,7 @@ describe("agent lifecycle", () => {
       runtime: nonoRuntime,
     });
 
-    await deleteTask(handle.taskId, repo, handle);
+    await deleteTask(handle.taskId, repo);
 
     // tmux session should be gone
     const proc = Bun.spawn(["tmux", "has-session", "-t", handle.sessionName], {
@@ -178,65 +168,6 @@ describe("agent lifecycle", () => {
     let dirExists = false;
     try { statSync(taskDir); dirExists = true; } catch { /* gone */ }
     expect(dirExists).toBe(false);
-  });
-
-  test("deleteTask without handle kills session, removes worktree and task directory", async () => {
-    const repo = await createTestRepo();
-    repos.push(repo);
-
-    const handle = await startAgent({
-      repoPath: repo,
-      prompt: "test",
-      baseBranch: "main",
-      config: testConfig,
-      runtime: nonoRuntime,
-    });
-
-    // Simulate the "no handle" case — deleteTask should still clean everything up
-    await deleteTask(handle.taskId, repo, null);
-
-    // tmux session should be gone
-    const proc = Bun.spawn(["tmux", "has-session", "-t", handle.sessionName], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    expect(await proc.exited).not.toBe(0);
-
-    // Worktree should be removed
-    expect(await Bun.file(join(handle.worktreePath, "README.md")).exists()).toBe(false);
-
-    // Task directory should be removed
-    const taskDir = join(dataDir(), "tasks", handle.taskId);
-    const { statSync } = await import("node:fs");
-    let dirExists = false;
-    try { statSync(taskDir); dirExists = true; } catch { /* gone */ }
-    expect(dirExists).toBe(false);
-  });
-
-  test("waitForCompletion respects AbortSignal", async () => {
-    const repo = await createTestRepo();
-    repos.push(repo);
-
-    const handle = await startAgent({
-      repoPath: repo,
-      prompt: "sleep 60",
-      baseBranch: "main",
-      config: testConfig,
-      runtime: nonoRuntime,
-    });
-    handles.push(handle);
-
-    const controller = new AbortController();
-
-    // Abort after 200ms
-    setTimeout(() => controller.abort(), 200);
-
-    const start = Date.now();
-    await waitForCompletion(handle, controller.signal);
-    const elapsed = Date.now() - start;
-
-    // Should have returned quickly, not waited the full poll interval
-    expect(elapsed).toBeLessThan(5_000);
   });
 
   test("startAgent with continueSession reuses existing worktree and taskId", async () => {

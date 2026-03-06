@@ -1,9 +1,6 @@
-import { join } from "node:path";
-import { dataDir } from "./task";
 import type { PersistedTask } from "./task";
 import type { TaskStateFile } from "./task-state";
 import type { AgentStatus } from "./state-machine";
-import type { AgentHandle } from "./agent";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -13,8 +10,7 @@ interface TeardownResult {
 }
 
 export interface AgentState {
-  id: number;
-  /** Persistent task ID (deer_xxx format) for history storage */
+  /** Persistent task ID (deer_xxx format) for history storage and React key */
   taskId: string;
   prompt: string;
   /** @example "main" */
@@ -26,14 +22,10 @@ export interface AgentState {
   lastActivity: string;
   /** Log lines (capped) */
   logs: string[];
-  /** Agent handle from the sandbox module */
-  handle: AgentHandle | null;
   /** Teardown result */
   result: TeardownResult | null;
   /** Error message on failure */
   error: string;
-  /** Timer handle */
-  timer: ReturnType<typeof setInterval> | null;
   /** PR state on GitHub */
   prState: "open" | "merged" | "closed" | null;
   /** True if this agent was loaded from history (not spawned this session) */
@@ -44,10 +36,14 @@ export interface AgentState {
   creatingPr: boolean;
   /** True while an existing PR is being updated (new commits pushed) */
   updatingPr: boolean;
-  /** AbortController for cancelling the wait loop */
-  abortController: AbortController | null;
   /** True if this task has been explicitly deleted (suppresses history write on cleanup) */
   deleted: boolean;
+  /** ISO 8601 timestamp when the task was created */
+  createdAt: string;
+  /** Path to the git worktree for this task */
+  worktreePath: string;
+  /** Git branch name for this task */
+  branch: string;
 }
 
 // ── Factory ──────────────────────────────────────────────────────────
@@ -55,7 +51,6 @@ export interface AgentState {
 /** Factory for AgentState with sensible defaults. */
 export function createAgentState(overrides: Partial<AgentState>): AgentState {
   return {
-    id: 0,
     taskId: "",
     prompt: "",
     baseBranch: "main",
@@ -63,17 +58,17 @@ export function createAgentState(overrides: Partial<AgentState>): AgentState {
     elapsed: 0,
     lastActivity: "",
     logs: [],
-    handle: null,
     result: null,
     error: "",
-    timer: null,
     prState: null,
     historical: false,
     idle: false,
     creatingPr: false,
     updatingPr: false,
-    abortController: null,
     deleted: false,
+    createdAt: new Date().toISOString(),
+    worktreePath: "",
+    branch: "",
     ...overrides,
   };
 }
@@ -81,10 +76,9 @@ export function createAgentState(overrides: Partial<AgentState>): AgentState {
 // ── Historical agent helpers ─────────────────────────────────────────
 
 /** Convert a persisted task to a read-only AgentState for display. */
-export function historicalAgent(task: PersistedTask, id: number): AgentState {
+export function historicalAgent(task: PersistedTask): AgentState {
   const wasInterrupted = task.status === "running";
   return createAgentState({
-    id,
     taskId: task.taskId,
     prompt: task.prompt,
     status: wasInterrupted ? "interrupted" : (task.status as AgentStatus),
@@ -93,6 +87,8 @@ export function historicalAgent(task: PersistedTask, id: number): AgentState {
     result: task.prUrl ? { finalBranch: task.finalBranch ?? "", prUrl: task.prUrl } : null,
     error: task.error || "",
     historical: true,
+    createdAt: task.createdAt,
+    branch: task.finalBranch ?? `deer/${task.taskId}`,
   });
 }
 
@@ -101,11 +97,8 @@ export function historicalAgent(task: PersistedTask, id: number): AgentState {
  * another deer instance. Includes full logs, idle status, and elapsed
  * as written by the owning instance.
  */
-export function liveTaskFromStateFile(stateFile: TaskStateFile, id: number): AgentState {
-  const sessionName = `deer-${stateFile.taskId}`;
-  const worktreePath = join(dataDir(), "tasks", stateFile.taskId, "worktree");
+export function liveTaskFromStateFile(stateFile: TaskStateFile): AgentState {
   return createAgentState({
-    id,
     taskId: stateFile.taskId,
     prompt: stateFile.prompt,
     status: "running",
@@ -117,18 +110,9 @@ export function liveTaskFromStateFile(stateFile: TaskStateFile, id: number): Age
     result: stateFile.prUrl
       ? { finalBranch: stateFile.finalBranch ?? "", prUrl: stateFile.prUrl }
       : null,
-    handle: {
-      taskId: stateFile.taskId,
-      sessionName,
-      worktreePath,
-      branch: stateFile.finalBranch ?? `deer/${stateFile.taskId}`,
-      async kill() {
-        await Bun.spawn(
-          ["tmux", "kill-session", "-t", sessionName],
-          { stdout: "pipe", stderr: "pipe" },
-        ).exited;
-      },
-    },
+    createdAt: stateFile.createdAt,
+    worktreePath: stateFile.worktreePath,
+    branch: stateFile.finalBranch ?? `deer/${stateFile.taskId}`,
   });
 }
 
@@ -136,9 +120,8 @@ export function liveTaskFromStateFile(stateFile: TaskStateFile, id: number): Age
  * Build an AgentState from a state file whose owning process has died.
  * Shows the task as interrupted with its last known state.
  */
-export function historicalAgentFromStateFile(stateFile: TaskStateFile, id: number): AgentState {
+export function historicalAgentFromStateFile(stateFile: TaskStateFile): AgentState {
   return createAgentState({
-    id,
     taskId: stateFile.taskId,
     prompt: stateFile.prompt,
     status: "interrupted",
@@ -150,5 +133,8 @@ export function historicalAgentFromStateFile(stateFile: TaskStateFile, id: numbe
       : null,
     error: stateFile.error || "",
     historical: true,
+    createdAt: stateFile.createdAt,
+    worktreePath: stateFile.worktreePath,
+    branch: stateFile.finalBranch ?? `deer/${stateFile.taskId}`,
   });
 }

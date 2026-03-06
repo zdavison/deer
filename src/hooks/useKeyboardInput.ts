@@ -23,6 +23,7 @@ interface KeyboardInputDeps {
   createPr: (agent: AgentState) => Promise<void>;
   updatePr: (agent: AgentState) => Promise<void>;
   deleteAgent: (agent: AgentState) => void;
+  retryAgent: (agent: AgentState) => void;
   exit: () => void;
 }
 
@@ -43,6 +44,7 @@ export function useKeyboardInput({
   createPr,
   updatePr,
   deleteAgent,
+  retryAgent,
   exit,
 }: KeyboardInputDeps) {
   const [selectedIdx, setSelectedIdx] = useState(0);
@@ -189,8 +191,8 @@ export function useKeyboardInput({
       const ctx = {
         status: agent.status,
         hasPrUrl: !!agent.result?.prUrl,
-        hasFinalBranch: !!agent.result?.finalBranch || !!agent.handle?.branch,
-        hasHandle: !!agent.handle,
+        hasFinalBranch: !!agent.result?.finalBranch || !!agent.branch,
+        hasHandle: agent.status === "running",
         isIdle: agent.idle,
         prState: agent.prState,
         hasWorktreePath: !!agent.taskId,
@@ -233,29 +235,10 @@ export function useKeyboardInput({
       case "toggle_logs":
         setLogExpanded((prev) => !prev);
         break;
-      case "retry": {
-        const retryPrompt = agent.prompt;
-        const retryHandle = agent.handle;
-        agent.abortController?.abort();
-        if (agent.timer) clearInterval(agent.timer);
+      case "retry":
         setSelectedIdx((prev) => Math.min(prev, Math.max(agents.length - 2, 0)));
-
-        if (retryHandle) {
-          // Kill the tmux session but preserve the worktree so Claude can
-          // continue the same conversation with --continue.
-          retryHandle.kill().catch(() => {});
-          setAgents((prev) => prev.filter((a) => a !== agent));
-          spawnAgent(retryPrompt, agent.baseBranch, {
-            taskId: retryHandle.taskId,
-            worktreePath: retryHandle.worktreePath,
-            branch: retryHandle.branch,
-          });
-        } else {
-          deleteAgent(agent);
-          spawnAgent(retryPrompt, agent.baseBranch);
-        }
+        retryAgent(agent);
         break;
-      }
       case "open_shell":
         openShell(agent);
         break;

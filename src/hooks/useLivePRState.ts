@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import type { MutableRefObject, Dispatch, SetStateAction } from "react";
 import type { AgentState } from "../agent-state";
 import { checkPrState } from "../github";
-import { PR_MERGE_CHECK_INTERVAL_MS } from "../dashboard-utils";
+import { PR_MERGE_CHECK_INTERVAL_MS } from "../constants";
 
 export function usePrPoller(
   agentsRef: MutableRefObject<AgentState[]>,
