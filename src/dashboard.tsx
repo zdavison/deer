@@ -263,7 +263,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
                   </Box>
                   <Text dimColor={!isSelected}>{pointer}</Text>
                   <Box flexGrow={1}>
-                    <Text bold={isSelected} wrap="truncate">
+                    <Text bold={isSelected} underline={isSelected} wrap="truncate">
                       {truncate(agent.prompt, titleWidth)}
                     </Text>
                   </Box>
