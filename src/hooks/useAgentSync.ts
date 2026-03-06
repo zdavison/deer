@@ -8,7 +8,7 @@ import { resolveRuntime } from "../sandbox/resolve";
 import { detectRepo } from "../git/worktree";
 import { type AgentState, historicalAgent, crossInstanceAgent } from "../agent-state";
 import type { DeerConfig } from "../config";
-import { stripAnsi, IDLE_THRESHOLD } from "../dashboard-utils";
+import { stripAnsi, IDLE_THRESHOLD, MAX_LOG_LINES, truncate } from "../dashboard-utils";
 
 export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig | null>) {
   const [agents, setAgents] = useState<AgentState[]>([]);
@@ -65,6 +65,8 @@ export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig
           const sessionName = `deer-${task.taskId}`;
           const lines = await captureTmuxPane(sessionName);
           let idle = false;
+          // Carry over logs from the previous sync so they aren't lost on each tick
+          let logs: string[] = existing?.logs ?? [];
           if (lines) {
             const snapshot = lines.map(stripAnsi).map((l) => l.trim()).filter(Boolean).join("\n");
             const paneState = crossInstancePaneStateRef.current.get(task.taskId) ?? { snapshot: "", unchangedCount: 0 };
@@ -73,12 +75,29 @@ export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig
             } else {
               paneState.unchangedCount = 0;
               paneState.snapshot = snapshot;
+
+              // Append new activity to logs when pane content changes (same logic as locally-managed agents)
+              const activityLine = lines
+                .map(stripAnsi)
+                .map((l) => l.trim())
+                .filter((l) => l.startsWith("●"))
+                .pop();
+              if (activityLine) {
+                logs = [...logs, `[tmux] ${truncate(activityLine, 200)}`];
+                if (logs.length > MAX_LOG_LINES) logs = logs.slice(-MAX_LOG_LINES);
+              } else if (logs.length === 0) {
+                // Initial load after restart: populate with the current visible pane content
+                logs = lines.map(stripAnsi).filter((l) => l.trim());
+                if (logs.length > MAX_LOG_LINES) logs = logs.slice(-MAX_LOG_LINES);
+              }
             }
             crossInstancePaneStateRef.current.set(task.taskId, paneState);
             idle = paneState.unchangedCount >= IDLE_THRESHOLD;
           }
 
-          return crossInstanceAgent(task, id, idle);
+          const agent = crossInstanceAgent(task, id, idle);
+          agent.logs = logs;
+          return agent;
         }
         // Session died — stop any proxy we restored for this task and clear pane state
         const proxyCleanup = restoredProxiesRef.current.get(task.taskId);
@@ -103,7 +122,7 @@ export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig
       newAgents.length !== currentAgents.length ||
       newAgents.some((a, i) => {
         const cur = currentAgents[i];
-        return !cur || a.taskId !== cur.taskId || a.status !== cur.status || a.lastActivity !== cur.lastActivity || a.idle !== cur.idle;
+        return !cur || a.taskId !== cur.taskId || a.status !== cur.status || a.lastActivity !== cur.lastActivity || a.idle !== cur.idle || a.logs.length !== cur.logs.length;
       });
 
     if (changed) setAgents(newAgents);
