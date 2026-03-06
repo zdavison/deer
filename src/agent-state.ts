@@ -41,6 +41,8 @@ export interface AgentState {
   idle: boolean;
   /** True while a PR is being created */
   creatingPr: boolean;
+  /** True while an existing PR is being updated (new commits pushed) */
+  updatingPr: boolean;
   /** AbortController for cancelling the wait loop */
   abortController: AbortController | null;
 }
@@ -66,6 +68,7 @@ export function createAgentState(overrides: Partial<AgentState>): AgentState {
     historical: false,
     idle: false,
     creatingPr: false,
+    updatingPr: false,
     abortController: null,
     ...overrides,
   };

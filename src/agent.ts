@@ -7,7 +7,7 @@
 
 import { join, resolve } from "node:path";
 import { createWorktree, removeWorktree } from "./git/worktree";
-import { createPullRequest, cleanupWorktree } from "./git/finalize";
+import { createPullRequest, cleanupWorktree, pushBranchUpdates } from "./git/finalize";
 import type { CreatePRResult } from "./git/finalize";
 import { launchSandbox, isTmuxSessionDead, captureTmuxPane } from "./sandbox/index";
 import type { SandboxSession, SandboxRuntime } from "./sandbox/index";
@@ -218,6 +218,22 @@ export async function createAgentPR(
     branch: handle.branch,
     baseBranch,
     prompt,
+  });
+}
+
+/**
+ * Push new commits from the worktree to the existing PR branch.
+ *
+ * @param handle - The agent handle from `startAgent()`
+ * @param finalBranch - The renamed branch that the PR targets (e.g. "deer/fix-login")
+ */
+export async function updateAgentPR(
+  handle: AgentHandle,
+  finalBranch: string,
+): Promise<void> {
+  return pushBranchUpdates({
+    worktreePath: handle.worktreePath,
+    branch: finalBranch,
   });
 }
 

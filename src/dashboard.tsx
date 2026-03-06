@@ -7,7 +7,7 @@ import { loadConfig } from "./config";
 import type { DeerConfig } from "./config";
 import { transition, availableActions, resolveKeypress, ACTION_BINDINGS } from "./state-machine";
 import type { AgentState as AgentStatus } from "./state-machine";
-import { startAgent, destroyAgent, deleteTask, createAgentPR } from "./agent";
+import { startAgent, destroyAgent, deleteTask, createAgentPR, updateAgentPR } from "./agent";
 import { isTmuxSessionDead, captureTmuxPane } from "./sandbox/index";
 import { resolveRuntime } from "./sandbox/resolve";
 import { detectRepo } from "./git/worktree";
@@ -471,7 +471,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   // ── Animate upload icon when creating PR ─────────────────────────
 
   useEffect(() => {
-    const anyCreating = agents.some((a) => a.creatingPr);
+    const anyCreating = agents.some((a) => a.creatingPr || a.updatingPr);
     if (!anyCreating) return;
     const interval = setInterval(() => setAnimTick((t) => t + 1), 200);
     return () => clearInterval(interval);
@@ -729,6 +729,26 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     }
   }, []);
 
+  // ── Update existing PR: push new commits to the PR branch ─────────
+
+  const updatePr = useCallback(async (agent: AgentState) => {
+    if (!agent.handle || !agent.result?.prUrl || !agent.result?.finalBranch) return;
+
+    agent.updatingPr = true;
+    agent.lastActivity = "Pushing updates to PR...";
+    setAgents((prev) => [...prev]);
+
+    try {
+      await updateAgentPR(agent.handle, agent.result.finalBranch);
+      agent.lastActivity = "PR updated";
+    } catch (err) {
+      agent.lastActivity = `PR update failed: ${err instanceof Error ? err.message : String(err)}`;
+    } finally {
+      agent.updatingPr = false;
+    }
+    setAgents((prev) => [...prev]);
+  }, []);
+
   // ── Continue: focus input to spawn a new agent off a PR branch ────
 
   const createPr = useCallback(async (agent: AgentState) => {
@@ -899,6 +919,9 @@ export default function Dashboard({ cwd }: { cwd: string }) {
           case "open_pr":
             if (agent.result?.prUrl) openUrl(agent.result.prUrl);
             break;
+          case "update_pr":
+            updatePr(agent);
+            break;
           case "kill":
             killAgent(agent);
             break;
@@ -1013,7 +1036,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
                 {/* Title line */}
                 <Box gap={1}>
                   <Text dimColor={!isSelected}>{pointer}</Text>
-                  {agent.creatingPr ? (
+                  {agent.creatingPr || agent.updatingPr ? (
                     <Text color="blue">{UPLOAD_FRAMES[animTick % UPLOAD_FRAMES.length]}</Text>
                   ) : agent.idle ? (
                     <Text>{agent.result?.prUrl ? "👀" : "👋"}</Text>

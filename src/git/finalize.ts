@@ -169,6 +169,36 @@ export async function createPullRequest(options: CreatePROptions): Promise<Creat
   };
 }
 
+export interface UpdatePROptions {
+  worktreePath: string;
+  /** @example "deer/fix-login-redirect" */
+  branch: string;
+}
+
+/**
+ * Push new commits (and any uncommitted changes) from the worktree to the
+ * existing remote branch, updating the open PR without creating a new one.
+ */
+export async function pushBranchUpdates(options: UpdatePROptions): Promise<void> {
+  const { worktreePath, branch } = options;
+
+  // Remove deer internal files before staging
+  await Bun.$`rm -rf ${worktreePath}/.deer-claude-config ${worktreePath}/.deer-prompt`.quiet().nothrow();
+
+  // Stage and commit any uncommitted changes
+  await Bun.$`git -C ${worktreePath} add -A`.quiet();
+  const status = await Bun.$`git -C ${worktreePath} status --porcelain`.quiet();
+  if (status.stdout.toString().trim().length > 0) {
+    await Bun.$`git -C ${worktreePath} commit -m "deer: uncommitted changes from agent session"`.quiet();
+  }
+
+  // Push to origin
+  const pushResult = await Bun.$`git -C ${worktreePath} push origin ${branch}`.quiet().nothrow();
+  if (pushResult.exitCode !== 0) {
+    throw new Error(`Push failed: ${pushResult.stderr.toString().trim()}`);
+  }
+}
+
 /**
  * Clean up a worktree and optionally delete the branch.
  */
