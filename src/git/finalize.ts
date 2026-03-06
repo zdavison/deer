@@ -2,6 +2,8 @@
  * Post-session git operations: create PR on demand, clean up worktree.
  */
 
+import { join } from "path";
+
 export interface CreatePRResult {
   /** @example "https://github.com/org/repo/pull/42" */
   prUrl: string;
@@ -34,6 +36,42 @@ interface PRMetadata {
   body: string;
 }
 
+/** Candidate paths to check for a PR template, in priority order. */
+const PR_TEMPLATE_PATHS = [
+  ".github/PULL_REQUEST_TEMPLATE.md",
+  ".github/pull_request_template.md",
+  "docs/pull_request_template.md",
+  "pull_request_template.md",
+];
+
+/**
+ * Find and read a GitHub PR template from the repo, if one exists.
+ *
+ * Checks standard GitHub-documented locations in priority order.
+ * Falls back to the first file found in `.github/PULL_REQUEST_TEMPLATE/`.
+ *
+ * @returns Template content, or null if none found.
+ */
+export async function findPRTemplate(repoPath: string): Promise<string | null> {
+  for (const candidate of PR_TEMPLATE_PATHS) {
+    const file = Bun.file(join(repoPath, candidate));
+    if (await file.exists()) return file.text();
+  }
+
+  // Check for directory-based templates
+  const templateDir = join(repoPath, ".github", "PULL_REQUEST_TEMPLATE");
+  try {
+    const dirGlob = new Bun.Glob("*.md");
+    for await (const name of dirGlob.scan({ cwd: templateDir, onlyFiles: true })) {
+      return Bun.file(join(templateDir, name)).text();
+    }
+  } catch {
+    // Directory does not exist
+  }
+
+  return null;
+}
+
 export function ensureDeerEmojiPrefix(title: string): string {
   if (title.startsWith("🦌 ")) return title;
   return `🦌 ${title}`;
@@ -43,7 +81,7 @@ export function ensureDeerEmojiPrefix(title: string): string {
  * Ask Claude to generate PR metadata (branch name, title, body) from the diff.
  * Falls back to a simple prompt-based title if Claude fails.
  */
-async function generatePRMetadata(worktreePath: string, baseBranch: string, prompt: string): Promise<PRMetadata> {
+async function generatePRMetadata(worktreePath: string, baseBranch: string, prompt: string, prTemplate: string | null): Promise<PRMetadata> {
   const diffResult = await Bun.$`git -C ${worktreePath} diff ${baseBranch}..HEAD`.quiet().nothrow();
   const diff = diffResult.stdout.toString().trim();
 
@@ -55,6 +93,14 @@ async function generatePRMetadata(worktreePath: string, baseBranch: string, prom
     ? diff.slice(0, maxDiffLen) + "\n... (diff truncated)"
     : diff;
 
+  const templateSection = prTemplate
+    ? `\nPR Template (use this structure for the body, filling in the relevant sections):\n${prTemplate}\n`
+    : "";
+
+  const bodyInstruction = prTemplate
+    ? "body: follow the PR template structure above, filling in relevant sections based on the changes. End with a horizontal rule and \"> Created by [deer](https://github.com/mm-zacharydavison/deer) — review carefully.\""
+    : "body: markdown with a ## Summary section describing what changed and why, followed by a ## Changes section with bullet points of key changes. End with a horizontal rule and \"> Created by [deer](https://github.com/mm-zacharydavison/deer) — review carefully.\"";
+
   const metadataPrompt = `You are generating metadata for a pull request. Analyze the following task prompt, commits, and diff, then produce EXACTLY the following JSON (no markdown fences, no extra text):
 
 {"branchName": "<short-kebab-case-name>", "title": "<PR title under 70 chars>", "body": "<PR body in markdown>"}
@@ -62,8 +108,8 @@ async function generatePRMetadata(worktreePath: string, baseBranch: string, prom
 Rules:
 - branchName: short, descriptive, kebab-case (e.g. "fix-login-redirect", "add-user-search"). Do NOT include any prefix like "deer/" — just the name itself.
 - title: concise, imperative mood (e.g. "Fix login redirect loop", "Add user search endpoint")
-- body: markdown with a ## Summary section describing what changed and why, followed by a ## Changes section with bullet points of key changes. End with a horizontal rule and "> Created by [deer](https://github.com/mm-zacharydavison/deer) — review carefully."
-
+- ${bodyInstruction}
+${templateSection}
 Task prompt:
 ${prompt}
 
@@ -145,7 +191,8 @@ export async function createPullRequest(options: CreatePROptions): Promise<Creat
   }
 
   // Generate PR metadata using Claude
-  const metadata = await generatePRMetadata(worktreePath, baseBranch, prompt);
+  const prTemplate = await findPRTemplate(repoPath);
+  const metadata = await generatePRMetadata(worktreePath, baseBranch, prompt, prTemplate);
 
   // Rename the branch if Claude provided a name
   let finalBranch = branch;
@@ -231,7 +278,8 @@ export async function updatePullRequest(options: UpdatePROptions): Promise<void>
   }
 
   // Regenerate PR metadata from the updated diff
-  const metadata = await generatePRMetadata(worktreePath, baseBranch, prompt);
+  const prTemplate = await findPRTemplate(repoPath);
+  const metadata = await generatePRMetadata(worktreePath, baseBranch, prompt, prTemplate);
 
   // Update the PR title and body
   const editResult = await Bun.$`gh pr edit ${prUrl} --title ${metadata.title} --body ${metadata.body}`.cwd(repoPath).quiet().nothrow();
