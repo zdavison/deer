@@ -54,6 +54,7 @@ export const DEFAULT_CONFIG: DeerConfig = {
     runtime: "bwrap",
     envPassthrough: [
       "CLAUDE_CODE_OAUTH_TOKEN",
+      "ANTHROPIC_API_KEY",
     ],
   },
 };

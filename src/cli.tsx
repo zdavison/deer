@@ -1,8 +1,10 @@
 #!/usr/bin/env bun
 
-// Strip ANTHROPIC_API_KEY immediately so it never leaks to any subprocess.
-// Deer must use CLAUDE_CODE_OAUTH_TOKEN for all Claude API access.
-delete process.env.ANTHROPIC_API_KEY;
+// Strip ANTHROPIC_API_KEY immediately — deer always prefers CLAUDE_CODE_OAUTH_TOKEN.
+// The API key is only used as a fallback if no OAuth token is available.
+if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
+  delete process.env.ANTHROPIC_API_KEY;
+}
 
 import { render } from "ink";
 import React from "react";
