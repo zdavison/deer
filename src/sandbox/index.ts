@@ -113,6 +113,8 @@ export async function launchSandbox(options: SandboxOptions): Promise<SandboxSes
   const tmuxSettings: [string, string][] = [
     // Keep pane alive after command exits so we can capture scrollback
     ["remain-on-exit", "on"],
+    // Enable mouse scroll wheel support (enters copy mode automatically)
+    ["mouse", "on"],
     // Status bar with detach instructions
     ["status", "on"],
     ["status-position", "bottom"],
