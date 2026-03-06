@@ -1012,16 +1012,18 @@ export default function Dashboard({ cwd }: { cwd: string }) {
               <Box key={agent.id} flexDirection="column">
                 {/* Title line */}
                 <Box gap={1}>
+                  <Box width={2}>
+                    {agent.creatingPr ? (
+                      <Text color="blue">{UPLOAD_FRAMES[animTick % UPLOAD_FRAMES.length]}</Text>
+                    ) : agent.idle ? (
+                      <Text>{agent.result?.prUrl ? "👀" : "👋"}</Text>
+                    ) : agent.status === "running" ? (
+                      <Spinner label="" />
+                    ) : (
+                      <Text color={display.color}>{display.icon}</Text>
+                    )}
+                  </Box>
                   <Text dimColor={!isSelected}>{pointer}</Text>
-                  {agent.creatingPr ? (
-                    <Text color="blue">{UPLOAD_FRAMES[animTick % UPLOAD_FRAMES.length]}</Text>
-                  ) : agent.idle ? (
-                    <Text>{agent.result?.prUrl ? "👀" : "👋"}</Text>
-                  ) : agent.status === "running" ? (
-                    <Spinner label="" />
-                  ) : (
-                    <Text color={display.color}>{display.icon}</Text>
-                  )}
                   <Box flexGrow={1}>
                     <Text bold={isSelected} wrap="truncate">
                       {truncate(agent.prompt, titleWidth)}
