@@ -1,5 +1,6 @@
 import { join, dirname } from "node:path";
 import { existsSync, lstatSync, readlinkSync, readdirSync, realpathSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { startProxy } from "./proxy";
 import type { SandboxRuntime, SandboxRuntimeOptions, SandboxCleanup } from "./runtime";
 
@@ -218,10 +219,36 @@ export function createBwrapRuntime(): SandboxRuntime {
     async prepare(options: SandboxRuntimeOptions): Promise<SandboxCleanup> {
       const proxy = await startProxy({ allowlist: options.allowlist });
       proxyPort = proxy.port;
+      // Persist port so it can be restored if deer restarts while this task runs
+      const portFile = join(dirname(options.worktreePath), "proxy-port");
+      await Bun.write(portFile, String(proxyPort));
       return () => {
         proxy.stop();
         proxyPort = 0;
       };
+    },
+
+    async restoreProxy(worktreePath: string, allowlist: string[]): Promise<SandboxCleanup | null> {
+      const portFile = join(dirname(worktreePath), "proxy-port");
+      let savedPort: number;
+      try {
+        const contents = await readFile(portFile, "utf-8");
+        savedPort = parseInt(contents.trim(), 10);
+        if (!Number.isFinite(savedPort) || savedPort <= 0) return null;
+      } catch {
+        return null;
+      }
+      try {
+        const proxy = await startProxy({ allowlist, port: savedPort });
+        proxyPort = proxy.port;
+        return () => {
+          proxy.stop();
+          proxyPort = 0;
+        };
+      } catch {
+        // Port may be in use or otherwise unavailable; can't recover
+        return null;
+      }
     },
 
     buildCommand(options: SandboxRuntimeOptions, innerCommand: string[]): string[] {

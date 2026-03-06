@@ -1,4 +1,7 @@
-import { test, expect, describe } from "bun:test";
+import { test, expect, describe, afterEach } from "bun:test";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createBwrapRuntime } from "../../src/sandbox/bwrap";
 import type { SandboxRuntimeOptions } from "../../src/sandbox/runtime";
 
@@ -116,6 +119,66 @@ describe("bwrapRuntime.buildCommand", () => {
       if (orig === undefined) delete process.env.ANTHROPIC_API_KEY;
       else process.env.ANTHROPIC_API_KEY = orig;
     }
+  });
+});
+
+describe("bwrapRuntime.restoreProxy", () => {
+  const cleanups: Array<() => void> = [];
+
+  afterEach(() => {
+    for (const fn of cleanups) fn();
+    cleanups.length = 0;
+  });
+
+  test("returns null when no proxy-port file exists", async () => {
+    const taskDir = await mkdtemp(join(tmpdir(), "deer-test-"));
+    const worktreePath = join(taskDir, "worktree");
+    const runtime = createBwrapRuntime();
+    const result = await runtime.restoreProxy!(worktreePath, []);
+    expect(result).toBeNull();
+  });
+
+  test("restores proxy on the saved port", async () => {
+    const taskDir = await mkdtemp(join(tmpdir(), "deer-test-"));
+    const worktreePath = join(taskDir, "worktree");
+
+    // Get a free port by starting a temporary proxy
+    const { startProxy } = await import("../../src/sandbox/proxy");
+    const temp = await startProxy({ allowlist: [] });
+    const port = temp.port;
+    temp.stop();
+
+    await writeFile(join(taskDir, "proxy-port"), String(port), "utf-8");
+
+    const runtime = createBwrapRuntime();
+    const cleanup = await runtime.restoreProxy!(worktreePath, ["example.com"]);
+    expect(cleanup).not.toBeNull();
+    cleanups.push(cleanup!);
+
+    // Verify the proxy is reachable on the expected port
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/`);
+      // Proxy returns 403 for non-CONNECT; reachable means it's up
+      expect(res.status).toBe(403);
+    } catch {
+      // If fetch throws, the server may not speak plain HTTP — that's OK,
+      // just check that _something_ is listening
+      const probe = await Bun.connect({
+        hostname: "127.0.0.1",
+        port,
+        socket: { open() {}, data() {}, close() {}, error() {} },
+      });
+      probe.end();
+    }
+  });
+
+  test("returns null when port is unparseable", async () => {
+    const taskDir = await mkdtemp(join(tmpdir(), "deer-test-"));
+    const worktreePath = join(taskDir, "worktree");
+    await writeFile(join(taskDir, "proxy-port"), "not-a-number", "utf-8");
+    const runtime = createBwrapRuntime();
+    const result = await runtime.restoreProxy!(worktreePath, []);
+    expect(result).toBeNull();
   });
 });
 

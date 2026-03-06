@@ -53,4 +53,14 @@ export interface SandboxRuntime {
    * - Pre-creating files for Landlock (nono) — cleanup is a no-op
    */
   prepare?(options: SandboxRuntimeOptions): Promise<SandboxCleanup>;
+
+  /**
+   * Restore runtime resources for a task that is already running (e.g. after
+   * a deer restart). Returns a cleanup function, or null if restoration is not
+   * applicable (no port file, wrong runtime, etc.).
+   *
+   * @param worktreePath - Path to the task's git worktree
+   * @param allowlist - Hosts to allow through the network proxy
+   */
+  restoreProxy?(worktreePath: string, allowlist: string[]): Promise<SandboxCleanup | null>;
 }

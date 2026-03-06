@@ -10,6 +10,12 @@ export interface ProxyOptions {
    * @default true
    */
   rejectPrivateIPs?: boolean;
+  /**
+   * Specific port to bind on. Defaults to 0 (OS-assigned ephemeral port).
+   * Use this to restore a proxy on the same port after a process restart.
+   * @default 0
+   */
+  port?: number;
 }
 
 export interface ProxyHandle {
@@ -75,7 +81,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
 
   const server = Bun.listen({
     hostname: "127.0.0.1",
-    port: 0,
+    port: options.port ?? 0,
     socket: {
       open() {},
 

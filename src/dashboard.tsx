@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { Box, Text, useInput, useApp, useStdout } from "ink";
 import { Spinner } from "@inkjs/ui";
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
@@ -9,6 +10,7 @@ import { transition, availableActions, resolveKeypress, ACTION_BINDINGS } from "
 import type { AgentState as AgentStatus } from "./state-machine";
 import { startAgent, destroyAgent, deleteTask, createAgentPR, updateAgentPR } from "./agent";
 import { isTmuxSessionDead, captureTmuxPane } from "./sandbox/index";
+import type { SandboxCleanup } from "./sandbox/index";
 import { resolveRuntime } from "./sandbox/resolve";
 import { detectRepo } from "./git/worktree";
 import { AgentState, createAgentState, historicalAgent, crossInstanceAgent } from "./agent-state";
@@ -422,6 +424,8 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   const deletedTaskIdsRef = useRef(new Set<string>());
   const configRef = useRef<DeerConfig | null>(null);
   const baseBranchRef = useRef("main");
+  /** Proxy cleanup functions for cross-instance tasks restored after a restart */
+  const restoredProxiesRef = useRef(new Map<string, SandboxCleanup>());
 
   // ── Detect base branch on mount ────────────────────────────────────
 
@@ -453,9 +457,23 @@ export default function Dashboard({ cwd }: { cwd: string }) {
       if (task.status === "running") {
         const isDead = await isTmuxSessionDead(`deer-${task.taskId}`);
         if (!isDead) {
+          // Restore the bwrap proxy once per task so the sandbox can reach
+          // the Claude API after a deer restart.
+          if (!restoredProxiesRef.current.has(task.taskId) && configRef.current) {
+            const runtime = resolveRuntime(configRef.current);
+            const worktreePath = join(dataDir(), "tasks", task.taskId, "worktree");
+            const cleanup = await runtime.restoreProxy?.(worktreePath, configRef.current.network.allowlist);
+            if (cleanup) restoredProxiesRef.current.set(task.taskId, cleanup);
+          }
           return crossInstanceAgent(task, id);
         }
-        // Session is dead — fall through to historicalAgent (shows as interrupted)
+        // Session died — stop any proxy we restored for this task
+        const proxyCleanup = restoredProxiesRef.current.get(task.taskId);
+        if (proxyCleanup) {
+          proxyCleanup();
+          restoredProxiesRef.current.delete(task.taskId);
+        }
+        // Fall through to historicalAgent (shows as interrupted)
       }
 
       return historicalAgent(task, id);
@@ -519,6 +537,10 @@ export default function Dashboard({ cwd }: { cwd: string }) {
           agent.handle.kill().catch(() => {});
         }
       }
+      for (const proxyCleanup of restoredProxiesRef.current.values()) {
+        proxyCleanup();
+      }
+      restoredProxiesRef.current.clear();
     };
 
     process.on("exit", cleanup);

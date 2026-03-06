@@ -299,6 +299,19 @@ describe("proxy server", () => {
     }
   });
 
+  test("binds on a specific port when given", async () => {
+    // Use an OS-assigned port first to find a free one
+    const probe = await startProxy({ allowlist: [] });
+    const freePort = probe.port;
+    probe.stop();
+    handles.length = 0;
+
+    // Now bind on that exact port
+    const h = await startProxy({ allowlist: ["example.com"], port: freePort });
+    handles.push(h);
+    expect(h.port).toBe(freePort);
+  });
+
   test("stop() shuts down the server", async () => {
     const h = await launch(["example.com"]);
     const port = h.port;
