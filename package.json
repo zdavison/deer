@@ -1,14 +1,21 @@
 {
-  "name": "deer",
+  "name": "@zdavison/deer",
   "version": "0.1.0",
   "description": "Unattended coding agent.",
   "type": "module",
   "bin": {
-    "deer": "src/cli.tsx"
+    "deer": "scripts/install.js"
+  },
+  "files": [
+    "scripts/install.js"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "test": "bun test",
-    "dev": "bun run src/cli.tsx"
+    "dev": "bun run src/cli.tsx",
+    "build": "bun build --compile --target=bun-linux-x64 src/cli.tsx --outfile dist/deer-linux-x64"
   },
   "dependencies": {
     "@iarna/toml": "^3.0.0",
