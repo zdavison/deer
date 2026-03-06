@@ -82,10 +82,14 @@ export function ensureDeerEmojiPrefix(title: string): string {
  * Falls back to a simple prompt-based title if Claude fails.
  */
 async function generatePRMetadata(worktreePath: string, baseBranch: string, prompt: string, prTemplate: string | null): Promise<PRMetadata> {
-  const diffResult = await Bun.$`git -C ${worktreePath} diff ${baseBranch}..HEAD`.quiet().nothrow();
+  // Fetch latest remote state so we compare against up-to-date origin
+  await Bun.$`git -C ${worktreePath} fetch origin ${baseBranch}`.quiet().nothrow();
+  const remoteBase = `origin/${baseBranch}`;
+
+  const diffResult = await Bun.$`git -C ${worktreePath} diff ${remoteBase}..HEAD`.quiet().nothrow();
   const diff = diffResult.stdout.toString().trim();
 
-  const logResult = await Bun.$`git -C ${worktreePath} log --oneline ${baseBranch}..HEAD`.quiet().nothrow();
+  const logResult = await Bun.$`git -C ${worktreePath} log --oneline ${remoteBase}..HEAD`.quiet().nothrow();
   const commitLog = logResult.stdout.toString().trim();
 
   const maxDiffLen = 20_000;
