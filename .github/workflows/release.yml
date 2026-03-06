@@ -29,10 +29,10 @@ jobs:
       - name: Build binaries
         run: |
           mkdir -p dist
-          bun build --compile --target=bun-linux-x64   --external react-devtools-core src/cli.tsx --outfile dist/deer-linux-x64
-          bun build --compile --target=bun-linux-arm64  --external react-devtools-core src/cli.tsx --outfile dist/deer-linux-arm64
-          bun build --compile --target=bun-darwin-x64  --external react-devtools-core src/cli.tsx --outfile dist/deer-darwin-x64
-          bun build --compile --target=bun-darwin-arm64 --external react-devtools-core src/cli.tsx --outfile dist/deer-darwin-arm64
+          bun build --compile --target=bun-linux-x64   src/cli.tsx --outfile dist/deer-linux-x64
+          bun build --compile --target=bun-linux-arm64  src/cli.tsx --outfile dist/deer-linux-arm64
+          bun build --compile --target=bun-darwin-x64  src/cli.tsx --outfile dist/deer-darwin-x64
+          bun build --compile --target=bun-darwin-arm64 src/cli.tsx --outfile dist/deer-darwin-arm64
 
       - name: Verify binaries
         run: ls -lh dist/

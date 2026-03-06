@@ -15,13 +15,14 @@
   "scripts": {
     "test": "bun test",
     "dev": "bun run src/cli.tsx",
-    "build": "bun build --compile --target=bun-linux-x64 --external react-devtools-core src/cli.tsx --outfile dist/deer-linux-x64"
+    "build": "bun build --compile --target=bun-linux-x64 src/cli.tsx --outfile dist/deer-linux-x64"
   },
   "dependencies": {
     "@iarna/toml": "^3.0.0",
     "@inkjs/ui": "^2.0.0",
     "ink": "^6.0.0",
-    "react": "^19.0.0"
+    "react": "^19.0.0",
+    "react-devtools-core": "file:stubs/react-devtools-core"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
