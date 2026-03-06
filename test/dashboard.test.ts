@@ -9,7 +9,7 @@ function makeTask(overrides?: Partial<PersistedTask>): PersistedTask {
   return {
     taskId: generateTaskId(),
     prompt: "fix the bug",
-    status: "completed",
+    status: "cancelled",
     createdAt: new Date().toISOString(),
     completedAt: new Date().toISOString(),
     elapsed: 60,
@@ -93,10 +93,10 @@ describe("historicalAgent", () => {
     expect(agent.lastActivity).toBe("Interrupted — deer was closed");
   });
 
-  test("preserves completed status", () => {
-    const task = makeTask({ status: "completed" });
+  test("preserves cancelled status", () => {
+    const task = makeTask({ status: "cancelled" });
     const agent = historicalAgent(task, 1);
-    expect(agent.status).toBe("completed");
+    expect(agent.status).toBe("cancelled");
   });
 
   test("preserves failed status with error", () => {

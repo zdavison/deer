@@ -6,7 +6,8 @@ import { upsertHistory, removeFromHistory, dataDir } from "../task";
 import type { PersistedTask } from "../task";
 import type { DeerConfig } from "../config";
 import type { PreflightResult } from "../preflight";
-import { startAgent, destroyAgent, deleteTask, createAgentPR, updateAgentPR } from "../agent";
+import { startAgent, destroyAgent, deleteTask, createAgentPR } from "../agent";
+import { updatePullRequest } from "../git/finalize";
 import { isTmuxSessionDead, captureTmuxPane } from "../sandbox/index";
 import { resolveRuntime } from "../sandbox/resolve";
 import { transition } from "../state-machine";
@@ -23,11 +24,10 @@ import {
 
 async function saveToHistory(agent: AgentState, repoPath: string): Promise<void> {
   if (agent.historical) return;
-  const status = agent.status as "completed" | "failed" | "cancelled";
   const task: PersistedTask = {
     taskId: agent.taskId,
     prompt: agent.prompt,
-    status,
+    status: agent.status as PersistedTask["status"],
     createdAt: new Date(Date.now() - agent.elapsed * 1000).toISOString(),
     completedAt: new Date().toISOString(),
     elapsed: agent.elapsed,
@@ -201,11 +201,10 @@ export function useAgentActions({
 
       if (abortController.signal.aborted) return;
 
-      // Process exited — mark completed, user decides what to do next
-      agent.idle = false;
-      agent.status = "completed";
+      // Process exited — agent is now at rest, idle until deleted
+      agent.idle = true;
       agent.result = { finalBranch: handle.branch, prUrl: "" };
-      agent.lastActivity = "Task complete — press p to create PR, ⏎ to attach";
+      agent.lastActivity = "Idle — press p to create PR, ⏎ to attach";
     } catch (err) {
       if (!abortController.signal.aborted) {
         agent.status = transition(agent.status, "ERROR") ?? "failed";
@@ -316,25 +315,28 @@ export function useAgentActions({
   // ── Update PR ─────────────────────────────────────────────────────
 
   const updatePr = useCallback(async (agent: AgentState) => {
-    if (!agent.handle || !agent.result?.prUrl) return;
+    if (!agent.result?.prUrl || !agent.result?.finalBranch) return;
 
-    agent.creatingPr = true;
+    const worktreePath = `${dataDir()}/tasks/${agent.taskId}/worktree`;
+
+    agent.updatingPr = true;
     agent.lastActivity = "Updating PR...";
     setAgents((prev) => [...prev]);
 
     try {
-      await updateAgentPR(
-        agent.handle,
-        cwd,
-        agent.baseBranch,
-        agent.prompt,
-        agent.result.prUrl,
-      );
+      await updatePullRequest({
+        repoPath: cwd,
+        worktreePath,
+        finalBranch: agent.result.finalBranch,
+        baseBranch: agent.baseBranch,
+        prompt: agent.prompt,
+        prUrl: agent.result.prUrl,
+      });
       agent.lastActivity = "PR updated";
     } catch (err) {
       agent.lastActivity = `PR update failed: ${err instanceof Error ? err.message : String(err)}`;
     } finally {
-      agent.creatingPr = false;
+      agent.updatingPr = false;
     }
     await saveToHistory(agent, cwd);
     setAgents((prev) => [...prev]);

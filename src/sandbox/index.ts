@@ -47,6 +47,8 @@ export async function applyTmuxStatusBar(
   { remainOnExit = false }: { remainOnExit?: boolean } = {},
 ): Promise<void> {
   const settings: [string, string][] = [
+    // Keep pane alive after command exits so we can capture scrollback
+    ["remain-on-exit", "on"],
     // Enable mouse scroll wheel support (enters copy mode automatically)
     ["mouse", "on"],
     // Status bar with detach instructions
@@ -54,7 +56,7 @@ export async function applyTmuxStatusBar(
     ["status-position", "bottom"],
     ["status-style", "#{?client_prefix,bg=#4a4a6e fg=#ffffff,bg=#1a1a2e fg=#e0e0e0}"],
     ["status-left", ""],
-    ["status-right", " 🦌 deer | Ctrl+b [ to scroll | Ctrl+b d to detach "],
+    ["status-right", " 🦌 deer | Ctrl+b d to detach "],
     ["status-right-style", "#{?client_prefix,bg=#4a4a6e fg=#ffffff,bg=#1a1a2e fg=#888888}"],
     ["status-justify", "left"],
   ];

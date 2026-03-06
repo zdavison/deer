@@ -8,7 +8,7 @@ import { startClaudeConfigGuard, type ClaudeConfigGuard, type ConfigAlert } from
 import { runPreflight, type PreflightResult } from "./preflight";
 import { PromptInput } from "./components/PromptInput";
 import { useAgentSync } from "./hooks/useAgentSync";
-import { usePrPoller } from "./hooks/usePrPoller";
+import { usePrPoller } from "./hooks/useLivePRState";
 import { useAgentActions } from "./hooks/useAgentActions";
 import { usePromptHistory } from "./hooks/usePromptHistory";
 import { useKeyboardInput } from "./hooks/useKeyboardInput";
@@ -72,6 +72,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     inputFocused,
     setInputFocused,
     confirmQuit,
+    pendingConfirmation,
     searchMode,
     searchQuery,
     searchMatchIdx,
@@ -351,6 +352,10 @@ export default function Dashboard({ cwd }: { cwd: string }) {
               <Text dimColor>⏎ select</Text>
               <Text dimColor>Esc cancel</Text>
             </>
+          ) : pendingConfirmation ? (
+            <Text color="yellow" bold>
+              {pendingConfirmation.message}
+            </Text>
           ) : confirmQuit ? (
             <Text color="yellow" bold>
               {activeCount} agent{activeCount !== 1 ? "s" : ""} running — quit? (y/n)

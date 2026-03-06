@@ -1,8 +1,8 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { useInput } from "ink";
 import type { AgentState } from "../agent-state";
 import type { Dispatch, SetStateAction } from "react";
-import { availableActions, resolveKeypress, ACTION_BINDINGS } from "../state-machine";
+import { availableActions, resolveKeypress, confirmationMessage, ACTION_BINDINGS, type AgentAction } from "../state-machine";
 import { fuzzyMatch } from "../fuzzy";
 import { openUrl, isActive } from "../dashboard-utils";
 
@@ -48,6 +48,11 @@ export function useKeyboardInput({
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [inputFocused, setInputFocused] = useState(true);
   const [confirmQuit, setConfirmQuit] = useState(false);
+  const [pendingConfirmation, setPendingConfirmation] = useState<{
+    action: AgentAction;
+    agent: AgentState;
+    message: string;
+  } | null>(null);
   const [searchMode, setSearchMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchMatchIdx, setSearchMatchIdx] = useState(0);
@@ -131,6 +136,15 @@ export function useKeyboardInput({
       return;
     }
 
+    // Pending action confirmation
+    if (pendingConfirmation) {
+      if (input === "y" || input === "Y") {
+        executeAction(pendingConfirmation.action, pendingConfirmation.agent);
+      }
+      setPendingConfirmation(null);
+      return;
+    }
+
     // Prompt history navigation (when input focused)
     if (inputFocused && promptHistory.length > 0) {
       if (key.upArrow) {
@@ -186,65 +200,77 @@ export function useKeyboardInput({
         const actions = availableActions(ctx);
         const action = resolveKeypress(input, key, actions);
 
-        switch (action) {
-          case "attach":
-            attachToAgent(agent);
-            break;
-          case "create_pr":
-            createPr(agent);
-            break;
-          case "update_pr":
-            updatePr(agent);
-            break;
-          case "open_pr":
-            if (agent.result?.prUrl) openUrl(agent.result.prUrl);
-            break;
-          case "kill":
-            killAgent(agent);
-            break;
-          case "delete":
-            deleteAgent(agent);
-            setSelectedIdx((prev) => Math.min(prev, Math.max(agents.length - 2, 0)));
-            break;
-          case "toggle_logs":
-            setLogExpanded((prev) => !prev);
-            break;
-          case "retry": {
-            const retryPrompt = agent.prompt;
-            const retryHandle = agent.handle;
-            agent.abortController?.abort();
-            if (agent.timer) clearInterval(agent.timer);
-            setSelectedIdx((prev) => Math.min(prev, Math.max(agents.length - 2, 0)));
-
-            if (retryHandle) {
-              // Kill the tmux session but preserve the worktree so Claude can
-              // continue the same conversation with --continue.
-              retryHandle.kill().catch(() => {});
-              setAgents((prev) => prev.filter((a) => a !== agent));
-              spawnAgent(retryPrompt, agent.baseBranch, {
-                taskId: retryHandle.taskId,
-                worktreePath: retryHandle.worktreePath,
-                branch: retryHandle.branch,
-              });
-            } else {
-              deleteAgent(agent);
-              spawnAgent(retryPrompt, agent.baseBranch);
-            }
-            break;
+        if (action) {
+          const prompt = confirmationMessage(action, ctx);
+          if (prompt) {
+            setPendingConfirmation({ action, agent, message: prompt });
+          } else {
+            executeAction(action, agent);
           }
-          case "open_shell":
-            openShell(agent);
-            break;
         }
       }
     }
   });
+
+  function executeAction(action: AgentAction, agent: AgentState) {
+    switch (action) {
+      case "attach":
+        attachToAgent(agent);
+        break;
+      case "create_pr":
+        createPr(agent);
+        break;
+      case "update_pr":
+        updatePr(agent);
+        break;
+      case "open_pr":
+        if (agent.result?.prUrl) openUrl(agent.result.prUrl);
+        break;
+      case "kill":
+        killAgent(agent);
+        break;
+      case "delete":
+        deleteAgent(agent);
+        setSelectedIdx((prev) => Math.min(prev, Math.max(agents.length - 2, 0)));
+        break;
+      case "toggle_logs":
+        setLogExpanded((prev) => !prev);
+        break;
+      case "retry": {
+        const retryPrompt = agent.prompt;
+        const retryHandle = agent.handle;
+        agent.abortController?.abort();
+        if (agent.timer) clearInterval(agent.timer);
+        setSelectedIdx((prev) => Math.min(prev, Math.max(agents.length - 2, 0)));
+
+        if (retryHandle) {
+          // Kill the tmux session but preserve the worktree so Claude can
+          // continue the same conversation with --continue.
+          retryHandle.kill().catch(() => {});
+          setAgents((prev) => prev.filter((a) => a !== agent));
+          spawnAgent(retryPrompt, agent.baseBranch, {
+            taskId: retryHandle.taskId,
+            worktreePath: retryHandle.worktreePath,
+            branch: retryHandle.branch,
+          });
+        } else {
+          deleteAgent(agent);
+          spawnAgent(retryPrompt, agent.baseBranch);
+        }
+        break;
+      }
+      case "open_shell":
+        openShell(agent);
+        break;
+    }
+  }
 
   return {
     selectedIdx,
     inputFocused,
     setInputFocused,
     confirmQuit,
+    pendingConfirmation,
     searchMode,
     searchQuery,
     searchMatchIdx,

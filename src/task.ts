@@ -33,10 +33,10 @@ export interface PersistedTask {
   /** @example "deer_01jm8k3nxa7f" */
   taskId: string;
   prompt: string;
-  status: "completed" | "failed" | "cancelled" | "running";
+  status: "running" | "failed" | "cancelled";
   /** ISO 8601 timestamp */
   createdAt: string;
-  /** ISO 8601 timestamp — null if task was never completed */
+  /** ISO 8601 timestamp — null while task is still running */
   completedAt: string | null;
   /** Elapsed seconds */
   elapsed: number;
