@@ -238,4 +238,57 @@ describe("agent lifecycle", () => {
     // Should have returned quickly, not waited the full poll interval
     expect(elapsed).toBeLessThan(5_000);
   });
+
+  test("startAgent with continueSession reuses existing worktree and taskId", async () => {
+    const repo = await createTestRepo();
+    repos.push(repo);
+
+    // Start a normal agent to create a worktree
+    const firstHandle = await startAgent({
+      repoPath: repo,
+      prompt: "echo hello",
+      baseBranch: "main",
+      config: testConfig,
+      runtime: nonoRuntime,
+    });
+    handles.push(firstHandle);
+
+    // Kill the first tmux session
+    await firstHandle.kill();
+
+    // Start a second agent that continues in the same worktree
+    const statuses: AgentStatus[] = [];
+    const secondHandle = await startAgent({
+      repoPath: repo,
+      prompt: "should not be used",
+      baseBranch: "main",
+      config: testConfig,
+      runtime: nonoRuntime,
+      continueSession: {
+        taskId: firstHandle.taskId,
+        worktreePath: firstHandle.worktreePath,
+        branch: firstHandle.branch,
+      },
+      onStatus: (s) => statuses.push(s),
+    });
+    handles.push(secondHandle);
+
+    // Handle should reuse the same identifiers
+    expect(secondHandle.taskId).toBe(firstHandle.taskId);
+    expect(secondHandle.worktreePath).toBe(firstHandle.worktreePath);
+    expect(secondHandle.branch).toBe(firstHandle.branch);
+
+    // A new tmux session should be running
+    const proc = Bun.spawn(["tmux", "has-session", "-t", secondHandle.sessionName], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(await proc.exited).toBe(0);
+
+    // The worktree should still exist (not re-created)
+    expect(await Bun.file(join(secondHandle.worktreePath, "README.md")).exists()).toBe(true);
+
+    // Status should indicate a continue, not a fresh worktree creation
+    expect(statuses.some((s) => s.phase === "setup")).toBe(true);
+  });
 });

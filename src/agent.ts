@@ -25,6 +25,15 @@ export interface AgentHandle {
   kill: () => Promise<void>;
 }
 
+export interface ContinueSession {
+  /** Task ID of the existing session to resume */
+  taskId: string;
+  /** Path to the existing worktree */
+  worktreePath: string;
+  /** Branch of the existing worktree */
+  branch: string;
+}
+
 export interface AgentRunOptions {
   /** Path to the repository root */
   repoPath: string;
@@ -40,6 +49,12 @@ export interface AgentRunOptions {
   runtime: SandboxRuntime;
   /** Callback for status updates */
   onStatus?: (status: AgentStatus) => void;
+  /**
+   * If provided, resume an existing Claude conversation instead of starting
+   * a fresh one. The worktree and branch are reused; `--continue` is passed
+   * to Claude instead of the prompt.
+   */
+  continueSession?: ContinueSession;
 }
 
 export type AgentStatus =
@@ -119,36 +134,46 @@ export async function startAgent(options: AgentRunOptions): Promise<AgentHandle>
     model = DEFAULT_MODEL,
     runtime,
     onStatus,
+    continueSession,
   } = options;
 
-  const taskId = generateTaskId();
+  const taskId = continueSession?.taskId ?? generateTaskId();
   const sessionName = `deer-${taskId}`;
 
-  onStatus?.({ phase: "setup", message: "Creating worktree..." });
+  let worktreePath: string;
+  let branch: string;
 
-  // Create git worktree
-  const worktree = await createWorktree(repoPath, taskId, baseBranch);
+  if (continueSession) {
+    worktreePath = continueSession.worktreePath;
+    branch = continueSession.branch;
+    onStatus?.({ phase: "setup", message: "Resuming previous session..." });
+  } else {
+    onStatus?.({ phase: "setup", message: "Creating worktree..." });
+
+    // Create git worktree
+    const worktree = await createWorktree(repoPath, taskId, baseBranch);
+    worktreePath = worktree.worktreePath;
+    branch = worktree.branch;
+
+    // Configure git in the worktree
+    await Bun.$`git -C ${worktreePath} config user.name "deer-agent"`.quiet();
+    await Bun.$`git -C ${worktreePath} config user.email "deer@noreply"`.quiet();
+  }
 
   onStatus?.({ phase: "setup", message: "Starting sandbox..." });
 
-  // Configure git in the worktree
-  await Bun.$`git -C ${worktree.worktreePath} config user.name "deer-agent"`.quiet();
-  await Bun.$`git -C ${worktree.worktreePath} config user.email "deer@noreply"`.quiet();
-
   // Build the Claude command — interactive mode (no -p) so users can
   // attach to the tmux session and observe/intervene.
-  const claudeCmd = [
-    "claude",
-    "--dangerously-skip-permissions",
-    "--model", model,
-    prompt,
-  ];
+  // When continuing, use --continue to resume the previous conversation.
+  const claudeCmd = continueSession
+    ? ["claude", "--dangerously-skip-permissions", "--model", model, "--continue"]
+    : ["claude", "--dangerously-skip-permissions", "--model", model, prompt];
 
   let sandbox: SandboxSession;
   try {
     sandbox = await launchSandbox({
       sessionName,
-      worktreePath: worktree.worktreePath,
+      worktreePath,
       repoGitDir: resolve(repoPath, ".git"),
       allowlist: config.network.allowlist,
       env: buildPassthroughEnv(config.sandbox.envPassthrough),
@@ -156,8 +181,10 @@ export async function startAgent(options: AgentRunOptions): Promise<AgentHandle>
       runtime,
     });
   } catch (err) {
-    // Clean up worktree on sandbox failure
-    await removeWorktree(repoPath, worktree.worktreePath).catch(() => {});
+    // Only clean up worktree on sandbox failure if we created it
+    if (!continueSession) {
+      await removeWorktree(repoPath, worktreePath).catch(() => {});
+    }
     throw err;
   }
 
@@ -171,8 +198,8 @@ export async function startAgent(options: AgentRunOptions): Promise<AgentHandle>
   return {
     taskId,
     sessionName,
-    worktreePath: worktree.worktreePath,
-    branch: worktree.branch,
+    worktreePath,
+    branch,
     async kill() {
       await sandbox.stop();
     },

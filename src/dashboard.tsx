@@ -571,7 +571,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
 
   // ── Spawn agent ───────────────────────────────────────────────────
 
-  const spawnAgent = useCallback(async (prompt: string, baseBranch?: string) => {
+  const spawnAgent = useCallback(async (prompt: string, baseBranch?: string, continueSession?: { taskId: string; worktreePath: string; branch: string }) => {
     if (!prompt.trim()) return;
     if (preflight && !preflight.ok) return;
 
@@ -599,7 +599,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
 
     try {
       // Phase 1: Start the sandboxed agent
-      appendLog(agent, "[setup] Creating worktree and sandbox...");
+      appendLog(agent, continueSession ? "[setup] Resuming session..." : "[setup] Creating worktree and sandbox...");
       agent.lastActivity = "Setting up sandbox...";
       setAgents((prev) => [...prev]);
 
@@ -610,6 +610,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
         config,
         model: MODEL,
         runtime: resolveRuntime(config),
+        continueSession,
         onStatus: (status) => {
           const detail = "message" in status ? status.message : status.phase;
           appendLog(agent, `[setup] ${detail}`);
@@ -1016,16 +1017,30 @@ export default function Dashboard({ cwd }: { cwd: string }) {
             break;
           case "retry": {
             const retryPrompt = agent.prompt;
+            const retryHandle = agent.handle;
             agent.abortController?.abort();
             if (agent.timer) clearInterval(agent.timer);
-            deleteTask(agent.taskId, cwd, agent.handle).catch(() => {});
             setAgents((prev) => prev.filter((a) => a !== agent));
             setSelectedIdx((prev) => Math.min(prev, Math.max(visible.length - 2, 0)));
-            deletedTaskIdsRef.current.add(agent.taskId);
-            removeFromHistory(cwd, agent.taskId).finally(() => {
-              deletedTaskIdsRef.current.delete(agent.taskId);
-            });
-            spawnAgent(retryPrompt);
+
+            if (retryHandle) {
+              // Kill the tmux session but preserve the worktree so Claude can
+              // continue the same conversation with --continue.
+              retryHandle.kill().catch(() => {});
+              spawnAgent(retryPrompt, agent.baseBranch, {
+                taskId: retryHandle.taskId,
+                worktreePath: retryHandle.worktreePath,
+                branch: retryHandle.branch,
+              });
+            } else {
+              // No live worktree available — fall back to a fresh chat.
+              deleteTask(agent.taskId, cwd, null).catch(() => {});
+              deletedTaskIdsRef.current.add(agent.taskId);
+              removeFromHistory(cwd, agent.taskId).finally(() => {
+                deletedTaskIdsRef.current.delete(agent.taskId);
+              });
+              spawnAgent(retryPrompt, agent.baseBranch);
+            }
             break;
           }
           case "open_shell":
