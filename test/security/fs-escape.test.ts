@@ -26,7 +26,7 @@ function nonoRun(
   dir: string,
   cmd: string,
   extraOpts?: { extraReadPaths?: string[]; extraWritePaths?: string[] },
-): ReturnType<typeof Bun.spawn> {
+) {
   const args = nonoRuntime.buildCommand(
     { worktreePath: dir, allowlist: [], ...extraOpts },
     ["sh", "-c", cmd],

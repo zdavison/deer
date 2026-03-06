@@ -26,9 +26,18 @@ const CLEAN_ENV = {
   TERM: process.env.TERM ?? "xterm-256color",
 };
 
+/** bwrap requires unprivileged user namespaces — not available in all environments. */
+const bwrapAvailable: boolean = (() => {
+  const result = Bun.spawnSync(["bwrap", "--ro-bind", "/", "/", "echo", "ok"], { stdout: "pipe", stderr: "pipe" });
+  return result.exitCode === 0;
+})();
+
+/** When running inside a nono sandbox, nested nono proxy network tests cannot reach the internet. */
+const insideNonoSandbox: boolean = !!process.env.HTTPS_PROXY;
+
 const runtimeFixtures: Array<[string, () => SandboxRuntime]> = [
   ["nono", () => nonoRuntime],
-  ["bwrap", () => createBwrapRuntime()],
+  ...(bwrapAvailable ? [["bwrap", () => createBwrapRuntime()] as [string, () => SandboxRuntime]] : []),
 ];
 
 // ── Shared suite ──────────────────────────────────────────────────────
@@ -115,10 +124,7 @@ describe.each(runtimeFixtures)("%s", (_name, getRuntime) => {
     await proc.exited;
 
     const content = (await readFile(outFile, "utf-8")).trim();
-    expect(content).toSatisfy(
-      (v: string) => v === "NOTSET" || v === "",
-      `expected ANTHROPIC_API_KEY to be absent inside sandbox, got: "${content}"`,
-    );
+    expect(content).toSatisfy((v: string) => v === "NOTSET" || v === "");
   });
 });
 
@@ -174,7 +180,7 @@ describe("nono", () => {
     expect(content.trim()).toBe("BLOCKED");
   }, 10000);
 
-  test("allows proxied access to allowlisted hosts", async () => {
+  test.skipIf(insideNonoSandbox)("allows proxied access to allowlisted hosts", async () => {
     const dir = await makeTmpDir();
     const outFile = join(dir, "out.txt");
     const args = nonoRuntime.buildCommand(
@@ -192,7 +198,7 @@ describe("nono", () => {
 
 // ── bwrap-specific integration ────────────────────────────────────────
 
-describe("bwrap", () => {
+describe.skipIf(!bwrapAvailable)("bwrap", () => {
   const tmpDirs: string[] = [];
   const cleanups: SandboxCleanup[] = [];
 
@@ -249,10 +255,7 @@ describe("bwrap", () => {
 
       const content = (await readFile(outFile, "utf-8")).trim();
       expect(content).not.toBe("sk-ant-bwrap-leak-sentinel");
-      expect(content).toSatisfy(
-        (v: string) => v === "NOTSET" || v === "",
-        `expected ANTHROPIC_API_KEY to be absent inside bwrap sandbox, got: "${content}"`,
-      );
+      expect(content).toSatisfy((v: string) => v === "NOTSET" || v === "");
     } finally {
       if (orig === undefined) delete process.env.ANTHROPIC_API_KEY;
       else process.env.ANTHROPIC_API_KEY = orig;

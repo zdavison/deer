@@ -1,5 +1,8 @@
 import { test, expect, describe, afterEach } from "bun:test";
 import { nonoRuntime } from "../../src/sandbox/nono";
+
+/** When running inside a nono sandbox, nested nono proxy network tests cannot reach the internet. */
+const insideNonoSandbox: boolean = !!process.env.HTTPS_PROXY;
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -56,7 +59,7 @@ describe("nono network isolation", () => {
     expect(content.trim()).toBe("BLOCKED");
   }, 10000);
 
-  test("allowlisted host is reachable through the proxy", async () => {
+  test.skipIf(insideNonoSandbox)("allowlisted host is reachable through the proxy", async () => {
     const dir = await makeTmpDir();
     const proc = nonoRun(
       dir,

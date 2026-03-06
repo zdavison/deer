@@ -178,9 +178,13 @@ export async function createPullRequest(options: CreatePROptions): Promise<Creat
 }
 
 export interface UpdatePROptions {
+  repoPath: string;
   worktreePath: string;
   /** @example "deer/fix-login-redirect" */
-  branch: string;
+  finalBranch: string;
+  baseBranch: string;
+  prompt: string;
+  prUrl: string;
 }
 
 /**
@@ -188,7 +192,7 @@ export interface UpdatePROptions {
  * existing remote branch, updating the open PR without creating a new one.
  */
 export async function pushBranchUpdates(options: UpdatePROptions): Promise<void> {
-  const { worktreePath, branch } = options;
+  const { worktreePath, finalBranch } = options;
 
   // Remove deer internal files before staging
   await Bun.$`rm -rf ${worktreePath}/.deer-claude-config ${worktreePath}/.deer-prompt`.quiet().nothrow();
@@ -201,7 +205,7 @@ export async function pushBranchUpdates(options: UpdatePROptions): Promise<void>
   }
 
   // Push to origin
-  const pushResult = await Bun.$`git -C ${worktreePath} push origin ${branch}`.quiet().nothrow();
+  const pushResult = await Bun.$`git -C ${worktreePath} push origin ${finalBranch}`.quiet().nothrow();
   if (pushResult.exitCode !== 0) {
     throw new Error(`Push failed: ${pushResult.stderr.toString().trim()}`);
   }

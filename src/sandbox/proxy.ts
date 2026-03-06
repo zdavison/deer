@@ -1,5 +1,5 @@
 import { connect as netConnect, type Socket as NetSocket } from "node:net";
-import { resolve as dnsResolve } from "node:dns/promises";
+import { lookup as dnsLookup } from "node:dns/promises";
 
 export interface ProxyOptions {
   allowlist: string[];
@@ -137,7 +137,8 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         };
 
         if (rejectPrivateIPs) {
-          dnsResolve(host).then((addresses) => {
+          dnsLookup(host, { all: true }).then((results) => {
+            const addresses = results.map(r => r.address);
             if (addresses.length === 0 || addresses.some(isPrivateIP)) {
               socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
               socket.end();

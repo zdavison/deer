@@ -312,6 +312,7 @@ describe("update_pr action", () => {
     hasHandle: true,
     isIdle: false,
     prState: "open",
+    hasWorktreePath: true,
     ...overrides,
   });
 
