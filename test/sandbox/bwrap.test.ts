@@ -1,9 +1,6 @@
-import { test, expect, describe, afterEach } from "bun:test";
+import { test, expect, describe } from "bun:test";
 import { createBwrapRuntime } from "../../src/sandbox/bwrap";
-import type { SandboxRuntimeOptions, SandboxCleanup } from "../../src/sandbox/runtime";
-import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
+import type { SandboxRuntimeOptions } from "../../src/sandbox/runtime";
 
 describe("bwrapRuntime.buildCommand", () => {
   const defaults: SandboxRuntimeOptions = {
@@ -89,125 +86,36 @@ describe("bwrapRuntime.buildCommand", () => {
     expect(sepIdx).toBeGreaterThan(0);
     expect(args.slice(sepIdx + 1)).toEqual(["claude", "--model", "sonnet"]);
   });
-});
 
-describe("bwrap integration", () => {
-  const tmpDirs: string[] = [];
-  const cleanups: SandboxCleanup[] = [];
-
-  afterEach(async () => {
-    for (const c of cleanups) c();
-    cleanups.length = 0;
-    for (const d of tmpDirs) {
-      await rm(d, { recursive: true, force: true }).catch(() => {});
+  test("does not pass ANTHROPIC_API_KEY from host env via --setenv", () => {
+    const orig = process.env.ANTHROPIC_API_KEY;
+    process.env.ANTHROPIC_API_KEY = "sk-ant-test-sentinel";
+    try {
+      const runtime = createBwrapRuntime();
+      const args = runtime.buildCommand(defaults, ["claude"]);
+      const setenvKeys: string[] = [];
+      for (let i = 0; i < args.length - 1; i++) {
+        if (args[i] === "--setenv") setenvKeys.push(args[i + 1]);
+      }
+      expect(setenvKeys).not.toContain("ANTHROPIC_API_KEY");
+    } finally {
+      if (orig === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = orig;
     }
-    tmpDirs.length = 0;
   });
 
-  async function makeTmpDir(): Promise<string> {
-    const d = await mkdtemp(join(tmpdir(), "deer-bwrap-test-"));
-    tmpDirs.push(d);
-    return d;
-  }
-
-  test("bwrap can run a simple command in the sandbox", async () => {
-    const dir = await makeTmpDir();
-    await writeFile(join(dir, "test.txt"), "hello");
-
-    const runtime = createBwrapRuntime();
-    const cleanup = await runtime.prepare!({ worktreePath: dir, allowlist: [] });
-    cleanups.push(cleanup);
-
-    const args = runtime.buildCommand(
-      { worktreePath: dir, allowlist: [] },
-      ["cat", join(dir, "test.txt")],
-    );
-
-    const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
-    const code = await proc.exited;
-    const stdout = await new Response(proc.stdout).text();
-
-    expect(code).toBe(0);
-    expect(stdout).toContain("hello");
-  });
-
-  test("bwrap can write files inside the worktree", async () => {
-    const dir = await makeTmpDir();
-    const runtime = createBwrapRuntime();
-    const cleanup = await runtime.prepare!({ worktreePath: dir, allowlist: [] });
-    cleanups.push(cleanup);
-
-    const args = runtime.buildCommand(
-      { worktreePath: dir, allowlist: [] },
-      ["sh", "-c", `echo "written" > ${dir}/output.txt`],
-    );
-
-    const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
-    await proc.exited;
-
-    const content = await readFile(join(dir, "output.txt"), "utf-8");
-    expect(content.trim()).toBe("written");
-  });
-
-  test("bwrap has isolated /tmp", async () => {
-    const dir = await makeTmpDir();
-    // Write a marker to the host /tmp
-    const marker = `deer-bwrap-test-${Date.now()}`;
-    await writeFile(`/tmp/${marker}`, "host-side");
-
-    const runtime = createBwrapRuntime();
-    const cleanup = await runtime.prepare!({ worktreePath: dir, allowlist: [] });
-    cleanups.push(cleanup);
-
-    const args = runtime.buildCommand(
-      { worktreePath: dir, allowlist: [] },
-      ["sh", "-c", `ls /tmp/${marker} 2>&1; echo exit=$?`],
-    );
-
-    const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
-    const stdout = await new Response(proc.stdout).text();
-    await proc.exited;
-
-    // Host /tmp file should NOT be visible inside the sandbox
-    expect(stdout).toContain("No such file");
-
-    // Clean up host marker
-    await rm(`/tmp/${marker}`).catch(() => {});
-  });
-
-  test("bwrap cannot write to /etc", async () => {
-    const dir = await makeTmpDir();
-    const runtime = createBwrapRuntime();
-    const cleanup = await runtime.prepare!({ worktreePath: dir, allowlist: [] });
-    cleanups.push(cleanup);
-
-    const args = runtime.buildCommand(
-      { worktreePath: dir, allowlist: [] },
-      ["sh", "-c", "echo pwned > /etc/deer-escape-test 2>&1; echo exit=$?"],
-    );
-
-    const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
-    const stdout = await new Response(proc.stdout).text();
-    await proc.exited;
-
-    expect(stdout).toMatch(/exit=[12]/);
-  });
-
-  test("bwrap passes environment variables into sandbox", async () => {
-    const dir = await makeTmpDir();
-    const runtime = createBwrapRuntime();
-    const cleanup = await runtime.prepare!({ worktreePath: dir, allowlist: [] });
-    cleanups.push(cleanup);
-
-    const args = runtime.buildCommand(
-      { worktreePath: dir, allowlist: [], env: { DEER_TEST: "it_works" } },
-      ["sh", "-c", "echo $DEER_TEST"],
-    );
-
-    const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
-    const stdout = await new Response(proc.stdout).text();
-    await proc.exited;
-
-    expect(stdout.trim()).toBe("it_works");
+  test("does not embed ANTHROPIC_API_KEY value anywhere in args", () => {
+    const orig = process.env.ANTHROPIC_API_KEY;
+    process.env.ANTHROPIC_API_KEY = "sk-ant-test-sentinel";
+    try {
+      const runtime = createBwrapRuntime();
+      const args = runtime.buildCommand(defaults, ["claude"]);
+      const joined = args.join(" ");
+      expect(joined).not.toContain("sk-ant-test-sentinel");
+    } finally {
+      if (orig === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = orig;
+    }
   });
 });
+

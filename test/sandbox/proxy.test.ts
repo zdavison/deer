@@ -248,6 +248,57 @@ describe("proxy server", () => {
     expect(statusCode).toBe(200);
   });
 
+  test("proxy does not inject Authorization headers into CONNECT tunnel", async () => {
+    // Even if ANTHROPIC_API_KEY is set in the host environment, the proxy must
+    // not forward it as an Authorization header into tunneled traffic.
+    const orig = process.env.ANTHROPIC_API_KEY;
+    process.env.ANTHROPIC_API_KEY = "sk-ant-proxy-sentinel";
+    try {
+      const echo = await startEchoServer();
+      const h = await launch(["127.0.0.1"], false);
+
+      const received = await new Promise<string>((resolve, reject) => {
+        let gotHandshake = false;
+        let resolved = false;
+
+        Bun.connect({
+          hostname: "127.0.0.1",
+          port: h.port,
+          socket: {
+            open(socket) {
+              socket.write(`CONNECT 127.0.0.1:${echo.port} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n`);
+            },
+            data(socket, data) {
+              const text = Buffer.from(data).toString();
+              if (!gotHandshake) {
+                gotHandshake = true;
+                // Send a plain HTTP request through the tunnel; echo server reflects it back
+                socket.write("GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n");
+                return;
+              }
+              resolved = true;
+              resolve(text);
+              socket.end();
+            },
+            close() {
+              if (!resolved) reject(new Error("closed before data"));
+            },
+            error(_, e) {
+              if (!resolved) reject(e);
+            },
+          },
+        });
+      });
+
+      // The echo server reflects exactly what was sent — no extra Authorization header
+      expect(received).not.toContain("Authorization");
+      expect(received).not.toContain("sk-ant-proxy-sentinel");
+    } finally {
+      if (orig === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = orig;
+    }
+  });
+
   test("stop() shuts down the server", async () => {
     const h = await launch(["example.com"]);
     const port = h.port;
