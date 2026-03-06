@@ -277,13 +277,12 @@ export function useAgentActions({
     await withSuspendedTerminal(setSuspended, async () => {
       await Bun.sleep(50);
       const { spawnSync } = await import("node:child_process");
-      // Create a tmux session (or reattach if it already exists) so that
-      // ctrl+b d detaches and returns to deer, just like attaching to the agent.
-      spawnSync(
-        "tmux",
-        ["new-session", "-A", "-s", sessionName, "-c", worktreePath, shell],
-        { stdio: "inherit" },
-      );
+      const { applyTmuxStatusBar } = await import("../sandbox/index");
+      // Create detached session (no-op if already exists); then apply the
+      // deer status bar, then attach — so ctrl+b d returns to deer like attach.
+      spawnSync("tmux", ["new-session", "-d", "-s", sessionName, "-c", worktreePath, shell]);
+      await applyTmuxStatusBar(sessionName);
+      spawnSync("tmux", ["attach", "-t", sessionName], { stdio: "inherit" });
     });
   }, [setSuspended]);
 

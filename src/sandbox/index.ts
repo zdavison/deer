@@ -39,6 +39,37 @@ export interface SandboxOptions {
 }
 
 /**
+ * Apply the deer status bar and mouse settings to a tmux session.
+ * @param remainOnExit - Keep pane alive after command exits (for agent sessions)
+ */
+export async function applyTmuxStatusBar(
+  sessionName: string,
+  { remainOnExit = false }: { remainOnExit?: boolean } = {},
+): Promise<void> {
+  const settings: [string, string][] = [
+    // Enable mouse scroll wheel support (enters copy mode automatically)
+    ["mouse", "on"],
+    // Status bar with detach instructions
+    ["status", "on"],
+    ["status-position", "bottom"],
+    ["status-style", "#{?client_prefix,bg=#4a4a6e fg=#ffffff,bg=#1a1a2e fg=#e0e0e0}"],
+    ["status-left", ""],
+    ["status-right", " 🦌 deer | Ctrl+b [ to scroll | Ctrl+b d to detach "],
+    ["status-right-style", "#{?client_prefix,bg=#4a4a6e fg=#ffffff,bg=#1a1a2e fg=#888888}"],
+    ["status-justify", "left"],
+  ];
+  if (remainOnExit) {
+    // Keep pane alive after command exits so we can capture scrollback
+    settings.unshift(["remain-on-exit", "on"]);
+  }
+  for (const [key, value] of settings) {
+    await Bun.spawn([
+      "tmux", "set", "-t", sessionName, key, value,
+    ], { stdout: "pipe", stderr: "pipe" }).exited;
+  }
+}
+
+/**
  * Launch a sandboxed process inside a tmux session.
  *
  * 1. Runs the runtime's prepare hook (if any)
@@ -110,25 +141,7 @@ export async function launchSandbox(options: SandboxOptions): Promise<SandboxSes
   }
 
   // Configure the tmux session
-  const tmuxSettings: [string, string][] = [
-    // Keep pane alive after command exits so we can capture scrollback
-    ["remain-on-exit", "on"],
-    // Enable mouse scroll wheel support (enters copy mode automatically)
-    ["mouse", "on"],
-    // Status bar with detach instructions
-    ["status", "on"],
-    ["status-position", "bottom"],
-    ["status-style", "#{?client_prefix,bg=#4a4a6e fg=#ffffff,bg=#1a1a2e fg=#e0e0e0}"],
-    ["status-left", ""],
-    ["status-right", " 🦌 deer | Ctrl+b [ to scroll | Ctrl+b d to detach "],
-    ["status-right-style", "#{?client_prefix,bg=#4a4a6e fg=#ffffff,bg=#1a1a2e fg=#888888}"],
-    ["status-justify", "left"],
-  ];
-  for (const [key, value] of tmuxSettings) {
-    await Bun.spawn([
-      "tmux", "set", "-t", sessionName, key, value,
-    ], { stdout: "pipe", stderr: "pipe" }).exited;
-  }
+  await applyTmuxStatusBar(sessionName, { remainOnExit: true });
 
   return {
     sessionName,
