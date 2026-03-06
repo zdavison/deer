@@ -1,3 +1,5 @@
+import { HOME } from "./constants";
+
 export interface PreflightResult {
   ok: boolean;
   errors: string[];
@@ -44,7 +46,7 @@ export async function runPreflight(): Promise<PreflightResult> {
   }
 
   // Check credentials — OAuth token preferred, API key accepted as fallback
-  const tokenFile = `${process.env.HOME ?? ""}/.claude/agent-oauth-token`;
+  const tokenFile = `${HOME}/.claude/agent-oauth-token`;
   if (!process.env.CLAUDE_CODE_OAUTH_TOKEN) {
     try {
       const f = Bun.file(tokenFile);

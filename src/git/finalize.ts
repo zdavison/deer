@@ -3,6 +3,31 @@
  */
 
 import { join } from "path";
+import { MAX_DIFF_FOR_PR_METADATA } from "../constants";
+
+/**
+ * Stage all changes and commit if there are uncommitted modifications.
+ * No-op if the worktree is clean.
+ */
+async function stageAndCommit(worktreePath: string, message = "deer: uncommitted changes from agent session"): Promise<void> {
+  await Bun.$`git -C ${worktreePath} add -A`.quiet();
+  const status = await Bun.$`git -C ${worktreePath} status --porcelain`.quiet();
+  if (status.stdout.toString().trim().length > 0) {
+    await Bun.$`git -C ${worktreePath} commit -m ${message}`.quiet();
+  }
+}
+
+/**
+ * Push a branch to origin, throwing on failure.
+ */
+async function pushBranch(worktreePath: string, branch: string, setUpstream = false): Promise<void> {
+  const result = setUpstream
+    ? await Bun.$`git -C ${worktreePath} push -u origin ${branch}`.quiet().nothrow()
+    : await Bun.$`git -C ${worktreePath} push origin ${branch}`.quiet().nothrow();
+  if (result.exitCode !== 0) {
+    throw new Error(`Push failed: ${result.stderr.toString().trim()}`);
+  }
+}
 
 export interface CreatePRResult {
   /** @example "https://github.com/org/repo/pull/42" */
@@ -92,9 +117,8 @@ async function generatePRMetadata(worktreePath: string, baseBranch: string, prom
   const logResult = await Bun.$`git -C ${worktreePath} log --oneline ${remoteBase}..HEAD`.quiet().nothrow();
   const commitLog = logResult.stdout.toString().trim();
 
-  const maxDiffLen = 20_000;
-  const truncatedDiff = diff.length > maxDiffLen
-    ? diff.slice(0, maxDiffLen) + "\n... (diff truncated)"
+  const truncatedDiff = diff.length > MAX_DIFF_FOR_PR_METADATA
+    ? diff.slice(0, MAX_DIFF_FOR_PR_METADATA) + "\n... (diff truncated)"
     : diff;
 
   const templateSection = prTemplate
@@ -189,12 +213,7 @@ ${truncatedDiff}`;
 export async function createPullRequest(options: CreatePROptions): Promise<CreatePRResult> {
   const { repoPath, worktreePath, branch, baseBranch, prompt } = options;
 
-  // Stage and commit any uncommitted changes
-  await Bun.$`git -C ${worktreePath} add -A`.quiet();
-  const status = await Bun.$`git -C ${worktreePath} status --porcelain`.quiet();
-  if (status.stdout.toString().trim().length > 0) {
-    await Bun.$`git -C ${worktreePath} commit -m "deer: uncommitted changes from agent session"`.quiet();
-  }
+  await stageAndCommit(worktreePath);
 
   // Generate PR metadata using Claude
   const prTemplate = await findPRTemplate(repoPath);
@@ -210,11 +229,7 @@ export async function createPullRequest(options: CreatePROptions): Promise<Creat
     }
   }
 
-  // Push the branch
-  const pushResult = await Bun.$`git -C ${worktreePath} push -u origin ${finalBranch}`.quiet().nothrow();
-  if (pushResult.exitCode !== 0) {
-    throw new Error(`Push failed: ${pushResult.stderr.toString().trim()}`);
-  }
+  await pushBranch(worktreePath, finalBranch, true);
 
   // Create PR
   const prResult = await Bun.$`gh pr create --base ${baseBranch} --head ${finalBranch} --title ${metadata.title} --body ${metadata.body}`.cwd(repoPath).quiet().nothrow();
@@ -246,18 +261,8 @@ export async function pushBranchUpdates(options: PushBranchOptions): Promise<voi
   // Remove deer internal files before staging
   await Bun.$`rm -rf ${worktreePath}/.deer-claude-config ${worktreePath}/.deer-prompt`.quiet().nothrow();
 
-  // Stage and commit any uncommitted changes
-  await Bun.$`git -C ${worktreePath} add -A`.quiet();
-  const status = await Bun.$`git -C ${worktreePath} status --porcelain`.quiet();
-  if (status.stdout.toString().trim().length > 0) {
-    await Bun.$`git -C ${worktreePath} commit -m "deer: uncommitted changes from agent session"`.quiet();
-  }
-
-  // Push to origin
-  const pushResult = await Bun.$`git -C ${worktreePath} push origin ${branch}`.quiet().nothrow();
-  if (pushResult.exitCode !== 0) {
-    throw new Error(`Push failed: ${pushResult.stderr.toString().trim()}`);
-  }
+  await stageAndCommit(worktreePath);
+  await pushBranch(worktreePath, branch);
 }
 
 /**
@@ -270,18 +275,8 @@ export async function updatePullRequest(options: UpdatePROptions): Promise<void>
   // Remove deer internal files before staging
   await Bun.$`rm -rf ${worktreePath}/.deer-claude-config ${worktreePath}/.deer-prompt`.quiet().nothrow();
 
-  // Stage and commit any uncommitted changes
-  await Bun.$`git -C ${worktreePath} add -A`.quiet();
-  const status = await Bun.$`git -C ${worktreePath} status --porcelain`.quiet();
-  if (status.stdout.toString().trim().length > 0) {
-    await Bun.$`git -C ${worktreePath} commit -m "deer: uncommitted changes from agent session"`.quiet();
-  }
-
-  // Push the branch
-  const pushResult = await Bun.$`git -C ${worktreePath} push origin ${finalBranch}`.quiet().nothrow();
-  if (pushResult.exitCode !== 0) {
-    throw new Error(`Push failed: ${pushResult.stderr.toString().trim()}`);
-  }
+  await stageAndCommit(worktreePath);
+  await pushBranch(worktreePath, finalBranch);
 
   // Regenerate PR metadata from the updated diff
   const prTemplate = await findPRTemplate(repoPath);

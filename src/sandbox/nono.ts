@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { SandboxRuntime, SandboxRuntimeOptions, SandboxCleanup } from "./runtime";
+import { HOME } from "../constants";
 
 /**
  * Path to the nono binary.
@@ -26,7 +27,7 @@ export const nonoRuntime: SandboxRuntime = {
     // Pre-create ~/.claude.json.lock so Landlock can attach a rule to it.
     // Claude Code's saveConfigWithLock creates this file; without it,
     // Landlock blocks creation (no MAKE_REG on ~/). See nono#220.
-    const lockFile = join(process.env.HOME ?? "/root", ".claude.json.lock");
+    const lockFile = join(HOME, ".claude.json.lock");
     await Bun.write(lockFile, "").catch(() => {});
     return () => {};
   },

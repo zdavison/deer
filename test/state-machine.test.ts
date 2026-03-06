@@ -5,7 +5,7 @@ import {
   resolveKeypress,
   confirmationMessage,
   ACTION_BINDINGS,
-  type AgentState,
+  type AgentStatus,
   type AgentEvent,
   type AgentAction,
   type AgentContext,
@@ -62,7 +62,7 @@ describe("transition", () => {
   });
 
   test("terminal states have no transitions", () => {
-    const terminalStates: AgentState[] = ["failed", "cancelled"];
+    const terminalStates: AgentStatus[] = ["failed", "cancelled"];
     const events: AgentEvent[] = [
       "SETUP_COMPLETE", "TEARDOWN_START", "TEARDOWN_COMPLETE",
       "ERROR", "USER_KILL", "SESSION_CLOSE",

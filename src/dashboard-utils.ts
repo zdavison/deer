@@ -1,35 +1,52 @@
-import type { AgentState as AgentStatus } from "./state-machine";
+import type { AgentStatus } from "./state-machine";
 import type { AgentState } from "./agent-state";
+import {
+  MAX_LOG_LINES,
+  DASHBOARD_POLL_MS,
+  IDLE_THRESHOLD,
+  DEFAULT_MODEL,
+  PR_MERGE_CHECK_INTERVAL_MS,
+  MAX_VISIBLE_LOGS,
+  LOG_LINES_PER_ENTRY,
+  ENTRY_ROWS_BASE,
+  ENTRY_ROWS_WITH_PR,
+  UPLOAD_FRAMES,
+} from "./constants";
+
+// ── Re-exports from constants ───────────────────────────────────────
+// Kept for backwards compatibility with existing imports in dashboard.tsx etc.
+
+export {
+  MAX_LOG_LINES,
+  MAX_VISIBLE_LOGS,
+  LOG_LINES_PER_ENTRY,
+  ENTRY_ROWS_BASE,
+  ENTRY_ROWS_WITH_PR,
+  UPLOAD_FRAMES,
+  PR_MERGE_CHECK_INTERVAL_MS,
+  IDLE_THRESHOLD,
+  DEFAULT_MODEL,
+};
+
+export const MODEL = DEFAULT_MODEL;
+export const POLL_MS = DASHBOARD_POLL_MS;
 
 // ── Constants ────────────────────────────────────────────────────────
 
 export const STATUS_DISPLAY: Record<AgentStatus, { icon: string; color: string }> = {
-  setup:       { icon: "⏳", color: "yellow" },
-  running:     { icon: "●",  color: "cyan" },
-  teardown:    { icon: "⬆",  color: "blue" },
-  failed:      { icon: "✗",  color: "red" },
-  cancelled:   { icon: "⊘",  color: "gray" },
+  setup:       { icon: "\u23F3", color: "yellow" },
+  running:     { icon: "\u25CF",  color: "cyan" },
+  teardown:    { icon: "\u2B06",  color: "blue" },
+  failed:      { icon: "\u2717",  color: "red" },
+  cancelled:   { icon: "\u2298",  color: "gray" },
   interrupted: { icon: "!",  color: "yellow" },
 };
-
-export const UPLOAD_FRAMES = ["⬆", "⇧"];
-
-export const MAX_LOG_LINES = 200;
-export const MAX_VISIBLE_LOGS = 5;
-export const LOG_LINES_PER_ENTRY = 2;
-export const ENTRY_ROWS_BASE = 1 + LOG_LINES_PER_ENTRY;
-export const ENTRY_ROWS_WITH_PR = ENTRY_ROWS_BASE + 1;
-export const MODEL = "sonnet";
-export const PR_MERGE_CHECK_INTERVAL_MS = 10_000;
-export const POLL_MS = 1_000;
-/** Number of consecutive unchanged pane captures before considering Claude idle */
-export const IDLE_THRESHOLD = 3;
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
 export function truncate(s: string, max: number): string {
   if (max <= 0) return "";
-  return s.length > max ? s.slice(0, max - 1) + "…" : s;
+  return s.length > max ? s.slice(0, max - 1) + "\u2026" : s;
 }
 
 export function formatTime(seconds: number): string {
@@ -53,6 +70,14 @@ export function isActive(a: AgentState): boolean {
 export function stripAnsi(s: string): string {
   return s.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "")
           .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "");
+}
+
+/**
+ * Normalize pane lines into a single snapshot string for comparison.
+ * Strips ANSI codes, trims whitespace, and drops empty lines.
+ */
+export function captureSnapshot(lines: string[]): string {
+  return lines.map(stripAnsi).map((l) => l.trim()).filter(Boolean).join("\n");
 }
 
 /** Suspend the ink alternate screen, run fn, then restore. */

@@ -13,6 +13,14 @@ import { launchSandbox, isTmuxSessionDead, captureTmuxPane } from "./sandbox/ind
 import type { SandboxSession, SandboxRuntime } from "./sandbox/index";
 import { generateTaskId, dataDir } from "./task";
 import type { DeerConfig } from "./config";
+import {
+  AGENT_POLL_INTERVAL_MS,
+  DEFAULT_MODEL,
+  BYPASS_DIALOG_MAX_POLLS,
+  BYPASS_DIALOG_POLL_MS,
+  BYPASS_DIALOG_KEY_DELAY_MS,
+  HOME,
+} from "./constants";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -65,9 +73,6 @@ export type AgentStatus =
 
 // ── Constants ────────────────────────────────────────────────────────
 
-const POLL_INTERVAL_MS = 3_000;
-const DEFAULT_MODEL = "sonnet";
-
 /**
  * Build an env object containing only the vars from the passthrough list.
  * Vars not set in the host environment are omitted.
@@ -92,8 +97,8 @@ function buildPassthroughEnv(passthrough: string[]): Record<string, string> {
  * and dismiss it by selecting "Yes, I accept".
  */
 async function dismissBypassDialog(sessionName: string): Promise<void> {
-  for (let i = 0; i < 15; i++) {
-    await Bun.sleep(500);
+  for (let i = 0; i < BYPASS_DIALOG_MAX_POLLS; i++) {
+    await Bun.sleep(BYPASS_DIALOG_POLL_MS);
     const pane = await captureTmuxPane(sessionName);
     if (!pane) return;
     const text = pane.join("\n");
@@ -103,7 +108,7 @@ async function dismissBypassDialog(sessionName: string): Promise<void> {
       await Bun.spawn(["tmux", "send-keys", "-t", sessionName, "Down"], {
         stdout: "pipe", stderr: "pipe",
       }).exited;
-      await Bun.sleep(200);
+      await Bun.sleep(BYPASS_DIALOG_KEY_DELAY_MS);
       await Bun.spawn(["tmux", "send-keys", "-t", sessionName, "Enter"], {
         stdout: "pipe", stderr: "pipe",
       }).exited;
@@ -223,7 +228,7 @@ export async function waitForCompletion(
     const dead = await isTmuxSessionDead(handle.sessionName);
     if (dead) return;
 
-    await Bun.sleep(POLL_INTERVAL_MS);
+    await Bun.sleep(AGENT_POLL_INTERVAL_MS);
   }
 }
 

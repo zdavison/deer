@@ -3,6 +3,7 @@ import { existsSync, lstatSync, readlinkSync, readdirSync, realpathSync } from "
 import { readFile } from "node:fs/promises";
 import { startProxy } from "./proxy";
 import type { SandboxRuntime, SandboxRuntimeOptions, SandboxCleanup } from "./runtime";
+import { HOME } from "../constants";
 
 /**
  * Paths that need to be available in the sandbox.
@@ -21,26 +22,15 @@ const SYSTEM_PATHS = [
   "/etc",
 ];
 
-/**
- * Build the bwrap argument array for a given proxy port and options.
- */
-function buildBwrapArgs(
-  options: SandboxRuntimeOptions,
-  innerCommand: string[],
-  proxyPort: number,
-): string[] {
-  const { worktreePath, repoGitDir, extraReadPaths, extraWritePaths, env } = options;
-  const home = process.env.HOME ?? "/root";
+// ── buildBwrapArgs helpers ────────────────────────────────────────────
 
-  const args: string[] = ["bwrap"];
-
-  // System directories — ro-bind or symlink depending on host layout
+/** Mount system directories, replicating symlinks (e.g. /bin -> usr/bin). */
+function addSystemMounts(args: string[]): void {
   for (const path of SYSTEM_PATHS) {
     if (!existsSync(path)) continue;
     try {
       const stat = lstatSync(path);
       if (stat.isSymbolicLink()) {
-        // e.g. /bin -> usr/bin: replicate as a symlink inside the sandbox
         const target = readlinkSync(path, "utf-8");
         args.push("--symlink", target, path);
       } else {
@@ -50,24 +40,18 @@ function buildBwrapArgs(
       args.push("--ro-bind", path, path);
     }
   }
+}
 
-  // Proc and dev
-  args.push("--proc", "/proc");
-  args.push("--dev", "/dev");
+/**
+ * Mount specific home-directory paths needed by the sandbox.
+ * Includes Claude config (rw), tool config dirs (ro), and PATH dirs under HOME.
+ */
+function addHomeMounts(args: string[], home: string): void {
+  const mounted = new Set<string>();
 
-  // Namespace isolation
-  args.push("--unshare-pid");
-  args.push("--unshare-ipc");
-
-  // Tmpfs for /tmp (writable but ephemeral, not the host's /tmp)
-  args.push("--tmpfs", "/tmp");
-
-  // Home directory read-only mounts — only specific paths, not all of $HOME
-  const homeMounts = new Set<string>();
-
-  const addHomeMount = (path: string) => {
-    if (homeMounts.has(path)) return;
-    homeMounts.add(path);
+  const addRo = (path: string) => {
+    if (mounted.has(path)) return;
+    mounted.add(path);
     if (existsSync(path)) {
       args.push("--ro-bind", path, path);
     }
@@ -79,7 +63,7 @@ function buildBwrapArgs(
   // module monitors for such tampering at the dashboard level.
   const claudeDir = join(home, ".claude");
   if (existsSync(claudeDir)) {
-    homeMounts.add(claudeDir);
+    mounted.add(claudeDir);
     args.push("--bind", claudeDir, claudeDir);
   }
 
@@ -92,7 +76,7 @@ function buildBwrapArgs(
   // Specific ~/.config sub-paths needed by tools (git, gh, deer).
   // Avoids exposing the entire ~/.config which contains unrelated secrets.
   for (const sub of ["git", "gh", "deer"]) {
-    addHomeMount(join(home, ".config", sub));
+    addRo(join(home, ".config", sub));
   }
 
   // Mount PATH directories under HOME so sandboxed tools are found.
@@ -105,9 +89,8 @@ function buildBwrapArgs(
     const homePrefix = home + "/";
     for (const dir of process.env.PATH.split(":")) {
       if (!dir.startsWith(homePrefix)) continue;
-      addHomeMount(dir);
+      addRo(dir);
 
-      // Resolve symlink targets in this PATH dir
       try {
         for (const entry of readdirSync(dir)) {
           const entryPath = join(dir, entry);
@@ -116,8 +99,7 @@ function buildBwrapArgs(
             if (stat.isSymbolicLink()) {
               const realPath = realpathSync(entryPath);
               if (realPath.startsWith(homePrefix)) {
-                // Mount the directory containing the real binary
-                addHomeMount(dirname(realPath));
+                addRo(dirname(realPath));
               }
             }
           } catch { /* skip broken symlinks */ }
@@ -125,24 +107,70 @@ function buildBwrapArgs(
       } catch { /* skip unreadable dirs */ }
     }
   }
+}
 
-  // Extra read-only paths
+/** Mount extra read-only and read-write paths from config. */
+function addExtraMounts(args: string[], extraReadPaths?: string[], extraWritePaths?: string[]): void {
   if (extraReadPaths) {
     for (const path of extraReadPaths) {
-      if (existsSync(path)) {
-        args.push("--ro-bind", path, path);
-      }
+      if (existsSync(path)) args.push("--ro-bind", path, path);
     }
   }
-
-  // Extra read-write paths
   if (extraWritePaths) {
     for (const path of extraWritePaths) {
-      if (existsSync(path)) {
-        args.push("--bind", path, path);
-      }
+      if (existsSync(path)) args.push("--bind", path, path);
     }
   }
+}
+
+/** Set environment variables inside the bwrap sandbox. */
+function addBwrapEnv(
+  args: string[],
+  home: string,
+  proxyPort: number,
+  env?: Record<string, string>,
+): void {
+  if (proxyPort > 0) {
+    const proxyUrl = `http://127.0.0.1:${proxyPort}`;
+    args.push("--setenv", "HTTPS_PROXY", proxyUrl);
+    args.push("--setenv", "HTTP_PROXY", proxyUrl);
+  }
+  if (env) {
+    for (const [key, value] of Object.entries(env)) {
+      args.push("--setenv", key, value);
+    }
+  }
+  args.push("--setenv", "HOME", home);
+  args.push("--unsetenv", "CLAUDECODE");
+  if (process.env.PATH) {
+    args.push("--setenv", "PATH", process.env.PATH);
+  }
+  args.push("--setenv", "TERM", process.env.TERM ?? "xterm-256color");
+}
+
+// ── buildBwrapArgs ───────────────────────────────────────────────────
+
+/**
+ * Build the bwrap argument array for a given proxy port and options.
+ */
+function buildBwrapArgs(
+  options: SandboxRuntimeOptions,
+  innerCommand: string[],
+  proxyPort: number,
+): string[] {
+  const { worktreePath, repoGitDir, extraReadPaths, extraWritePaths, env } = options;
+  const home = HOME;
+  const args: string[] = ["bwrap"];
+
+  // Filesystem mounts
+  addSystemMounts(args);
+  args.push("--proc", "/proc");
+  args.push("--dev", "/dev");
+  args.push("--unshare-pid");
+  args.push("--unshare-ipc");
+  args.push("--tmpfs", "/tmp");
+  addHomeMounts(args, home);
+  addExtraMounts(args, extraReadPaths, extraWritePaths);
 
   // Main repo's .git/ directory — needed for git worktree operations.
   if (repoGitDir && existsSync(repoGitDir)) {
@@ -150,8 +178,7 @@ function buildBwrapArgs(
   }
 
   // Worktree: the only persistent writable mount.
-  // Must come after all read-only mounts so it overlays any parent ro-bind
-  // (e.g. worktree under ~/.local/share/deer is inside the ~/.local ro-bind).
+  // Must come after all read-only mounts so it overlays any parent ro-bind.
   args.push("--bind", worktreePath, worktreePath);
 
   // Process isolation
@@ -159,33 +186,8 @@ function buildBwrapArgs(
   args.push("--clearenv");
   args.push("--chdir", worktreePath);
 
-  // Environment: proxy settings
-  if (proxyPort > 0) {
-    const proxyUrl = `http://127.0.0.1:${proxyPort}`;
-    args.push("--setenv", "HTTPS_PROXY", proxyUrl);
-    args.push("--setenv", "HTTP_PROXY", proxyUrl);
-  }
-
-  // Custom environment variables (e.g. CLAUDE_CODE_OAUTH_TOKEN)
-  if (env) {
-    for (const [key, value] of Object.entries(env)) {
-      args.push("--setenv", key, value);
-    }
-  }
-
-  // Preserve HOME so Claude Code finds its config
-  args.push("--setenv", "HOME", home);
-
-  // Unset CLAUDECODE so nested Claude instances don't refuse to start
-  args.push("--unsetenv", "CLAUDECODE");
-
-  // Preserve PATH so sandboxed tools (claude, git, gh, etc.) are found
-  if (process.env.PATH) {
-    args.push("--setenv", "PATH", process.env.PATH);
-  }
-
-  // Preserve TERM so interactive TUI applications render correctly
-  args.push("--setenv", "TERM", process.env.TERM ?? "xterm-256color");
+  // Environment
+  addBwrapEnv(args, home, proxyPort, env);
 
   // Separator + inner command
   args.push("--");

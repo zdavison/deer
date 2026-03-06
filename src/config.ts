@@ -1,5 +1,6 @@
 import TOML from "@iarna/toml";
 import { join } from "node:path";
+import { HOME } from "./constants";
 
 export interface DeerConfig {
   defaults: {
@@ -156,7 +157,7 @@ export async function loadConfig(
   let config: unknown = structuredClone(DEFAULT_CONFIG);
 
   // 1. Global config
-  const globalPath = globalConfigPath ?? join(process.env.HOME ?? "", ".config", "deer", "config.toml");
+  const globalPath = globalConfigPath ?? join(HOME, ".config", "deer", "config.toml");
   const globalToml = await readTomlFile(globalPath);
   if (globalToml) {
     config = deepMerge(config as Record<string, unknown>, tomlToConfig(globalToml) as Record<string, unknown>);

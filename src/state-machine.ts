@@ -5,7 +5,7 @@
 
 // ── Types ────────────────────────────────────────────────────────────
 
-export type AgentState =
+export type AgentStatus =
   | "setup"
   | "running"
   | "teardown"
@@ -33,7 +33,7 @@ export type AgentAction =
   | "open_shell";
 
 export interface AgentContext {
-  status: AgentState;
+  status: AgentStatus;
   hasPrUrl: boolean;
   hasFinalBranch: boolean;
   hasHandle: boolean;
@@ -49,7 +49,7 @@ interface ActionBinding {
 
 // ── Transition Table ─────────────────────────────────────────────────
 
-const TRANSITIONS: Record<AgentState, Partial<Record<AgentEvent, AgentState>>> = {
+const TRANSITIONS: Record<AgentStatus, Partial<Record<AgentEvent, AgentStatus>>> = {
   setup:       { SETUP_COMPLETE: "running", ERROR: "failed", USER_KILL: "cancelled" },
   running:     { TEARDOWN_START: "teardown", ERROR: "failed", USER_KILL: "cancelled", SESSION_CLOSE: "interrupted" },
   teardown:    { TEARDOWN_COMPLETE: "running", ERROR: "failed" },
@@ -62,13 +62,13 @@ const TRANSITIONS: Record<AgentState, Partial<Record<AgentEvent, AgentState>>> =
  * Attempt a state transition. Returns the next state, or null if the
  * transition is invalid for the current state.
  */
-export function transition(current: AgentState, event: AgentEvent): AgentState | null {
+export function transition(current: AgentStatus, event: AgentEvent): AgentStatus | null {
   return TRANSITIONS[current][event] ?? null;
 }
 
 // ── Action Map per State ─────────────────────────────────────────────
 
-const ACTIONS_BY_STATE: Record<AgentState, AgentAction[]> = {
+const ACTIONS_BY_STATE: Record<AgentStatus, AgentAction[]> = {
   setup:       ["kill", "delete", "toggle_logs"],
   running:     ["attach", "kill", "open_shell", "delete", "toggle_logs", "retry"],
   teardown:    ["open_shell", "delete", "toggle_logs"],
@@ -126,7 +126,7 @@ export function availableActions(ctx: AgentContext): AgentAction[] {
 
 // ── Confirmation Messages ─────────────────────────────────────────────
 
-const ACTIVE_STATES = new Set<AgentState>(["setup", "running", "teardown"]);
+const ACTIVE_STATES = new Set<AgentStatus>(["setup", "running", "teardown"]);
 
 /**
  * Returns a confirmation prompt for dangerous actions, or null if the action

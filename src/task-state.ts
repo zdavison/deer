@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { dataDir } from "./task";
+import type { TaskMetadata } from "./task";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -10,20 +11,7 @@ import { dataDir } from "./task";
  *
  * Stored at: ~/.local/share/deer/tasks/<taskId>/state.json
  */
-export interface TaskStateFile {
-  /** @example "deer_01jm8k3nxa7f" */
-  taskId: string;
-  prompt: string;
-  status: "running" | "failed" | "cancelled";
-  /** Elapsed seconds (paused while idle) */
-  elapsed: number;
-  /** Latest activity line shown in the TUI */
-  lastActivity: string;
-  /** @example "deer/deer_01jm8k3nxa7f" */
-  finalBranch: string | null;
-  /** @example "https://github.com/org/repo/pull/42" */
-  prUrl: string | null;
-  error: string | null;
+export interface TaskStateFile extends TaskMetadata {
   /** Capped ring buffer of recent log lines */
   logs: string[];
   /** True when Claude is idle (waiting for user input) */

@@ -27,25 +27,31 @@ export function dataDir(): string {
   return `${home}/.local/share/deer`;
 }
 
-// ── Task History Persistence ──────────────────────────────────────────
+// ── Task Types ───────────────────────────────────────────────────────
 
-export interface PersistedTask {
+/** Shared fields common to all task representations. */
+export interface TaskMetadata {
   /** @example "deer_01jm8k3nxa7f" */
   taskId: string;
   prompt: string;
   status: "running" | "failed" | "cancelled";
-  /** ISO 8601 timestamp */
-  createdAt: string;
-  /** ISO 8601 timestamp — null while task is still running */
-  completedAt: string | null;
   /** Elapsed seconds */
   elapsed: number;
+  lastActivity: string;
   /** @example "https://github.com/org/repo/pull/42" */
   prUrl: string | null;
   /** @example "deer/fix-login-bug" */
   finalBranch: string | null;
   error: string | null;
-  lastActivity: string;
+}
+
+// ── Task History Persistence ──────────────────────────────────────────
+
+export interface PersistedTask extends TaskMetadata {
+  /** ISO 8601 timestamp */
+  createdAt: string;
+  /** ISO 8601 timestamp — null while task is still running */
+  completedAt: string | null;
 }
 
 /**

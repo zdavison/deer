@@ -11,6 +11,7 @@ import { watch, type FSWatcher } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
+import { HOME, CONFIG_GUARD_DEBOUNCE_MS } from "../constants";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -45,6 +46,8 @@ interface WatchedEntry {
 }
 
 function claudeDir(): string {
+  // Read HOME at call time (not from the cached constant) because tests
+  // override process.env.HOME after module load.
   return join(process.env.HOME ?? "", ".claude");
 }
 
@@ -289,7 +292,7 @@ export async function startClaudeConfigGuard(
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
       checkForChanges().catch(() => {});
-    }, 300);
+    }, CONFIG_GUARD_DEBOUNCE_MS);
   }
 
   // Watch ~/.claude directory

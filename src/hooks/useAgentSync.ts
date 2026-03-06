@@ -9,6 +9,7 @@ import { detectRepo } from "../git/worktree";
 import { type AgentState, historicalAgent, liveTaskFromStateFile, historicalAgentFromStateFile } from "../agent-state";
 import { readTaskState, scanLiveTaskIds, isOwnerAlive } from "../task-state";
 import type { DeerConfig } from "../config";
+import { TASK_SYNC_DEBOUNCE_MS, TASK_SYNC_SAFETY_POLL_MS } from "../constants";
 
 export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig | null>) {
   const [agents, setAgents] = useState<AgentState[]>([]);
@@ -139,7 +140,7 @@ export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig
 
     const trigger = () => {
       if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(syncWithHistory, 100);
+      debounceTimer = setTimeout(syncWithHistory, TASK_SYNC_DEBOUNCE_MS);
     };
 
     let watcher: ReturnType<typeof watch> | null = null;
@@ -152,7 +153,7 @@ export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig
     }
 
     // Safety-net poll in case fs.watch misses events (e.g. on some Linux setups)
-    const interval = setInterval(syncWithHistory, 10_000);
+    const interval = setInterval(syncWithHistory, TASK_SYNC_SAFETY_POLL_MS);
 
     return () => {
       watcher?.close();

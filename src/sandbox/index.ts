@@ -1,4 +1,5 @@
 import type { SandboxRuntime, SandboxCleanup } from "./runtime";
+import { HOME } from "../constants";
 
 export type { SandboxRuntime, SandboxRuntimeOptions, SandboxCleanup } from "./runtime";
 export { nonoRuntime } from "./nono";
@@ -72,6 +73,42 @@ export async function applyTmuxStatusBar(
 }
 
 /**
+ * Build a minimal environment for the tmux session.
+ * Only system essentials + explicitly passthrough'd vars reach the sandbox.
+ * This prevents leaking host secrets (AWS keys, DB URLs, etc.) into the
+ * sandboxed process via /proc/self/environ.
+ */
+function buildSandboxEnvironment(extra: Record<string, string>): Record<string, string> {
+  return {
+    PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
+    HOME: HOME,
+    TERM: process.env.TERM ?? "xterm-256color",
+    // tmux needs TMUX/TMUX_PANE unset to create new sessions,
+    // so we intentionally do NOT propagate them.
+    ...extra,
+  };
+}
+
+/** Shell-escape an argument for use inside single quotes. */
+function shellEscape(arg: string): string {
+  return `'${arg.replace(/'/g, "'\\''")}'`;
+}
+
+/**
+ * Build the shell preamble that sets environment vars, disables flow control,
+ * and exec's the sandboxed command.
+ */
+function buildShellPreamble(env: Record<string, string>, command: string[]): string {
+  const envExports = Object.entries(env)
+    .map(([k, v]) => `export ${k}=${shellEscape(v)}`)
+    .join("; ");
+  const escapedCmd = command.map(shellEscape).join(" ");
+
+  // Disable XON/XOFF flow control so attaching a terminal client cannot stall Claude's output.
+  return `${envExports}; unset CLAUDECODE; stty -ixon 2>/dev/null || true; exec ${escapedCmd}`;
+}
+
+/**
  * Launch a sandboxed process inside a tmux session.
  *
  * 1. Runs the runtime's prepare hook (if any)
@@ -100,39 +137,17 @@ export async function launchSandbox(options: SandboxOptions): Promise<SandboxSes
   // Build the full sandboxed command via the runtime
   const fullCommand = runtime.buildCommand(runtimeOpts, command);
 
-  const escapedCmd = fullCommand
-    .map((arg) => `'${arg.replace(/'/g, "'\\''")}'`)
-    .join(" ");
-
-  // Build a minimal environment for the tmux session.
-  // Only system essentials + explicitly passthrough'd vars reach the sandbox.
-  // This prevents leaking host secrets (AWS keys, DB URLs, etc.) into the
-  // sandboxed process via /proc/self/environ.
-  const sandboxEnv: Record<string, string> = {
-    PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
-    HOME: process.env.HOME ?? "/root",
-    TERM: process.env.TERM ?? "xterm-256color",
-    // tmux needs TMUX/TMUX_PANE unset to create new sessions,
-    // so we intentionally do NOT propagate them.
-    ...env,
-  };
-
-  // Build env exports for the shell preamble
-  const envExports = Object.entries(sandboxEnv)
-    .map(([k, v]) => `export ${k}='${v.replace(/'/g, "'\\''")}'`)
-    .join("; ");
-
-  // Disable XON/XOFF flow control so attaching a terminal client cannot stall Claude's output.
-  const preamble = `${envExports}; unset CLAUDECODE; stty -ixon 2>/dev/null || true; exec ${escapedCmd}`;
+  const sandboxEnv = buildSandboxEnvironment(env);
+  const preamble = buildShellPreamble(sandboxEnv, fullCommand);
 
   // Create tmux session with a clean environment (env -i).
   // The preamble re-exports only the allowed vars.
   const createProc = Bun.spawn([
     "env", "-i",
     // tmux itself needs minimal env to function
-    `PATH=${process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin"}`,
-    `HOME=${process.env.HOME ?? "/root"}`,
-    `TERM=${process.env.TERM ?? "xterm-256color"}`,
+    `PATH=${sandboxEnv.PATH}`,
+    `HOME=${sandboxEnv.HOME}`,
+    `TERM=${sandboxEnv.TERM}`,
     "tmux", "new-session", "-d", "-s", sessionName,
     "-x", "200", "-y", "50",
     "sh", "-c", preamble,

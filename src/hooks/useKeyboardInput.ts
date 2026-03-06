@@ -61,70 +61,68 @@ export function useKeyboardInput({
     ? agents.map((a, i) => ({ agent: a, idx: i })).filter(({ agent }) => fuzzyMatch(agent.prompt, searchQuery))
     : [];
 
-  useInput((input, key) => {
-    if (suspended) return;
+  // ── Sub-handlers ──────────────────────────────────────────────────
 
-    // Search mode: capture all input for the search query
-    if (searchMode) {
-      if (key.escape || (key.ctrl && input === "c")) {
-        setSearchMode(false);
-        setSearchQuery("");
-        setSearchMatchIdx(0);
-        return;
-      }
-      if (key.return) {
-        // Select the currently highlighted search match
-        const matches = agents
-          .map((a, i) => ({ agent: a, idx: i }))
-          .filter(({ agent }) => fuzzyMatch(agent.prompt, searchQuery));
-        const match = matches[searchMatchIdx];
-        if (match) {
-          setSelectedIdx(match.idx);
-          setInputFocused(false);
-        }
-        setSearchMode(false);
-        setSearchQuery("");
-        setSearchMatchIdx(0);
-        return;
-      }
-      if (key.upArrow) {
-        const matchCount = agents.filter((a) => fuzzyMatch(a.prompt, searchQuery)).length;
-        setSearchMatchIdx((prev) => Math.max(prev - 1, 0));
-        return;
-      }
-      if (key.downArrow) {
-        const matchCount = agents.filter((a) => fuzzyMatch(a.prompt, searchQuery)).length;
-        setSearchMatchIdx((prev) => Math.min(prev + 1, Math.max(matchCount - 1, 0)));
-        return;
-      }
-      if (key.backspace || key.delete) {
-        setSearchQuery((prev) => prev.slice(0, -1));
-        setSearchMatchIdx(0);
-        return;
-      }
-      if (input && !key.ctrl && !key.meta) {
-        setSearchQuery((prev) => prev + input);
-        setSearchMatchIdx(0);
-        return;
-      }
-      return;
+  function handleSearchInput(input: string, key: Record<string, unknown>): boolean {
+    if (!searchMode) return false;
+
+    if (key.escape || (key.ctrl && input === "c")) {
+      setSearchMode(false);
+      setSearchQuery("");
+      setSearchMatchIdx(0);
+      return true;
     }
+    if (key.return) {
+      const matches = agents
+        .map((a, i) => ({ agent: a, idx: i }))
+        .filter(({ agent }) => fuzzyMatch(agent.prompt, searchQuery));
+      const match = matches[searchMatchIdx];
+      if (match) {
+        setSelectedIdx(match.idx);
+        setInputFocused(false);
+      }
+      setSearchMode(false);
+      setSearchQuery("");
+      setSearchMatchIdx(0);
+      return true;
+    }
+    if (key.upArrow) {
+      setSearchMatchIdx((prev) => Math.max(prev - 1, 0));
+      return true;
+    }
+    if (key.downArrow) {
+      const matchCount = agents.filter((a) => fuzzyMatch(a.prompt, searchQuery)).length;
+      setSearchMatchIdx((prev) => Math.min(prev + 1, Math.max(matchCount - 1, 0)));
+      return true;
+    }
+    if (key.backspace || key.delete) {
+      setSearchQuery((prev) => prev.slice(0, -1));
+      setSearchMatchIdx(0);
+      return true;
+    }
+    if (input && !key.ctrl && !key.meta) {
+      setSearchQuery((prev) => prev + input);
+      setSearchMatchIdx(0);
+      return true;
+    }
+    return true;
+  }
 
-    const clampedIdx = Math.min(selectedIdx, Math.max(agents.length - 1, 0));
-
-    // Quit handling
+  function handleQuitInput(input: string): boolean {
     if (input === "q" && !inputFocused) {
       const running = agents.filter(isActive);
       if (running.length > 0 && !confirmQuit) {
         setConfirmQuit(true);
-        return;
+        return true;
       }
       for (const a of running) killAgent(a);
       exit();
-      return;
+      return true;
     }
+    return false;
+  }
 
-    // Confirm quit
+  function handleConfirmationInput(input: string): boolean {
     if (confirmQuit) {
       if (input === "y" || input === "Y") {
         const running = agents.filter(isActive);
@@ -133,84 +131,83 @@ export function useKeyboardInput({
       } else {
         setConfirmQuit(false);
       }
-      return;
+      return true;
     }
 
-    // Pending action confirmation
     if (pendingConfirmation) {
       if (input === "y" || input === "Y") {
         executeAction(pendingConfirmation.action, pendingConfirmation.agent);
       }
       setPendingConfirmation(null);
+      return true;
+    }
+
+    return false;
+  }
+
+  function handleHistoryInput(key: Record<string, unknown>): boolean {
+    if (!inputFocused || promptHistory.length === 0) return false;
+
+    if (key.upArrow) {
+      const nextIdx = historyIdx < promptHistory.length - 1 ? historyIdx + 1 : historyIdx;
+      setHistoryIdx(nextIdx);
+      setInputDefault(promptHistory[promptHistory.length - 1 - nextIdx]);
+      setInputKey((k) => k + 1);
+      return true;
+    }
+    if (key.downArrow) {
+      const nextIdx = historyIdx > 0 ? historyIdx - 1 : -1;
+      setHistoryIdx(nextIdx);
+      setInputDefault(nextIdx === -1 ? "" : promptHistory[promptHistory.length - 1 - nextIdx]);
+      setInputKey((k) => k + 1);
+      return true;
+    }
+    return false;
+  }
+
+  function handleAgentListInput(input: string, key: Record<string, unknown>): void {
+    if (inputFocused || agents.length === 0) return;
+
+    if (input === "/") {
+      setSearchMode(true);
+      setSearchQuery("");
+      setSearchMatchIdx(0);
       return;
     }
 
-    // Prompt history navigation (when input focused)
-    if (inputFocused && promptHistory.length > 0) {
-      if (key.upArrow) {
-        const nextIdx = historyIdx < promptHistory.length - 1 ? historyIdx + 1 : historyIdx;
-        setHistoryIdx(nextIdx);
-        setInputDefault(promptHistory[promptHistory.length - 1 - nextIdx]);
-        setInputKey((k) => k + 1);
-        return;
-      }
-      if (key.downArrow) {
-        const nextIdx = historyIdx > 0 ? historyIdx - 1 : -1;
-        setHistoryIdx(nextIdx);
-        setInputDefault(nextIdx === -1 ? "" : promptHistory[promptHistory.length - 1 - nextIdx]);
-        setInputKey((k) => k + 1);
-        return;
-      }
+    if (input === "j" || key.downArrow) {
+      setSelectedIdx((prev) => Math.min(prev + 1, agents.length - 1));
+    }
+    if (input === "k" || key.upArrow) {
+      setSelectedIdx((prev) => Math.max(prev - 1, 0));
     }
 
-    // Tab to toggle focus
-    if (key.tab) {
-      setInputFocused((prev) => !prev);
-      return;
-    }
+    // Resolve agent-specific actions via state machine
+    const clampedIdx = Math.min(selectedIdx, Math.max(agents.length - 1, 0));
+    const agent = agents[clampedIdx];
+    if (agent) {
+      const ctx = {
+        status: agent.status,
+        hasPrUrl: !!agent.result?.prUrl,
+        hasFinalBranch: !!agent.result?.finalBranch || !!agent.handle?.branch,
+        hasHandle: !!agent.handle,
+        isIdle: agent.idle,
+        prState: agent.prState,
+        hasWorktreePath: !!agent.taskId,
+      };
+      const actions = availableActions(ctx);
+      const action = resolveKeypress(input, key as Parameters<typeof resolveKeypress>[1], actions);
 
-    // List navigation (when list focused)
-    if (!inputFocused && agents.length > 0) {
-      if (input === "/") {
-        setSearchMode(true);
-        setSearchQuery("");
-        setSearchMatchIdx(0);
-        return;
-      }
-
-      if (input === "j" || key.downArrow) {
-        setSelectedIdx((prev) => Math.min(prev + 1, agents.length - 1));
-      }
-      if (input === "k" || key.upArrow) {
-        setSelectedIdx((prev) => Math.max(prev - 1, 0));
-      }
-
-      // Resolve agent-specific actions via state machine
-      const agent = agents[clampedIdx];
-      if (agent) {
-        const ctx = {
-          status: agent.status,
-          hasPrUrl: !!agent.result?.prUrl,
-          hasFinalBranch: !!agent.result?.finalBranch || !!agent.handle?.branch,
-          hasHandle: !!agent.handle,
-          isIdle: agent.idle,
-          prState: agent.prState,
-          hasWorktreePath: !!agent.taskId,
-        };
-        const actions = availableActions(ctx);
-        const action = resolveKeypress(input, key, actions);
-
-        if (action) {
-          const prompt = confirmationMessage(action, ctx);
-          if (prompt) {
-            setPendingConfirmation({ action, agent, message: prompt });
-          } else {
-            executeAction(action, agent);
-          }
+      if (action) {
+        const prompt = confirmationMessage(action, ctx);
+        if (prompt) {
+          setPendingConfirmation({ action, agent, message: prompt });
+        } else {
+          executeAction(action, agent);
         }
       }
     }
-  });
+  }
 
   function executeAction(action: AgentAction, agent: AgentState) {
     switch (action) {
@@ -264,6 +261,25 @@ export function useKeyboardInput({
         break;
     }
   }
+
+  // ── Main input handler ────────────────────────────────────────────
+
+  useInput((input, key) => {
+    if (suspended) return;
+
+    if (handleSearchInput(input, key)) return;
+    if (handleQuitInput(input)) return;
+    if (handleConfirmationInput(input)) return;
+    if (handleHistoryInput(key)) return;
+
+    // Tab to toggle focus
+    if (key.tab) {
+      setInputFocused((prev) => !prev);
+      return;
+    }
+
+    handleAgentListInput(input, key);
+  });
 
   return {
     selectedIdx,

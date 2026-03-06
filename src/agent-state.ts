@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { dataDir } from "./task";
 import type { PersistedTask } from "./task";
 import type { TaskStateFile } from "./task-state";
-import type { AgentState as AgentStatus } from "./state-machine";
+import type { AgentStatus } from "./state-machine";
 import type { AgentHandle } from "./agent";
 
 // ── Types ────────────────────────────────────────────────────────────

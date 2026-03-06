@@ -19,6 +19,7 @@ import {
   appendLog,
   isActive,
   stripAnsi,
+  captureSnapshot,
   truncate,
   withSuspendedTerminal,
   MODEL,
@@ -41,6 +42,16 @@ function toTaskStateFile(agent: AgentState): TaskStateFile {
     createdAt: new Date(Date.now() - agent.elapsed * 1000).toISOString(),
     ownerPid: process.pid,
   };
+}
+
+/** Persist agent state to the live task state file (fire-and-forget). */
+function persistState(agent: AgentState): void {
+  writeTaskState(toTaskStateFile(agent)).catch(() => {});
+}
+
+/** Persist agent state to the live task state file (awaited). */
+async function persistStateAsync(agent: AgentState): Promise<void> {
+  await writeTaskState(toTaskStateFile(agent));
 }
 
 async function saveToHistory(agent: AgentState, repoPath: string): Promise<void> {
@@ -84,6 +95,63 @@ export function useAgentActions({
   /** Per-task pane snapshot state shared between the poll loop and attachToAgent */
   const paneStateRef = useRef(new Map<string, PaneState>());
 
+  // ── Poll loop ────────────────────────────────────────────────────
+
+  /** Poll tmux pane until the agent exits or is aborted. */
+  async function runAgentPoll(agent: AgentState, sessionName: string, signal: AbortSignal): Promise<void> {
+    paneStateRef.current.set(agent.taskId, { snapshot: "", unchangedCount: 0 });
+
+    while (true) {
+      await Bun.sleep(POLL_MS);
+      if (signal.aborted) return;
+
+      const dead = await isTmuxSessionDead(sessionName);
+      if (dead) {
+        appendLog(agent, "[tmux] Claude process exited");
+        return;
+      }
+
+      const lines = await captureTmuxPane(sessionName);
+      if (!lines) continue;
+
+      const snapshot = captureSnapshot(lines);
+      const prev = paneStateRef.current.get(agent.taskId) ?? { snapshot: "", unchangedCount: 0 };
+      const next = advancePaneState(prev, snapshot);
+      paneStateRef.current.set(agent.taskId, next);
+
+      if (next.unchangedCount === 0) {
+        // Update lastActivity with the latest bullet line (Claude's text output)
+        const lastOutput = lines
+          .map(stripAnsi)
+          .map((l) => l.trim())
+          .filter((l) => l.startsWith("\u25CF"))
+          .pop();
+        if (lastOutput) {
+          const activity = truncate(lastOutput, 120);
+          if (activity !== agent.lastActivity) {
+            agent.lastActivity = activity;
+            appendLog(agent, `[tmux] ${truncate(lastOutput, 200)}`);
+            await persistStateAsync(agent);
+            setAgents((prev) => [...prev]);
+          }
+        }
+      }
+
+      // Claude is idle when the pane hasn't changed for several consecutive polls
+      if (isIdleState(next, IDLE_THRESHOLD) && !agent.idle) {
+        agent.idle = true;
+        agent.lastActivity = "Idle \u2014 press \u23CE to attach";
+        appendLog(agent, "[deer] Claude is idle");
+        await persistStateAsync(agent);
+        setAgents((prev) => [...prev]);
+      } else if (next.unchangedCount === 0 && agent.idle) {
+        agent.idle = false;
+        await persistStateAsync(agent);
+        setAgents((prev) => [...prev]);
+      }
+    }
+  }
+
   // ── Spawn agent ───────────────────────────────────────────────────
 
   const spawnAgent = useCallback(async (prompt: string, baseBranch?: string, continueSession?: { taskId: string; worktreePath: string; branch: string }) => {
@@ -107,7 +175,7 @@ export function useAgentActions({
     // Start elapsed timer — pauses while agent is idle
     agent.timer = setInterval(() => {
       if (!agent.idle) agent.elapsed++;
-      if (agent.taskId) writeTaskState(toTaskStateFile(agent)).catch(() => {});
+      if (agent.taskId) persistState(agent);
       setAgents((prev) => [...prev]);
     }, 1000);
 
@@ -137,74 +205,22 @@ export function useAgentActions({
 
       agent.handle = handle;
       agent.taskId = handle.taskId;
-
-      // Write live state file so other deer instances can observe this task
-      await writeTaskState(toTaskStateFile(agent));
+      await persistStateAsync(agent);
 
       agent.status = transition(agent.status, "SETUP_COMPLETE") ?? agent.status;
       appendLog(agent, `[running] Claude started in tmux session: ${handle.sessionName}`);
       agent.lastActivity = "Claude running...";
       setAgents((prev) => [...prev]);
 
-      // Phase 2: Poll for completion (process exit or idle detection)
-      paneStateRef.current.set(agent.taskId, { snapshot: "", unchangedCount: 0 });
-      while (true) {
-        await Bun.sleep(POLL_MS);
-        if (abortController.signal.aborted) return;
-
-        const dead = await isTmuxSessionDead(handle.sessionName);
-        if (dead) {
-          appendLog(agent, "[tmux] Claude process exited");
-          break;
-        }
-
-        // Capture visible pane content and diff against previous frame
-        const lines = await captureTmuxPane(handle.sessionName);
-        if (lines) {
-          const snapshot = lines.map(stripAnsi).map((l) => l.trim()).filter(Boolean).join("\n");
-          const prev = paneStateRef.current.get(agent.taskId) ?? { snapshot: "", unchangedCount: 0 };
-          const next = advancePaneState(prev, snapshot);
-          paneStateRef.current.set(agent.taskId, next);
-
-          if (next.unchangedCount === 0) {
-            // Update lastActivity with the latest ● line (Claude's text output)
-            const lastOutput = lines
-              .map(stripAnsi)
-              .map((l) => l.trim())
-              .filter((l) => l.startsWith("●"))
-              .pop();
-            if (lastOutput) {
-              const activity = truncate(lastOutput, 120);
-              if (activity !== agent.lastActivity) {
-                agent.lastActivity = activity;
-                appendLog(agent, `[tmux] ${truncate(lastOutput, 200)}`);
-                await writeTaskState(toTaskStateFile(agent));
-                setAgents((prev) => [...prev]);
-              }
-            }
-          }
-
-          // Claude is idle when the pane hasn't changed for several consecutive polls
-          if (isIdleState(next, IDLE_THRESHOLD) && !agent.idle) {
-            agent.idle = true;
-            agent.lastActivity = "Idle — press ⏎ to attach";
-            appendLog(agent, "[deer] Claude is idle");
-            await writeTaskState(toTaskStateFile(agent));
-            setAgents((prev) => [...prev]);
-          } else if (next.unchangedCount === 0 && agent.idle) {
-            agent.idle = false;
-            await writeTaskState(toTaskStateFile(agent));
-            setAgents((prev) => [...prev]);
-          }
-        }
-      }
+      // Phase 2: Poll for completion
+      await runAgentPoll(agent, handle.sessionName, abortController.signal);
 
       if (abortController.signal.aborted) return;
 
       // Process exited — agent is now at rest, idle until deleted
       agent.idle = true;
       agent.result = { finalBranch: handle.branch, prUrl: "" };
-      agent.lastActivity = "Idle — press p to create PR, ⏎ to attach";
+      agent.lastActivity = "Idle \u2014 press p to create PR, \u23CE to attach";
     } catch (err) {
       if (!abortController.signal.aborted) {
         agent.status = transition(agent.status, "ERROR") ?? "failed";
@@ -237,7 +253,7 @@ export function useAgentActions({
     if (agent.timer) clearInterval(agent.timer);
     agent.timer = null;
     saveToHistory(agent, cwd);
-    writeTaskState(toTaskStateFile(agent)).catch(() => {});
+    persistState(agent);
     setAgents((prev) => [...prev]);
   }, [cwd]);
 
@@ -266,8 +282,8 @@ export function useAgentActions({
       const linesB = await captureTmuxPane(agent.handle.sessionName);
 
       if (linesA && linesB) {
-        const snapA = linesA.map(stripAnsi).map((l) => l.trim()).filter(Boolean).join("\n");
-        const snapB = linesB.map(stripAnsi).map((l) => l.trim()).filter(Boolean).join("\n");
+        const snapA = captureSnapshot(linesA);
+        const snapB = captureSnapshot(linesB);
 
         if (snapA === snapB) {
           // Pane is stable — seed the poll loop's counter so idle is recognised
