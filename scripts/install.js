@@ -71,16 +71,7 @@ async function install() {
   }
 }
 
-const args = process.argv.slice(2);
-
-if (args[0] === "install") {
-  install().catch((err) => {
-    console.error(`Error: ${err.message}`);
-    process.exit(1);
-  });
-} else {
-  console.log("Usage: bunx @zdavison/deer install");
-  console.log("");
-  console.log("Commands:");
-  console.log("  install    Download and install the deer binary");
-}
+install().catch((err) => {
+  console.error(`Error: ${err.message}`);
+  process.exit(1);
+});
