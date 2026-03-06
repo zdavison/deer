@@ -99,17 +99,23 @@ export function historicalAgent(task: PersistedTask, id: number): AgentState {
  * Convert a persisted "running" task to an AgentState for a task managed by
  * another deer instance. The tmux session is still alive, so this shows the
  * task as running and provides a handle for attaching and killing.
+ *
+ * @param idle - Whether the pane has been stable long enough to be considered idle
  */
-export function crossInstanceAgent(task: PersistedTask, id: number): AgentState {
+export function crossInstanceAgent(task: PersistedTask, id: number, idle = false): AgentState {
   const sessionName = `deer-${task.taskId}`;
   const worktreePath = join(dataDir(), "tasks", task.taskId, "worktree");
+  const lastActivity = idle
+    ? "Idle — press ⏎ to attach"
+    : (task.lastActivity || "Running in another instance...");
   return createAgentState({
     id,
     taskId: task.taskId,
     prompt: task.prompt,
     status: "running",
     elapsed: task.elapsed,
-    lastActivity: task.lastActivity || "Running in another instance...",
+    lastActivity,
+    idle,
     historical: true,
     handle: {
       taskId: task.taskId,

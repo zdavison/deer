@@ -177,4 +177,28 @@ describe("crossInstanceAgent", () => {
     const agent = crossInstanceAgent(task, 1);
     expect(agent.elapsed).toBe(42);
   });
+
+  test("idle defaults to false", () => {
+    const task = makeTask({ status: "running", completedAt: null });
+    const agent = crossInstanceAgent(task, 1);
+    expect(agent.idle).toBe(false);
+  });
+
+  test("idle is set to true when passed", () => {
+    const task = makeTask({ status: "running", completedAt: null });
+    const agent = crossInstanceAgent(task, 1, true);
+    expect(agent.idle).toBe(true);
+  });
+
+  test("lastActivity is idle message when idle=true", () => {
+    const task = makeTask({ status: "running", completedAt: null, lastActivity: "Working..." });
+    const agent = crossInstanceAgent(task, 1, true);
+    expect(agent.lastActivity).toBe("Idle — press ⏎ to attach");
+  });
+
+  test("lastActivity preserved from task when not idle", () => {
+    const task = makeTask({ status: "running", completedAt: null, lastActivity: "Working..." });
+    const agent = crossInstanceAgent(task, 1, false);
+    expect(agent.lastActivity).toBe("Working...");
+  });
 });

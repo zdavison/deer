@@ -2,12 +2,13 @@ import { join } from "node:path";
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { MutableRefObject } from "react";
 import { loadHistory, dataDir } from "../task";
-import { isTmuxSessionDead } from "../sandbox/index";
+import { isTmuxSessionDead, captureTmuxPane } from "../sandbox/index";
 import type { SandboxCleanup } from "../sandbox/index";
 import { resolveRuntime } from "../sandbox/resolve";
 import { detectRepo } from "../git/worktree";
 import { type AgentState, historicalAgent, crossInstanceAgent } from "../agent-state";
 import type { DeerConfig } from "../config";
+import { stripAnsi, IDLE_THRESHOLD } from "../dashboard-utils";
 
 export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig | null>) {
   const [agents, setAgents] = useState<AgentState[]>([]);
@@ -18,6 +19,8 @@ export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig
   const baseBranchRef = useRef("main");
   /** Proxy cleanup functions for cross-instance tasks restored after a restart */
   const restoredProxiesRef = useRef(new Map<string, SandboxCleanup>());
+  /** Pane snapshot state for idle detection on cross-instance tasks */
+  const crossInstancePaneStateRef = useRef(new Map<string, { snapshot: string; unchangedCount: number }>());
 
   // ── Detect base branch on mount ────────────────────────────────────
 
@@ -57,14 +60,33 @@ export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig
             const cleanup = await runtime.restoreProxy?.(worktreePath, configRef.current.network.allowlist);
             if (cleanup) restoredProxiesRef.current.set(task.taskId, cleanup);
           }
-          return crossInstanceAgent(task, id);
+
+          // Detect idle by comparing consecutive pane snapshots across sync ticks
+          const sessionName = `deer-${task.taskId}`;
+          const lines = await captureTmuxPane(sessionName);
+          let idle = false;
+          if (lines) {
+            const snapshot = lines.map(stripAnsi).map((l) => l.trim()).filter(Boolean).join("\n");
+            const paneState = crossInstancePaneStateRef.current.get(task.taskId) ?? { snapshot: "", unchangedCount: 0 };
+            if (snapshot === paneState.snapshot) {
+              paneState.unchangedCount++;
+            } else {
+              paneState.unchangedCount = 0;
+              paneState.snapshot = snapshot;
+            }
+            crossInstancePaneStateRef.current.set(task.taskId, paneState);
+            idle = paneState.unchangedCount >= IDLE_THRESHOLD;
+          }
+
+          return crossInstanceAgent(task, id, idle);
         }
-        // Session died — stop any proxy we restored for this task
+        // Session died — stop any proxy we restored for this task and clear pane state
         const proxyCleanup = restoredProxiesRef.current.get(task.taskId);
         if (proxyCleanup) {
           proxyCleanup();
           restoredProxiesRef.current.delete(task.taskId);
         }
+        crossInstancePaneStateRef.current.delete(task.taskId);
         // Fall through to historicalAgent (shows as interrupted)
       }
 
@@ -81,7 +103,7 @@ export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig
       newAgents.length !== currentAgents.length ||
       newAgents.some((a, i) => {
         const cur = currentAgents[i];
-        return !cur || a.taskId !== cur.taskId || a.status !== cur.status || a.lastActivity !== cur.lastActivity;
+        return !cur || a.taskId !== cur.taskId || a.status !== cur.status || a.lastActivity !== cur.lastActivity || a.idle !== cur.idle;
       });
 
     if (changed) setAgents(newAgents);
