@@ -8,7 +8,7 @@ import { startClaudeConfigGuard, type ClaudeConfigGuard, type ConfigAlert } from
 import { runPreflight, type PreflightResult } from "./preflight";
 import { PromptInput } from "./components/PromptInput";
 import { useAgentSync } from "./hooks/useAgentSync";
-import { usePrPoller } from "./hooks/usePrPoller";
+import { usePrPoller } from "./hooks/useLivePRState";
 import { useAgentActions } from "./hooks/useAgentActions";
 import { usePromptHistory } from "./hooks/usePromptHistory";
 import { useKeyboardInput } from "./hooks/useKeyboardInput";
