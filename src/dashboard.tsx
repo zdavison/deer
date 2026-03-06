@@ -180,6 +180,20 @@ export default function Dashboard({ cwd }: { cwd: string }) {
       </Box>
       <Text>{"─".repeat(termWidth)}</Text>
 
+      {/* Confirmation banners */}
+      {pendingConfirmation && (
+        <Box paddingX={1}>
+          <Text color="yellow" bold>{pendingConfirmation.message}</Text>
+        </Box>
+      )}
+      {confirmQuit && (
+        <Box paddingX={1}>
+          <Text color="yellow" bold>
+            {activeCount} agent{activeCount !== 1 ? "s" : ""} running — quit? (y/n)
+          </Text>
+        </Box>
+      )}
+
       {/* Preflight errors */}
       {preflight && !preflight.ok && (
         <Box flexDirection="column" paddingX={1}>
@@ -358,14 +372,6 @@ export default function Dashboard({ cwd }: { cwd: string }) {
               <Text dimColor>⏎ select</Text>
               <Text dimColor>Esc cancel</Text>
             </>
-          ) : pendingConfirmation ? (
-            <Text color="yellow" bold>
-              {pendingConfirmation.message}
-            </Text>
-          ) : confirmQuit ? (
-            <Text color="yellow" bold>
-              {activeCount} agent{activeCount !== 1 ? "s" : ""} running — quit? (y/n)
-            </Text>
           ) : (
             <>
               <Text dimColor>Tab focus</Text>
