@@ -1,14 +1,18 @@
 {
-  "name": "deer",
+  "name": "@zdavison/deer",
   "version": "0.1.0",
   "description": "Unattended coding agent.",
   "type": "module",
   "bin": {
     "deer": "src/cli.tsx"
   },
+  "files": [
+    "src/"
+  ],
   "scripts": {
     "test": "bun test",
-    "dev": "bun run src/cli.tsx"
+    "dev": "bun run src/cli.tsx",
+    "build": "mkdir -p dist && bun build --compile src/cli.tsx --outfile dist/deer"
   },
   "dependencies": {
     "@iarna/toml": "^3.0.0",
@@ -19,6 +23,7 @@
   "devDependencies": {
     "@types/react": "^19.0.0",
     "bun-types": "latest",
+    "react-devtools-core": "^7.0.1",
     "typescript": "^5.9.3"
   }
 }

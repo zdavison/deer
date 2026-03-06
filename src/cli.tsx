@@ -4,6 +4,12 @@
 // Deer must use CLAUDE_CODE_OAUTH_TOKEN for all Claude API access.
 delete process.env.ANTHROPIC_API_KEY;
 
+if (process.argv[2] === "install") {
+  const { installDeer } = await import("./install.ts");
+  await installDeer();
+  process.exit(0);
+}
+
 import { render } from "ink";
 import React from "react";
 import { detectRepo } from "./git/worktree.ts";
