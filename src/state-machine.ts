@@ -72,7 +72,7 @@ export function transition(current: AgentState, event: AgentEvent): AgentState |
 
 const ACTIONS_BY_STATE: Record<AgentState, AgentAction[]> = {
   setup:       ["kill", "delete", "toggle_logs"],
-  running:     ["attach", "kill", "open_shell", "delete", "toggle_logs"],
+  running:     ["attach", "kill", "open_shell", "delete", "toggle_logs", "retry"],
   teardown:    ["open_shell", "delete", "toggle_logs"],
   completed:   ["attach", "create_pr", "open_pr", "update_pr", "retry", "open_shell", "delete", "toggle_logs"],
   failed:      ["retry", "open_shell", "delete", "toggle_logs"],

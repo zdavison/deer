@@ -107,6 +107,7 @@ function prStateColor(state: "open" | "merged" | "closed" | null): string {
 interface PreflightResult {
   ok: boolean;
   errors: string[];
+  credentialType: "subscription" | "api-token" | "none";
 }
 
 async function runPreflight(): Promise<PreflightResult> {
@@ -148,7 +149,7 @@ async function runPreflight(): Promise<PreflightResult> {
     errors.push("gh CLI not available");
   }
 
-  // Check OAuth token
+  // Check credentials — OAuth token preferred, API key accepted as fallback
   const tokenFile = `${process.env.HOME ?? ""}/.claude/agent-oauth-token`;
   if (!process.env.CLAUDE_CODE_OAUTH_TOKEN) {
     try {
@@ -158,11 +159,20 @@ async function runPreflight(): Promise<PreflightResult> {
       }
     } catch { /* ignore */ }
   }
-  if (!process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-    errors.push("No OAuth token — set CLAUDE_CODE_OAUTH_TOKEN or create ~/.claude/agent-oauth-token");
+  // Strip API key if OAuth is now available (OAuth always wins)
+  if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
+    delete process.env.ANTHROPIC_API_KEY;
+  }
+  let credentialType: PreflightResult["credentialType"] = "none";
+  if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
+    credentialType = "subscription";
+  } else if (process.env.ANTHROPIC_API_KEY) {
+    credentialType = "api-token";
+  } else {
+    errors.push("No credentials — set CLAUDE_CODE_OAUTH_TOKEN, create ~/.claude/agent-oauth-token, or set ANTHROPIC_API_KEY");
   }
 
-  return { ok: errors.length === 0, errors };
+  return { ok: errors.length === 0, errors, credentialType };
 }
 
 // ── History helpers ──────────────────────────────────────────────────
@@ -1238,41 +1248,48 @@ export default function Dashboard({ cwd }: { cwd: string }) {
 
       {/* Footer / keybindings */}
       <Text>{"─".repeat(termWidth)}</Text>
-      <Box paddingX={1} gap={2}>
-        {searchMode ? (
-          <>
-            <Text dimColor>j/k nav</Text>
-            <Text dimColor>⏎ select</Text>
-            <Text dimColor>Esc cancel</Text>
-          </>
-        ) : confirmQuit ? (
-          <Text color="yellow" bold>
-            {activeCount} agent{activeCount !== 1 ? "s" : ""} running — quit? (y/n)
+      <Box paddingX={1} gap={2} justifyContent="space-between">
+        <Box gap={2}>
+          {searchMode ? (
+            <>
+              <Text dimColor>j/k nav</Text>
+              <Text dimColor>⏎ select</Text>
+              <Text dimColor>Esc cancel</Text>
+            </>
+          ) : confirmQuit ? (
+            <Text color="yellow" bold>
+              {activeCount} agent{activeCount !== 1 ? "s" : ""} running — quit? (y/n)
+            </Text>
+          ) : (
+            <>
+              <Text dimColor>Tab focus</Text>
+              {inputFocused ? null : (
+                <>
+                  <Text dimColor>j/k nav</Text>
+                  <Text dimColor>/ search</Text>
+                  {selected && availableActions({
+                    status: selected.status,
+                    hasPrUrl: !!selected.result?.prUrl,
+                    hasFinalBranch: !!selected.result?.finalBranch || !!selected.handle?.branch,
+                    hasHandle: !!selected.handle,
+                    isIdle: selected.idle,
+                    prState: selected.prState,
+                    hasWorktreePath: !!selected.taskId,
+                  }).map((action) => (
+                    <Text key={action} dimColor>
+                      {ACTION_BINDINGS[action].keyDisplay} {ACTION_BINDINGS[action].label}
+                    </Text>
+                  ))}
+                  <Text dimColor>q quit</Text>
+                </>
+              )}
+            </>
+          )}
+        </Box>
+        {preflight && (
+          <Text dimColor={preflight.credentialType !== "none"} color={preflight.credentialType === "none" ? "red" : undefined}>
+            {preflight.credentialType === "subscription" ? "subscription" : preflight.credentialType === "api-token" ? "api-token" : "no credentials"}
           </Text>
-        ) : (
-          <>
-            <Text dimColor>Tab focus</Text>
-            {inputFocused ? null : (
-              <>
-                <Text dimColor>j/k nav</Text>
-                <Text dimColor>/ search</Text>
-                {selected && availableActions({
-                  status: selected.status,
-                  hasPrUrl: !!selected.result?.prUrl,
-                  hasFinalBranch: !!selected.result?.finalBranch || !!selected.handle?.branch,
-                  hasHandle: !!selected.handle,
-                  isIdle: selected.idle,
-                  prState: selected.prState,
-                  hasWorktreePath: !!selected.taskId,
-                }).map((action) => (
-                  <Text key={action} dimColor>
-                    {ACTION_BINDINGS[action].keyDisplay} {ACTION_BINDINGS[action].label}
-                  </Text>
-                ))}
-                <Text dimColor>q quit</Text>
-              </>
-            )}
-          </>
         )}
       </Box>
     </Box>

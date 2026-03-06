@@ -56,6 +56,7 @@ const DEFAULT_MODEL = "sonnet";
 /**
  * Build an env object containing only the vars from the passthrough list.
  * Vars not set in the host environment are omitted.
+ * OAuth takes precedence: ANTHROPIC_API_KEY is excluded if CLAUDE_CODE_OAUTH_TOKEN is present.
  */
 function buildPassthroughEnv(passthrough: string[]): Record<string, string> {
   const env: Record<string, string> = {};
@@ -64,6 +65,9 @@ function buildPassthroughEnv(passthrough: string[]): Record<string, string> {
     if (value !== undefined) {
       env[name] = value;
     }
+  }
+  if (env.CLAUDE_CODE_OAUTH_TOKEN) {
+    delete env.ANTHROPIC_API_KEY;
   }
   return env;
 }
