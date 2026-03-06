@@ -127,6 +127,36 @@ export function availableActions(ctx: AgentContext): AgentAction[] {
   });
 }
 
+// ── Confirmation Messages ─────────────────────────────────────────────
+
+const ACTIVE_STATES = new Set<AgentState>(["setup", "running", "teardown"]);
+
+/**
+ * Returns a confirmation prompt for dangerous actions, or null if the action
+ * is safe to execute without prompting. Conditions vary by action and context.
+ */
+export function confirmationMessage(action: AgentAction, ctx: AgentContext): string | null {
+  switch (action) {
+    case "kill":
+      return "Kill this agent? (y/n)";
+    case "delete":
+      if (ACTIVE_STATES.has(ctx.status)) {
+        return "Agent is still running — delete? (y/n)";
+      }
+      if (ctx.hasFinalBranch && !ctx.hasPrUrl) {
+        return "No PR created — delete and lose work? (y/n)";
+      }
+      return null;
+    case "retry":
+      if (ACTIVE_STATES.has(ctx.status)) {
+        return "Agent is still running — kill and retry? (y/n)";
+      }
+      return null;
+    default:
+      return null;
+  }
+}
+
 // ── Key Resolution ───────────────────────────────────────────────────
 
 interface KeyInfo {

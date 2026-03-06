@@ -72,6 +72,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     inputFocused,
     setInputFocused,
     confirmQuit,
+    pendingConfirmation,
     searchMode,
     searchQuery,
     searchMatchIdx,
@@ -351,6 +352,10 @@ export default function Dashboard({ cwd }: { cwd: string }) {
               <Text dimColor>⏎ select</Text>
               <Text dimColor>Esc cancel</Text>
             </>
+          ) : pendingConfirmation ? (
+            <Text color="yellow" bold>
+              {pendingConfirmation.message}
+            </Text>
           ) : confirmQuit ? (
             <Text color="yellow" bold>
               {activeCount} agent{activeCount !== 1 ? "s" : ""} running — quit? (y/n)

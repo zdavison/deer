@@ -3,6 +3,7 @@ import {
   transition,
   availableActions,
   resolveKeypress,
+  confirmationMessage,
   ACTION_BINDINGS,
   type AgentState,
   type AgentEvent,
@@ -358,6 +359,100 @@ describe("update_pr action", () => {
 
   test("'u' key returns null when update_pr is not available", () => {
     expect(resolveKeypress("u", {}, ["open_pr", "delete"])).toBeNull();
+  });
+});
+
+// ── confirmationMessage tests ────────────────────────────────────────
+
+describe("confirmationMessage", () => {
+  const baseCtx = (overrides: Partial<AgentContext>): AgentContext => ({
+    status: "running",
+    hasPrUrl: false,
+    hasFinalBranch: false,
+    hasHandle: true,
+    isIdle: false,
+    prState: null,
+    hasWorktreePath: true,
+    ...overrides,
+  });
+
+  // kill always requires confirmation
+  test("kill always requires confirmation", () => {
+    for (const status of ["setup", "running", "teardown", "completed", "failed", "cancelled", "interrupted"] as const) {
+      expect(confirmationMessage("kill", baseCtx({ status }))).not.toBeNull();
+    }
+  });
+
+  // delete: active states require confirmation
+  test("delete requires confirmation when agent is running", () => {
+    expect(confirmationMessage("delete", baseCtx({ status: "running" }))).not.toBeNull();
+  });
+
+  test("delete requires confirmation when agent is in setup", () => {
+    expect(confirmationMessage("delete", baseCtx({ status: "setup" }))).not.toBeNull();
+  });
+
+  test("delete requires confirmation when agent is in teardown", () => {
+    expect(confirmationMessage("delete", baseCtx({ status: "teardown" }))).not.toBeNull();
+  });
+
+  // delete: terminal with work but no PR
+  test("delete requires confirmation when completed with work but no PR", () => {
+    expect(confirmationMessage("delete", baseCtx({
+      status: "completed",
+      hasFinalBranch: true,
+      hasPrUrl: false,
+    }))).not.toBeNull();
+  });
+
+  test("delete requires confirmation when failed with work but no PR", () => {
+    expect(confirmationMessage("delete", baseCtx({
+      status: "failed",
+      hasFinalBranch: true,
+      hasPrUrl: false,
+    }))).not.toBeNull();
+  });
+
+  // delete: no confirmation when PR already exists
+  test("delete does not require confirmation when PR already exists", () => {
+    expect(confirmationMessage("delete", baseCtx({
+      status: "completed",
+      hasFinalBranch: true,
+      hasPrUrl: true,
+    }))).toBeNull();
+  });
+
+  // delete: no confirmation when no work to lose
+  test("delete does not require confirmation when no final branch", () => {
+    expect(confirmationMessage("delete", baseCtx({
+      status: "completed",
+      hasFinalBranch: false,
+      hasPrUrl: false,
+    }))).toBeNull();
+  });
+
+  // retry: active states require confirmation
+  test("retry requires confirmation when agent is running", () => {
+    expect(confirmationMessage("retry", baseCtx({ status: "running" }))).not.toBeNull();
+  });
+
+  test("retry requires confirmation when agent is in setup", () => {
+    expect(confirmationMessage("retry", baseCtx({ status: "setup" }))).not.toBeNull();
+  });
+
+  // retry: no confirmation in terminal states
+  test("retry does not require confirmation in terminal states", () => {
+    for (const status of ["completed", "failed", "cancelled", "interrupted"] as const) {
+      expect(confirmationMessage("retry", baseCtx({ status }))).toBeNull();
+    }
+  });
+
+  // non-dangerous actions never require confirmation
+  test("attach, create_pr, open_pr, update_pr, toggle_logs, open_shell never require confirmation", () => {
+    const safeActions: AgentAction[] = ["attach", "create_pr", "open_pr", "update_pr", "toggle_logs", "open_shell"];
+    for (const action of safeActions) {
+      expect(confirmationMessage(action, baseCtx({}))).toBeNull();
+    }
   });
 });
 
