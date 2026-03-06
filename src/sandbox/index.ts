@@ -34,9 +34,7 @@ export interface SandboxOptions {
   extraWritePaths?: string[];
   /** Command + args to run inside the sandbox (default: interactive shell) */
   command: string[];
-  /** Sandbox runtime to use
-   * @default nonoRuntime
-   */
+  /** Sandbox runtime to use */
   runtime: SandboxRuntime;
 }
 

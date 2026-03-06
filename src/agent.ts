@@ -7,7 +7,7 @@
 
 import { join, resolve } from "node:path";
 import { createWorktree, removeWorktree } from "./git/worktree";
-import { createPullRequest, cleanupWorktree, pushBranchUpdates } from "./git/finalize";
+import { createPullRequest, updatePullRequest, cleanupWorktree } from "./git/finalize";
 import type { CreatePRResult } from "./git/finalize";
 import { launchSandbox, isTmuxSessionDead, captureTmuxPane } from "./sandbox/index";
 import type { SandboxSession, SandboxRuntime } from "./sandbox/index";
@@ -131,10 +131,6 @@ export async function startAgent(options: AgentRunOptions): Promise<AgentHandle>
   await Bun.$`git -C ${worktree.worktreePath} config user.name "deer-agent"`.quiet();
   await Bun.$`git -C ${worktree.worktreePath} config user.email "deer@noreply"`.quiet();
 
-  // Write the prompt to a file in the worktree so Claude can read it
-  const promptPath = `${worktree.worktreePath}/.deer-prompt`;
-  await Bun.write(promptPath, prompt);
-
   // Build the Claude command — interactive mode (no -p) so users can
   // attach to the tmux session and observe/intervene.
   const claudeCmd = [
@@ -160,9 +156,6 @@ export async function startAgent(options: AgentRunOptions): Promise<AgentHandle>
     await removeWorktree(repoPath, worktree.worktreePath).catch(() => {});
     throw err;
   }
-
-  // Clean up the prompt file (it's already been passed to Claude)
-  await Bun.$`rm -f ${promptPath}`.quiet().nothrow();
 
   // Dismiss the --dangerously-skip-permissions confirmation dialog.
   // The dialog defaults to "1. No, exit" — send Down then Enter
@@ -222,18 +215,22 @@ export async function createAgentPR(
 }
 
 /**
- * Push new commits from the worktree to the existing PR branch.
- *
- * @param handle - The agent handle from `startAgent()`
- * @param finalBranch - The renamed branch that the PR targets (e.g. "deer/fix-login")
+ * Push new commits and update the title/body of an existing PR.
  */
 export async function updateAgentPR(
   handle: AgentHandle,
-  finalBranch: string,
+  repoPath: string,
+  baseBranch: string,
+  prompt: string,
+  prUrl: string,
 ): Promise<void> {
-  return pushBranchUpdates({
+  return updatePullRequest({
+    repoPath,
     worktreePath: handle.worktreePath,
-    branch: finalBranch,
+    finalBranch: handle.branch,
+    baseBranch,
+    prompt,
+    prUrl,
   });
 }
 

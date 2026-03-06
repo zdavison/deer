@@ -17,6 +17,17 @@ export interface CreatePROptions {
   prompt: string;
 }
 
+export interface UpdatePROptions {
+  repoPath: string;
+  worktreePath: string;
+  /** Already-finalized branch name, e.g. "deer/fix-login-bug" */
+  finalBranch: string;
+  baseBranch: string;
+  prompt: string;
+  /** @example "https://github.com/org/repo/pull/42" */
+  prUrl: string;
+}
+
 interface PRMetadata {
   branchName: string;
   title: string;
@@ -126,9 +137,6 @@ ${truncatedDiff}`;
 export async function createPullRequest(options: CreatePROptions): Promise<CreatePRResult> {
   const { repoPath, worktreePath, branch, baseBranch, prompt } = options;
 
-  // Remove deer internal files before staging
-  await Bun.$`rm -rf ${worktreePath}/.deer-claude-config ${worktreePath}/.deer-prompt`.quiet().nothrow();
-
   // Stage and commit any uncommitted changes
   await Bun.$`git -C ${worktreePath} add -A`.quiet();
   const status = await Bun.$`git -C ${worktreePath} status --porcelain`.quiet();
@@ -196,6 +204,39 @@ export async function pushBranchUpdates(options: UpdatePROptions): Promise<void>
   const pushResult = await Bun.$`git -C ${worktreePath} push origin ${branch}`.quiet().nothrow();
   if (pushResult.exitCode !== 0) {
     throw new Error(`Push failed: ${pushResult.stderr.toString().trim()}`);
+  }
+}
+
+/**
+ * Update an existing PR: commit any new changes, push, and regenerate the
+ * PR title and body from the latest diff.
+ */
+export async function updatePullRequest(options: UpdatePROptions): Promise<void> {
+  const { repoPath, worktreePath, finalBranch, baseBranch, prompt, prUrl } = options;
+
+  // Remove deer internal files before staging
+  await Bun.$`rm -rf ${worktreePath}/.deer-claude-config ${worktreePath}/.deer-prompt`.quiet().nothrow();
+
+  // Stage and commit any uncommitted changes
+  await Bun.$`git -C ${worktreePath} add -A`.quiet();
+  const status = await Bun.$`git -C ${worktreePath} status --porcelain`.quiet();
+  if (status.stdout.toString().trim().length > 0) {
+    await Bun.$`git -C ${worktreePath} commit -m "deer: uncommitted changes from agent session"`.quiet();
+  }
+
+  // Push the branch
+  const pushResult = await Bun.$`git -C ${worktreePath} push origin ${finalBranch}`.quiet().nothrow();
+  if (pushResult.exitCode !== 0) {
+    throw new Error(`Push failed: ${pushResult.stderr.toString().trim()}`);
+  }
+
+  // Regenerate PR metadata from the updated diff
+  const metadata = await generatePRMetadata(worktreePath, baseBranch, prompt);
+
+  // Update the PR title and body
+  const editResult = await Bun.$`gh pr edit ${prUrl} --title ${metadata.title} --body ${metadata.body}`.cwd(repoPath).quiet().nothrow();
+  if (editResult.exitCode !== 0) {
+    throw new Error(`PR update failed: ${editResult.stderr.toString().trim()}`);
   }
 }
 

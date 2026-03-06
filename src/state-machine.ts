@@ -30,7 +30,8 @@ export type AgentAction =
   | "kill"
   | "delete"
   | "toggle_logs"
-  | "retry";
+  | "retry"
+  | "open_shell";
 
 export interface AgentContext {
   status: AgentState;
@@ -39,6 +40,7 @@ export interface AgentContext {
   hasHandle: boolean;
   isIdle: boolean;
   prState: "open" | "merged" | "closed" | null;
+  hasWorktreePath: boolean;
 }
 
 interface ActionBinding {
@@ -70,12 +72,12 @@ export function transition(current: AgentState, event: AgentEvent): AgentState |
 
 const ACTIONS_BY_STATE: Record<AgentState, AgentAction[]> = {
   setup:       ["kill", "delete", "toggle_logs"],
-  running:     ["attach", "kill", "delete", "toggle_logs"],
-  teardown:    ["delete", "toggle_logs"],
-  completed:   ["attach", "create_pr", "open_pr", "update_pr", "delete", "toggle_logs"],
-  failed:      ["retry", "delete", "toggle_logs"],
-  cancelled:   ["delete", "toggle_logs"],
-  interrupted: ["delete", "toggle_logs"],
+  running:     ["attach", "kill", "open_shell", "delete", "toggle_logs"],
+  teardown:    ["open_shell", "delete", "toggle_logs"],
+  completed:   ["attach", "create_pr", "open_pr", "update_pr", "open_shell", "delete", "toggle_logs"],
+  failed:      ["retry", "open_shell", "delete", "toggle_logs"],
+  cancelled:   ["open_shell", "delete", "toggle_logs"],
+  interrupted: ["open_shell", "delete", "toggle_logs"],
 };
 
 // ── Action Bindings ──────────────────────────────────────────────────
@@ -89,6 +91,7 @@ export const ACTION_BINDINGS: Record<AgentAction, ActionBinding> = {
   delete:       { keyDisplay: "⌫", label: "delete" },
   toggle_logs:  { keyDisplay: "l", label: "logs" },
   retry:        { keyDisplay: "r", label: "retry" },
+  open_shell:   { keyDisplay: "s", label: "shell" },
 };
 
 // ── Runtime Filtering ────────────────────────────────────────────────
@@ -100,7 +103,7 @@ export const ACTION_BINDINGS: Record<AgentAction, ActionBinding> = {
  */
 export function availableActions(ctx: AgentContext): AgentAction[] {
   const base = [...ACTIONS_BY_STATE[ctx.status]];
-  // Idle agents can create/update PRs (Claude is alive but waiting for input)
+  // Idle agents can create or update PRs (Claude is alive but waiting for input)
   if (ctx.isIdle && !base.includes("create_pr")) {
     base.push("create_pr", "open_pr", "update_pr");
   }
@@ -112,6 +115,8 @@ export function availableActions(ctx: AgentContext): AgentAction[] {
         return ctx.hasFinalBranch && !ctx.hasPrUrl;
       case "open_pr":
         return ctx.hasPrUrl;
+      case "open_shell":
+        return ctx.hasWorktreePath;
       case "update_pr":
         return ctx.hasPrUrl && ctx.hasHandle && ctx.prState !== "merged" && ctx.prState !== "closed";
       case "delete":
@@ -163,6 +168,7 @@ export function resolveKeypress(
     x: "kill",
     l: "toggle_logs",
     r: "retry",
+    s: "open_shell",
     u: "update_pr",
   };
 

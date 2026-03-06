@@ -1,7 +1,7 @@
 import { Box, Text, useInput, useApp, useStdout } from "ink";
 import { Spinner } from "@inkjs/ui";
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { loadHistory, upsertHistory, removeFromHistory, loadPromptHistory, savePromptHistory } from "./task";
+import { loadHistory, upsertHistory, removeFromHistory, loadPromptHistory, savePromptHistory, dataDir } from "./task";
 import type { PersistedTask } from "./task";
 import { loadConfig } from "./config";
 import type { DeerConfig } from "./config";
@@ -35,7 +35,7 @@ const LOG_LINES_PER_ENTRY = 2;
 const ENTRY_ROWS_BASE = 1 + LOG_LINES_PER_ENTRY;
 const ENTRY_ROWS_WITH_PR = ENTRY_ROWS_BASE + 1;
 const MODEL = "sonnet";
-const PR_MERGE_CHECK_INTERVAL_MS = 60_000;
+const PR_MERGE_CHECK_INTERVAL_MS = 10_000;
 const POLL_MS = 1_000;
 /** Number of consecutive unchanged pane captures before considering Claude idle */
 const IDLE_THRESHOLD = 3;
@@ -186,18 +186,48 @@ async function saveToHistory(agent: AgentState, repoPath: string): Promise<void>
   await upsertHistory(repoPath, task);
 }
 
-/** Check the current state of a PR via `gh pr view`. */
+let _ghToken: string | null | undefined = undefined;
+
+/** Get the GitHub auth token, cached after first call. */
+async function getGitHubToken(): Promise<string | null> {
+  if (_ghToken !== undefined) return _ghToken;
+  try {
+    const proc = Bun.spawn(["gh", "auth", "token"], { stdout: "pipe", stderr: "pipe" });
+    const code = await proc.exited;
+    _ghToken = code === 0 ? (await new Response(proc.stdout).text()).trim() : null;
+  } catch {
+    _ghToken = null;
+  }
+  return _ghToken;
+}
+
+/** Parse a GitHub PR URL into owner, repo, and PR number. */
+function parsePrUrl(prUrl: string): { owner: string; repo: string; number: number } | null {
+  const match = prUrl.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
+  if (!match) return null;
+  return { owner: match[1], repo: match[2], number: parseInt(match[3], 10) };
+}
+
+/** Check the current state of a PR via the GitHub REST API. */
 async function checkPrState(prUrl: string): Promise<"open" | "merged" | "closed" | null> {
   try {
-    const proc = Bun.spawn(
-      ["gh", "pr", "view", prUrl, "--json", "state", "-q", ".state"],
-      { stdout: "pipe", stderr: "pipe" },
+    const token = await getGitHubToken();
+    const parsed = parsePrUrl(prUrl);
+    if (!parsed) return null;
+    const { owner, repo, number } = parsed;
+    const res = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/pulls/${number}`,
+      {
+        headers: {
+          Accept: "application/vnd.github+json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      },
     );
-    const code = await proc.exited;
-    if (code !== 0) return null;
-    const state = (await new Response(proc.stdout).text()).trim();
-    if (state === "MERGED") return "merged";
-    if (state === "CLOSED") return "closed";
+    if (!res.ok) return null;
+    const data = await res.json() as { state: string; merged: boolean };
+    if (data.merged) return "merged";
+    if (data.state === "closed") return "closed";
     return "open";
   } catch {
     return null;
@@ -389,6 +419,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   const nextId = useRef(1);
   const agentsRef = useRef(agents);
   agentsRef.current = agents;
+  const deletedTaskIdsRef = useRef(new Set<string>());
   const configRef = useRef<DeerConfig | null>(null);
   const baseBranchRef = useRef("main");
 
@@ -403,7 +434,8 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   // ── Sync state from history file ──────────────────────────────────
 
   const syncWithHistory = useCallback(async () => {
-    const fileTasks = await loadHistory(cwd);
+    const allFileTasks = await loadHistory(cwd);
+    const fileTasks = allFileTasks.filter(t => !deletedTaskIdsRef.current.has(t.taskId));
     const currentAgents = agentsRef.current;
     const agentByTaskId = new Map(currentAgents.map(a => [a.taskId, a]));
     const fileTaskIds = new Set(fileTasks.map(t => t.taskId));
@@ -729,24 +761,18 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     }
   }, []);
 
-  // ── Update existing PR: push new commits to the PR branch ─────────
+  // ── Open shell in worktree ────────────────────────────────────────
 
-  const updatePr = useCallback(async (agent: AgentState) => {
-    if (!agent.handle || !agent.result?.prUrl || !agent.result?.finalBranch) return;
+  const openShell = useCallback(async (agent: AgentState) => {
+    if (!agent.taskId) return;
+    const worktreePath = `${dataDir()}/tasks/${agent.taskId}/worktree`;
+    const shell = process.env.SHELL ?? "/bin/sh";
 
-    agent.updatingPr = true;
-    agent.lastActivity = "Pushing updates to PR...";
-    setAgents((prev) => [...prev]);
-
-    try {
-      await updateAgentPR(agent.handle, agent.result.finalBranch);
-      agent.lastActivity = "PR updated";
-    } catch (err) {
-      agent.lastActivity = `PR update failed: ${err instanceof Error ? err.message : String(err)}`;
-    } finally {
-      agent.updatingPr = false;
-    }
-    setAgents((prev) => [...prev]);
+    await withSuspendedTerminal(setSuspended, async () => {
+      await Bun.sleep(50);
+      const { spawnSync } = await import("node:child_process");
+      spawnSync(shell, [], { stdio: "inherit", cwd: worktreePath });
+    });
   }, []);
 
   // ── Continue: focus input to spawn a new agent off a PR branch ────
@@ -776,6 +802,31 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     setAgents((prev) => [...prev]);
   }, [cwd]);
 
+
+  const updatePr = useCallback(async (agent: AgentState) => {
+    if (!agent.handle || !agent.result?.prUrl) return;
+
+    agent.creatingPr = true;
+    agent.lastActivity = "Updating PR...";
+    setAgents((prev) => [...prev]);
+
+    try {
+      await updateAgentPR(
+        agent.handle,
+        cwd,
+        agent.baseBranch,
+        agent.prompt,
+        agent.result.prUrl,
+      );
+      agent.lastActivity = "PR updated";
+    } catch (err) {
+      agent.lastActivity = `PR update failed: ${err instanceof Error ? err.message : String(err)}`;
+    } finally {
+      agent.creatingPr = false;
+    }
+    await saveToHistory(agent, cwd);
+    setAgents((prev) => [...prev]);
+  }, [cwd]);
 
   // ── Keyboard input ────────────────────────────────────────────────
 
@@ -905,6 +956,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
           hasHandle: !!agent.handle,
           isIdle: agent.idle,
           prState: agent.prState,
+          hasWorktreePath: !!agent.taskId,
         };
         const actions = availableActions(ctx);
         const action = resolveKeypress(input, key, actions);
@@ -915,6 +967,9 @@ export default function Dashboard({ cwd }: { cwd: string }) {
             break;
           case "create_pr":
             createPr(agent);
+            break;
+          case "update_pr":
+            updatePr(agent);
             break;
           case "open_pr":
             if (agent.result?.prUrl) openUrl(agent.result.prUrl);
@@ -931,13 +986,19 @@ export default function Dashboard({ cwd }: { cwd: string }) {
             deleteTask(agent.taskId, cwd, agent.handle).catch(() => {});
             setAgents((prev) => prev.filter((a) => a !== agent));
             setSelectedIdx((prev) => Math.min(prev, Math.max(visible.length - 2, 0)));
-            removeFromHistory(cwd, agent.taskId);
+            deletedTaskIdsRef.current.add(agent.taskId);
+            removeFromHistory(cwd, agent.taskId).finally(() => {
+              deletedTaskIdsRef.current.delete(agent.taskId);
+            });
             break;
           case "toggle_logs":
             setLogExpanded((prev) => !prev);
             break;
           case "retry":
             spawnAgent(agent.prompt);
+            break;
+          case "open_shell":
+            openShell(agent);
             break;
         }
       }
@@ -1035,16 +1096,18 @@ export default function Dashboard({ cwd }: { cwd: string }) {
               <Box key={agent.id} flexDirection="column">
                 {/* Title line */}
                 <Box gap={1}>
+                  <Box width={2}>
+                    {agent.creatingPr ? (
+                      <Text color="blue">{UPLOAD_FRAMES[animTick % UPLOAD_FRAMES.length]}</Text>
+                    ) : agent.idle ? (
+                      <Text>{agent.result?.prUrl ? "👀" : "👋"}</Text>
+                    ) : agent.status === "running" ? (
+                      <Spinner label="" />
+                    ) : (
+                      <Text color={display.color}>{display.icon}</Text>
+                    )}
+                  </Box>
                   <Text dimColor={!isSelected}>{pointer}</Text>
-                  {agent.creatingPr || agent.updatingPr ? (
-                    <Text color="blue">{UPLOAD_FRAMES[animTick % UPLOAD_FRAMES.length]}</Text>
-                  ) : agent.idle ? (
-                    <Text>{agent.result?.prUrl ? "👀" : "👋"}</Text>
-                  ) : agent.status === "running" ? (
-                    <Spinner label="" />
-                  ) : (
-                    <Text color={display.color}>{display.icon}</Text>
-                  )}
                   <Box flexGrow={1}>
                     <Text bold={isSelected} wrap="truncate">
                       {truncate(agent.prompt, titleWidth)}
@@ -1179,6 +1242,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
                   hasHandle: !!selected.handle,
                   isIdle: selected.idle,
                   prState: selected.prState,
+                  hasWorktreePath: !!selected.taskId,
                 }).map((action) => (
                   <Text key={action} dimColor>
                     {ACTION_BINDINGS[action].keyDisplay} {ACTION_BINDINGS[action].label}

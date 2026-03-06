@@ -85,6 +85,7 @@ describe("availableActions", () => {
     hasHandle: true,
     isIdle: false,
     prState: null,
+    hasWorktreePath: true,
     ...overrides,
   });
 
@@ -292,7 +293,7 @@ describe("resolveKeypress", () => {
   });
 });
 
-// ── update_pr action tests ───────────────────────────────────────────
+// ── update_pr action tests ────────────────────────────────────────────
 
 describe("update_pr action", () => {
   const baseCtx = (overrides: Partial<AgentContext>): AgentContext => ({
@@ -334,14 +335,19 @@ describe("update_pr action", () => {
     const actions = availableActions(baseCtx({ status: "running", isIdle: true }));
     expect(actions).toContain("update_pr");
   });
-});
 
-describe("resolveKeypress update_pr", () => {
-  test("'u' resolves to update_pr when available", () => {
-    expect(resolveKeypress("u", {}, ["update_pr", "open_pr"])).toBe("update_pr");
+  test("update_pr not available in non-terminal non-idle states", () => {
+    for (const status of ["setup", "teardown", "cancelled", "interrupted"] as const) {
+      const actions = availableActions(baseCtx({ status, hasPrUrl: true }));
+      expect(actions).not.toContain("update_pr");
+    }
   });
 
-  test("'u' returns null when update_pr not available", () => {
+  test("'u' key resolves to update_pr when available", () => {
+    expect(resolveKeypress("u", {}, ["update_pr", "open_pr", "delete"])).toBe("update_pr");
+  });
+
+  test("'u' key returns null when update_pr is not available", () => {
     expect(resolveKeypress("u", {}, ["open_pr", "delete"])).toBeNull();
   });
 });
@@ -351,7 +357,7 @@ describe("resolveKeypress update_pr", () => {
 describe("ACTION_BINDINGS", () => {
   test("every action has a keyDisplay and label", () => {
     const actions: AgentAction[] = [
-      "attach", "create_pr", "open_pr", "kill", "delete", "toggle_logs", "retry", "update_pr",
+      "attach", "create_pr", "open_pr", "update_pr", "kill", "delete", "toggle_logs", "retry", "open_shell",
     ];
     for (const action of actions) {
       const binding = ACTION_BINDINGS[action];
