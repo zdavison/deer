@@ -49,7 +49,7 @@ export const ENTRY_ROWS_BASE = 1 + LOG_LINES_PER_ENTRY;
 export const ENTRY_ROWS_WITH_PR = ENTRY_ROWS_BASE + 1;
 
 /** Upload animation frames */
-export const UPLOAD_FRAMES = ["\u2B06", "\u21E7"];
+export const UPLOAD_FRAMES = ["\u25B2", "\u25B3"];
 
 /** HOME directory fallback */
 export const HOME = process.env.HOME ?? "/root";
