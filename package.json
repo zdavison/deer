@@ -14,6 +14,7 @@
   },
   "scripts": {
     "test": "bun test",
+    "lint": "oxlint src",
     "dev": "bun run src/cli.tsx",
     "build": "bun build --compile --target=bun-linux-x64 src/cli.tsx --outfile dist/deer-linux-x64"
   },
@@ -28,6 +29,7 @@
   "devDependencies": {
     "@types/react": "^19.0.0",
     "bun-types": "latest",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "oxlint": "latest"
   }
 }
