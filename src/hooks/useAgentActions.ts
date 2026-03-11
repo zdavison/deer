@@ -26,6 +26,7 @@ import {
 import {
   DEFAULT_MODEL,
   DASHBOARD_POLL_MS,
+  IDLE_THRESHOLD,
 } from "../constants";
 
 // ── Runtime handle map ───────────────────────────────────────────────
