@@ -1,0 +1,27 @@
+src/preflight.ts
+  ff90a0a3992fc8d2 3-4,16-17,21-30
+scripts/install.js
+  ff90a0a3992fc8d2 8,16-17,67-82
+src/sandbox/srt.ts
+  ff90a0a3992fc8d2 10-13,16-18,21-36,38-39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.10",
+  "base_commit_sha": "5614f5957c12305b9a18bcc40d35191c682fab8b",
+  "prompts": {
+    "ff90a0a3992fc8d2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e75daffe-df54-497f-a2e3-d620258eff9e",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "deer-agent <deer@noreply>",
+      "messages": [],
+      "total_additions": 64,
+      "total_deletions": 11,
+      "accepted_lines": 58,
+      "overriden_lines": 0
+    }
+  }
+}
