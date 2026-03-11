@@ -27,6 +27,31 @@ export function formatTime(seconds: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+export function formatCost(cost: number): string {
+  if (cost < 0.01) return "<$0.01";
+  return `$${cost.toFixed(2)}`;
+}
+
+/**
+ * Scan tmux pane lines for a Claude Code cost output like "Cost: $0.0234".
+ * Returns the last dollar amount found in a cost-bearing line, or null.
+ */
+export function parseCostFromPane(lines: string[]): number | null {
+  let lastCost: number | null = null;
+  for (const line of lines) {
+    const cleaned = stripAnsi(line).trim();
+    // Prefer lines explicitly mentioning cost
+    if (/cost/i.test(cleaned)) {
+      const match = cleaned.match(/\$(\d+\.\d+)/);
+      if (match) {
+        const val = parseFloat(match[1]);
+        if (!isNaN(val)) lastCost = val;
+      }
+    }
+  }
+  return lastCost;
+}
+
 export function appendLog(agent: AgentState, line: string, verbose = false) {
   agent.logs.push({ text: line, verbose });
   if (agent.logs.length > MAX_LOG_LINES) {
