@@ -10,8 +10,11 @@ import { render } from "ink";
 import React from "react";
 import { detectRepo } from "./git/worktree.ts";
 import Dashboard from "./dashboard.tsx";
+import { checkAndUpdate } from "./updater.ts";
 
 async function main() {
+  await checkAndUpdate();
+
   const startDir = process.cwd();
 
   let repoRoot: string;
