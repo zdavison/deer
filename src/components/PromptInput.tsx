@@ -23,10 +23,9 @@ export function PromptInput({
   valueRef.current = value;
   cursorOffsetRef.current = cursorOffset;
 
-  // Ink v6 handles the Kitty keyboard protocol natively — it auto-detects
-  // terminal support, enables the protocol, and parses \x1b[13;2u into
-  // key.return + key.shift. We rely on that here rather than a separate raw
-  // stdin listener, which would cause double-insertion when both fire.
+  // Ink v6 Kitty keyboard protocol is opt-in via render()'s kittyKeyboard
+  // option (set in cli.tsx). When active, \x1b[13;2u is parsed into
+  // key.return + key.shift, which we handle below.
 
   useInput(
     (input, key) => {

@@ -26,7 +26,9 @@ async function main() {
   // Enter alternate screen buffer
   process.stdout.write("\x1b[?1049h");
 
-  const instance = render(<Dashboard cwd={repoRoot} />);
+  const instance = render(<Dashboard cwd={repoRoot} />, {
+    kittyKeyboard: { flags: ["disambiguateEscapeCodes"] },
+  });
 
   await instance.waitUntilExit();
 
