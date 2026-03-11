@@ -120,11 +120,34 @@ const tools: Tool[] = [
     },
   },
   {
+    name: "srt (@anthropic-ai/sandbox-runtime)",
+    check: () => commandExists("srt"),
+    async install() {
+      if (await commandExists("npm")) {
+        log("  Installing srt via npm...");
+        await $`npm install -g @anthropic-ai/sandbox-runtime`;
+      } else if (await commandExists("bun")) {
+        log("  Installing srt via bun...");
+        await $`bun add -g @anthropic-ai/sandbox-runtime`;
+      } else {
+        log("  Could not find npm or bun. Install @anthropic-ai/sandbox-runtime manually.");
+      }
+    },
+    note: "Required by deer for sandboxing (macOS: seatbelt, Linux: bubblewrap)",
+  },
+  {
     name: "claude (Claude Code CLI)",
     check: () => commandExists("claude"),
     async install() {
-      log("  Installing Claude Code via npm...");
-      await $`npm install -g @anthropic-ai/claude-code`;
+      if (await commandExists("npm")) {
+        log("  Installing Claude Code via npm...");
+        await $`npm install -g @anthropic-ai/claude-code`;
+      } else if (await commandExists("bun")) {
+        log("  Installing Claude Code via bun...");
+        await $`bun add -g @anthropic-ai/claude-code`;
+      } else {
+        log("  Could not find npm or bun. Install @anthropic-ai/claude-code manually.");
+      }
     },
   },
   {
