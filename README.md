@@ -2,7 +2,7 @@
 
 `deer` is what I consider the simplest tool for running multiple unattended `claude` instances safely.
 
-If you want to parallelize `claude` agents, but don't like the complexity of agent orchestrators like `multiclaude` and `claude-squad`, `deer` may be for you.
+If you want to parallelize `claude` agents, but don't like the complexity of agent orchestrators like [`multiclaude`](https://github.com/dlorenc/multiclaude) and [`claude-squad`](https://github.com/smtg-ai/claude-squad), `deer` may be for you.
 
 ![the deer dashboard TUI](assets/demo-dashboard.png)
 
