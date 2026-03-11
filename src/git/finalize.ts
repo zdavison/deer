@@ -113,10 +113,17 @@ async function generatePRMetadata(worktreePath: string, baseBranch: string, prom
   await Bun.$`git -C ${worktreePath} fetch origin ${baseBranch}`.quiet().nothrow();
   const remoteBase = `origin/${baseBranch}`;
 
-  const diffResult = await Bun.$`git -C ${worktreePath} diff ${remoteBase}..HEAD`.quiet().nothrow();
+  // Use the merge-base (three-dot equivalent) so the diff matches exactly what
+  // GitHub will show in the PR — only the agent's changes since diverging from
+  // origin, regardless of where the local base branch was when the worktree
+  // was created.
+  const mergeBaseResult = await Bun.$`git -C ${worktreePath} merge-base ${remoteBase} HEAD`.quiet().nothrow();
+  const mergeBase = mergeBaseResult.stdout.toString().trim() || remoteBase;
+
+  const diffResult = await Bun.$`git -C ${worktreePath} diff ${mergeBase}..HEAD`.quiet().nothrow();
   const diff = diffResult.stdout.toString().trim();
 
-  const logResult = await Bun.$`git -C ${worktreePath} log --oneline ${remoteBase}..HEAD`.quiet().nothrow();
+  const logResult = await Bun.$`git -C ${worktreePath} log --oneline ${mergeBase}..HEAD`.quiet().nothrow();
   const commitLog = logResult.stdout.toString().trim();
 
   const truncatedDiff = diff.length > MAX_DIFF_FOR_PR_METADATA

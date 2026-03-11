@@ -67,12 +67,8 @@ export async function createWorktree(
   // Ensure parent directory exists
   await mkdir(join(dataDir(), "tasks", taskId), { recursive: true });
 
-  // Fetch latest remote state so the worktree branches from up-to-date origin,
-  // ensuring PR diffs compare against the correct base.
-  await Bun.$`git -C ${repoPath} fetch origin ${baseBranch}`.quiet().nothrow();
-
   const result =
-    await Bun.$`git -C ${repoPath} worktree add -b ${branch} ${worktreePath} origin/${baseBranch}`.quiet();
+    await Bun.$`git -C ${repoPath} worktree add -b ${branch} ${worktreePath} ${baseBranch}`.quiet();
 
   if (result.exitCode !== 0) {
     throw new Error(
