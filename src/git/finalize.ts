@@ -128,8 +128,8 @@ async function generatePRMetadata(worktreePath: string, baseBranch: string, prom
     : "";
 
   const bodyInstruction = prTemplate
-    ? "body: follow the PR template structure above, filling in relevant sections based on the changes. End with a horizontal rule and \"> Created by [deer](https://github.com/mm-zacharydavison/deer) — review carefully.\""
-    : "body: markdown with a ## Summary section describing what changed and why, followed by a ## Changes section with bullet points of key changes. End with a horizontal rule and \"> Created by [deer](https://github.com/mm-zacharydavison/deer) — review carefully.\"";
+    ? "body: follow the PR template structure above, filling in relevant sections based on the changes. Start with a ## Task section containing the original task prompt as a blockquote. End with a horizontal rule and \"> Created by [deer](https://github.com/mm-zacharydavison/deer) — review carefully.\""
+    : "body: markdown starting with a ## Task section containing the original task prompt as a blockquote, followed by a ## Summary section describing what changed and why, then a ## Changes section with bullet points of key changes. End with a horizontal rule and \"> Created by [deer](https://github.com/mm-zacharydavison/deer) — review carefully.\"";
 
   const metadataPrompt = `You are generating metadata for a pull request. Analyze the following task prompt, commits, and diff, then produce EXACTLY the following JSON (no markdown fences, no extra text):
 
