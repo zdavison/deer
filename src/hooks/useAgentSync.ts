@@ -12,8 +12,8 @@ import { readTaskState, scanLiveTaskIds, isOwnerAlive } from "../task-state";
 import type { DeerConfig } from "../config";
 import { TASK_SYNC_DEBOUNCE_MS, TASK_SYNC_SAFETY_POLL_MS } from "../constants";
 
-export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig | null>) {
-  const [agents, setAgents] = useState<AgentState[]>([]);
+export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig | null>, mockAgents?: AgentState[]) {
+  const [agents, setAgents] = useState<AgentState[]>(mockAgents ?? []);
   const agentsRef = useRef(agents);
   agentsRef.current = agents;
   const deletedTaskIdsRef = useRef(new Set<string>());
@@ -29,6 +29,7 @@ export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig
   // ── Detect base branch on mount ────────────────────────────────────
 
   useEffect(() => {
+    if (mockAgents) return;
     detectRepo(cwd).then((info) => {
       baseBranchRef.current = info.defaultBranch;
     }).catch(() => {});
@@ -37,6 +38,7 @@ export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig
   // ── Sync state from state files + history ──────────────────────────
 
   const syncWithHistory = useCallback(async () => {
+    if (mockAgents) return;
     // Live tasks: read all state.json files in parallel
     const liveTaskIds = await scanLiveTaskIds();
     const liveStateResults = await Promise.all(
@@ -157,6 +159,7 @@ export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig
   // ── Watch tasks directory for instant cross-instance updates ───────
 
   useEffect(() => {
+    if (mockAgents) return;
     const tasksDir = join(dataDir(), "tasks");
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 

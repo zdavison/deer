@@ -27,22 +27,25 @@ import {
   ENTRY_ROWS_BASE,
   ENTRY_ROWS_WITH_PR,
 } from "./constants";
+import type { AgentState } from "./agent-state";
 
 export { stripAnsi } from "./dashboard-utils";
 
-export default function Dashboard({ cwd }: { cwd: string }) {
+export default function Dashboard({ cwd, mockAgents }: { cwd: string; mockAgents?: AgentState[] }) {
   const { exit } = useApp();
   const { stdout } = useStdout();
   const termWidth = stdout?.columns || 80;
   const termHeight = stdout?.rows || 24;
 
   const [suspended, setSuspended] = useState(false);
-  const [preflight, setPreflight] = useState<PreflightResult | null>(null);
+  const [preflight, setPreflight] = useState<PreflightResult | null>(
+    mockAgents ? { ok: true, errors: [], credentialType: "subscription" } : null,
+  );
   const [logExpanded, setLogExpanded] = useState(false);
   const [animTick, setAnimTick] = useState(0);
   const configRef = useRef<DeerConfig | null>(null);
 
-  const { agents, setAgents, agentsRef, deletedTaskIdsRef, baseBranchRef, restoredProxiesRef, liveSessionIdsRef, syncWithHistory } = useAgentSync(cwd, configRef);
+  const { agents, setAgents, agentsRef, deletedTaskIdsRef, baseBranchRef, restoredProxiesRef, liveSessionIdsRef, syncWithHistory } = useAgentSync(cwd, configRef, mockAgents);
 
   const {
     promptHistory,
@@ -102,7 +105,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   // ── Load config + preflight + start config guard ───────────────────
 
   useEffect(() => {
-    runPreflight().then(setPreflight);
+    if (!mockAgents) runPreflight().then(setPreflight);
     loadConfig(cwd).then((cfg) => {
       configRef.current = cfg;
       // Re-run sync immediately so proxies are restored for any
