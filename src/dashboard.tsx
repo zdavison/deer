@@ -34,10 +34,8 @@ export { stripAnsi } from "./dashboard-utils";
 export default function Dashboard({ cwd, mockAgents }: { cwd: string; mockAgents?: AgentState[] }) {
   const { exit } = useApp();
   const { stdout } = useStdout();
-  const [frozenWidth] = useState(() => stdout?.columns || 80);
-  const [frozenHeight] = useState(() => stdout?.rows || 24);
-  const termWidth = mockAgents ? frozenWidth : (stdout?.columns || 80);
-  const termHeight = mockAgents ? frozenHeight : (stdout?.rows || 24);
+  const termWidth = stdout?.columns || 80;
+  const termHeight = stdout?.rows || 24;
 
   const [suspended, setSuspended] = useState(false);
   const [preflight, setPreflight] = useState<PreflightResult | null>(
