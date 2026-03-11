@@ -1,7 +1,7 @@
 import { test, expect, describe, afterEach } from "bun:test";
 import { generateTaskId, dataDir, historyPath, loadHistory, removeFromHistory, upsertHistory } from "../src/task";
 import type { PersistedTask } from "../src/task";
-import { rm, mkdtemp } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 

@@ -69,7 +69,6 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   const {
     selectedIdx,
     inputFocused,
-    setInputFocused,
     confirmQuit,
     pendingConfirmation,
     verboseMode,

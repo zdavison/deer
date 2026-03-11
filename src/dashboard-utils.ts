@@ -40,7 +40,9 @@ export function isActive(a: AgentState): boolean {
 
 /** Strip ANSI escape sequences from terminal output */
 export function stripAnsi(s: string): string {
+  // eslint-disable-next-line no-control-regex
   return s.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "")
+          // eslint-disable-next-line no-control-regex
           .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "");
 }
 

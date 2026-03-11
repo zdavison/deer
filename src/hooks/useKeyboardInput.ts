@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useInput } from "ink";
 import type { AgentState } from "../agent-state";
 import type { Dispatch, SetStateAction } from "react";
-import { availableActions, resolveKeypress, confirmationMessage, ACTION_BINDINGS, type AgentAction } from "../state-machine";
+import { availableActions, resolveKeypress, confirmationMessage, type AgentAction } from "../state-machine";
 import { fuzzyMatch } from "../fuzzy";
 import { openUrl, isActive } from "../dashboard-utils";
 
@@ -40,7 +40,7 @@ function copyLogsToClipboard(agent: AgentState): void {
 export function useKeyboardInput({
   suspended,
   agents,
-  setAgents,
+  setAgents: _setAgents,
   logExpanded,
   setLogExpanded,
   promptHistory,
@@ -48,7 +48,7 @@ export function useKeyboardInput({
   setHistoryIdx,
   setInputDefault,
   setInputKey,
-  spawnAgent,
+  spawnAgent: _spawnAgent,
   killAgent,
   attachToAgent,
   openShell,

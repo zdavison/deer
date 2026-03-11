@@ -8,7 +8,7 @@ import { writeTaskState, removeTaskState } from "../task-state";
 import type { TaskStateFile } from "../task-state";
 import type { DeerConfig } from "../config";
 import type { PreflightResult } from "../preflight";
-import { startAgent, destroyAgent, deleteTask } from "../agent";
+import { startAgent, deleteTask } from "../agent";
 import { updatePullRequest, createPullRequest } from "../git/finalize";
 import { isTmuxSessionDead, captureTmuxPane, applyTmuxStatusBar } from "../sandbox/index";
 import { resolveRuntime } from "../sandbox/resolve";

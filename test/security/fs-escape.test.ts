@@ -8,7 +8,7 @@
 import { test, expect, describe, afterEach } from "bun:test";
 import { createSrtRuntime } from "../../src/sandbox/srt";
 import type { SandboxCleanup } from "../../src/sandbox/runtime";
-import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";

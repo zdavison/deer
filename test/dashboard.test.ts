@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test";
-import { historicalAgent, liveTaskFromStateFile, historicalAgentFromStateFile, createAgentState } from "../src/agent-state";
+import { historicalAgent, liveTaskFromStateFile, historicalAgentFromStateFile } from "../src/agent-state";
 import { generateTaskId } from "../src/task";
 import type { PersistedTask } from "../src/task";
 import type { TaskStateFile } from "../src/task-state";

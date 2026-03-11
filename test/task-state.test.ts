@@ -1,7 +1,5 @@
 import { test, expect, describe, afterEach } from "bun:test";
-import { rm, mkdir } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
+
 import {
   readTaskState,
   writeTaskState,
@@ -10,15 +8,11 @@ import {
   scanLiveTaskIds,
   type TaskStateFile,
 } from "../src/task-state";
-import * as taskModule from "../src/task";
 
 // Override dataDir for tests by monkey-patching the task-state module's dep
 // We do this by writing state files into a temp tasks dir and pointing the
 // module at it via the real filesystem under a unique temp path.
 
-function makeTempDir(): string {
-  return join(tmpdir(), `deer-task-state-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-}
 
 function makeStateFile(overrides?: Partial<TaskStateFile>): TaskStateFile {
   return {
@@ -38,19 +32,6 @@ function makeStateFile(overrides?: Partial<TaskStateFile>): TaskStateFile {
     baseBranch: "main",
     ...overrides,
   };
-}
-
-// Temporarily override dataDir to point at a temp directory
-async function withTempDataDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
-  const dir = makeTempDir();
-  await mkdir(join(dir, "tasks"), { recursive: true });
-  const origDataDir = (taskModule as unknown as { dataDir: () => string }).dataDir;
-
-  // We can't easily monkey-patch an ES module, so we test via the filesystem
-  // directly: the task-state functions are pure file I/O against dataDir().
-  // For these tests we'll use the real dataDir but with unique taskIds that
-  // won't collide with real state.
-  return fn(dir);
 }
 
 // Use unique taskIds per test to avoid cross-contamination

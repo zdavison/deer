@@ -5,7 +5,6 @@
 
 import { $ } from "bun";
 
-const isLinux = process.platform === "linux";
 const isMac = process.platform === "darwin";
 
 interface Tool {
