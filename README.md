@@ -67,16 +67,48 @@ deer
 
 ### Dashboard
 
-[Description of the TUI dashboard — task list, log viewer, keyboard shortcuts]
+The TUI dashboard shows all running and completed agents, their status, recent log lines, and PR links. A prompt input at the bottom lets you launch new agents.
 
 #### Keyboard shortcuts
 
+**Input mode** (default — prompt bar is active):
+
 | Key | Action |
 |-----|--------|
-| [TBD] | Submit prompt |
-| [TBD] | Cancel task |
-| [TBD] | View task logs |
-| [TBD] | ... |
+| `Enter` | Submit prompt and launch agent |
+| `↑` / `↓` | Navigate prompt history |
+| `Tab` | Switch focus to agent list |
+
+**Agent list mode** (press `Tab` from input to enter):
+
+| Key | Action |
+|-----|--------|
+| `Tab` | Switch focus back to input |
+| `j` / `↓` | Select next agent |
+| `k` / `↑` | Select previous agent |
+| `/` | Fuzzy-search agents |
+| `Enter` | Attach to agent's tmux session |
+| `x` | Kill running agent |
+| `r` | Retry (re-run agent from scratch) |
+| `p` | Create PR (or open PR if one exists) |
+| `u` | Update existing PR |
+| `s` | Open a shell in the agent's worktree |
+| `l` | Toggle log detail panel |
+| `c` | Copy logs to clipboard (when log panel open) |
+| `v` | Toggle verbose log mode (when log panel open) |
+| `Backspace` | Delete agent entry |
+| `q` | Quit (confirms if agents are still running) |
+
+**Search mode** (press `/` from agent list):
+
+| Key | Action |
+|-----|--------|
+| `j` / `↓` | Next match |
+| `k` / `↑` | Previous match |
+| `Enter` | Select highlighted match |
+| `Esc` | Cancel search |
+
+> Actions that require confirmation (kill, delete with uncommitted work, retry while running) prompt `(y/n)` before executing.
 
 ### Attaching to a running agent
 
@@ -105,14 +137,19 @@ Configuration is layered. Later sources override earlier ones:
 [defaults]
 base_branch = "main"       # default base branch for PRs
 timeout_ms = 1800000       # agent timeout in ms (default: 30 minutes)
-setup_command = ""         # command to run before the agent starts
+setup_command = ""         # command to run inside the worktree before the agent starts
 
 [network]
-allowlist = [...]          # domains the sandbox can reach (replaces default list)
+# Replaces the built-in allowlist entirely (see repo-local allowlist_extra to extend it)
+allowlist = [
+  "api.anthropic.com",
+  "registry.npmjs.org",
+  # ...
+]
 
 [sandbox]
-runtime = "srt"
-env_passthrough = []       # host env vars to forward into the sandbox
+runtime = "srt"            # only "srt" is supported
+env_passthrough = []       # host env var names to forward into the sandbox
 ```
 
 ### Repo-local config (`deer.toml`)
@@ -123,20 +160,29 @@ Place this in your repo root — it is safe to commit.
 # Override the base branch for this repo
 base_branch = "master"
 
-# Run a setup command before the agent starts (e.g. install dependencies)
+# Run a setup command inside the worktree before the agent starts
 setup_command = "pnpm install"
 
-# Allow additional domains (merged with the global allowlist)
+# Extend the network allowlist (merged with global allowlist)
 [network]
 allowlist_extra = ["npm.pkg.github.com"]
 
-# Forward additional env vars into the sandbox
+# Forward additional host env vars into the sandbox
 [sandbox]
-env_passthrough_extra = ["NODE_ENV"]
+env_passthrough_extra = ["NODE_ENV", "MY_VAR"]
 
-# Inject extra credentials via the auth proxy
+# Inject extra credentials via the host-side auth proxy.
+# The sandbox never sees the real token — the proxy injects it as an auth header.
 # [[sandbox.proxy_credentials_extra]]
-# ...
+# domain = "your-registry.example.com"
+# target = "https://your-registry.example.com"
+# [sandbox.proxy_credentials_extra.hostEnv]
+# key = "MY_REGISTRY_TOKEN"
+# [sandbox.proxy_credentials_extra.headerTemplate]
+# authorization = "Bearer ${value}"
+# [sandbox.proxy_credentials_extra.sandboxEnv]
+# key = "NPM_CONFIG_REGISTRY"
+# value = "http://your-registry.example.com"
 ```
 
 See `deer.toml.example` for a full annotated example.
