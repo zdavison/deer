@@ -418,7 +418,6 @@ export function useAgentActions({
       agent.status = transition(agent.status, "PR_FAILED") ?? agent.status;
       agent.error = msg;
       agent.lastActivity = `PR failed: ${truncate(msg, 120)}`;
-      appendLog(agent, `[pr] PR creation failed: ${msg}`);
     } finally {
       agent.creatingPr = false;
     }

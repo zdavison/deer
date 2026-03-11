@@ -108,7 +108,7 @@ export function ensureDeerEmojiPrefix(title: string): string {
  * Ask Claude to generate PR metadata (branch name, title, body) from the diff.
  * Falls back to a simple prompt-based title if Claude fails.
  */
-async function generatePRMetadata(worktreePath: string, baseBranch: string, prompt: string, prTemplate: string | null): Promise<PRMetadata> {
+async function generatePRMetadata(worktreePath: string, baseBranch: string, prompt: string, prTemplate: string | null, onLog?: (msg: string) => void): Promise<PRMetadata> {
   // Fetch latest remote state so we compare against up-to-date origin
   await Bun.$`git -C ${worktreePath} fetch origin ${baseBranch}`.quiet().nothrow();
   const remoteBase = `origin/${baseBranch}`;
@@ -154,12 +154,21 @@ ${truncatedDiff}`;
       stdout: "pipe",
       stderr: "pipe",
       timeout: 60_000,
-      // Run in /tmp so this doesn't pollute the user's project history in ~/.claude/projects/
+      // Run in /tmp so this doesn't pollute the user's project history in ~/.claude/projects/.
+      // Also explicitly set PWD so claude uses /tmp for its project path rather than inheriting
+      // the parent process's working directory.
       cwd: "/tmp",
+      env: { ...process.env, PWD: "/tmp" },
     });
-    const exitCode = await proc.exited;
-    if (exitCode !== 0) throw new Error("claude exited with non-zero status");
-    const output = (await new Response(proc.stdout).text()).trim();
+    // Read stdout and stderr concurrently with process exit — reading after proc.exited
+    // can return empty in Bun because unread pipe data may be discarded on process exit.
+    const [exitCode, rawOutput, stderrText] = await Promise.all([
+      proc.exited,
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
+    if (exitCode !== 0) throw new Error(`claude exited ${exitCode}: ${stderrText.trim()}`);
+    const output = rawOutput.trim();
 
     let text = output;
     try {
@@ -170,7 +179,7 @@ ${truncatedDiff}`;
     }
 
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("No JSON found in Claude response");
+    if (!jsonMatch) throw new Error(`No JSON found in Claude response: ${text.slice(0, 200)}`);
 
     const parsed = JSON.parse(jsonMatch[0]);
     if (!parsed.branchName || !parsed.title || !parsed.body) {
@@ -182,7 +191,8 @@ ${truncatedDiff}`;
       title: ensureDeerEmojiPrefix(parsed.title.slice(0, 70)),
       body: parsed.body,
     };
-  } catch {
+  } catch (err) {
+    onLog?.(`[pr] generatePRMetadata failed (using fallback): ${err instanceof Error ? err.message : String(err)}`);
     const clean = prompt.replace(/\n/g, " ").trim();
     const title = ensureDeerEmojiPrefix(clean.length > 65 ? clean.slice(0, 62) + "..." : clean);
     const body = [
@@ -225,7 +235,7 @@ export async function createPullRequest(options: CreatePROptions): Promise<Creat
   log(`[pr] PR template: ${prTemplate ? "found" : "none"}`);
 
   log(`[pr] Generating PR metadata via Claude...`);
-  const metadata = await generatePRMetadata(worktreePath, baseBranch, prompt, prTemplate);
+  const metadata = await generatePRMetadata(worktreePath, baseBranch, prompt, prTemplate, onLog);
   log(`[pr] Metadata: branch=${metadata.branchName} title=${metadata.title}`);
 
   // Rename the branch if Claude provided a name
