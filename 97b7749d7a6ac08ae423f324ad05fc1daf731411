@@ -1,0 +1,23 @@
+src/sandbox/srt.ts
+  4141a5c955ed46b1 106-107
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.10",
+  "base_commit_sha": "97b7749d7a6ac08ae423f324ad05fc1daf731411",
+  "prompts": {
+    "4141a5c955ed46b1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3f3fbb9b-008a-46d3-adba-c1b60b1503ac",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "deer-agent <deer@noreply>",
+      "messages": [],
+      "total_additions": 2,
+      "total_deletions": 0,
+      "accepted_lines": 2,
+      "overriden_lines": 0
+    }
+  }
+}
