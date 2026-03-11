@@ -3,7 +3,6 @@
 // kadai:emoji 📸
 // kadai:description Launch deer in demo mode with mock tasks for README screenshots
 
-import { $ } from "bun";
 import { join } from "node:path";
 
 async function main() {
@@ -13,10 +12,14 @@ async function main() {
   console.log("🦌 Launching deer in demo mode...");
   console.log(`   Press q to quit\n`);
 
-  await $`bun run ${cliPath} --demo`.env({
-    ...process.env,
-    FORCE_COLOR: "1",
+  const proc = Bun.spawn(["bun", "run", cliPath, "--demo"], {
+    env: { ...process.env, FORCE_COLOR: "1" },
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
   });
+
+  await proc.exited;
 }
 
 main().catch((err) => {
