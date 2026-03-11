@@ -129,6 +129,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     process.on("SIGTERM", () => { cleanup(); process.exit(0); });
 
     return () => {
+      cleanup();
       process.removeListener("exit", cleanup);
     };
   }, [cwd]);
