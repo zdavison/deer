@@ -1,4 +1,4 @@
-# deer
+# 🦌 deer
 
 `deer` is what I consider the simplest tool for running multiple unattended `claude` instances safely.
 
