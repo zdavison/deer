@@ -62,8 +62,6 @@ cd your-project
 deer
 ```
 
-[Screenshot or demo GIF]
-
 ### Dashboard
 
 #### Keyboard shortcuts
