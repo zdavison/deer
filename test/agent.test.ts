@@ -5,7 +5,7 @@ import { startAgent, getAgentOutput, destroyAgent, deleteTask } from "../src/age
 import type { AgentHandle, AgentStatus } from "../src/agent";
 import { dataDir } from "../src/task";
 import { DEFAULT_CONFIG } from "../src/config";
-import { nonoRuntime } from "../src/sandbox/index";
+import { createSrtRuntime } from "../src/sandbox/index";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -57,7 +57,7 @@ describe("agent lifecycle", () => {
       prompt: "echo hello",
       baseBranch: "main",
       config: testConfig,
-      runtime: nonoRuntime,
+      runtime: createSrtRuntime(),
       onStatus: (s) => statuses.push(s),
     });
     handles.push(handle);
@@ -81,7 +81,7 @@ describe("agent lifecycle", () => {
       prompt: "echo hello",
       baseBranch: "main",
       config: testConfig,
-      runtime: nonoRuntime,
+      runtime: createSrtRuntime(),
       taskId: preTaskId,
     });
     handles.push(handle);
@@ -98,7 +98,7 @@ describe("agent lifecycle", () => {
       prompt: "test",
       baseBranch: "main",
       config: testConfig,
-      runtime: nonoRuntime,
+      runtime: createSrtRuntime(),
     });
     handles.push(handle);
 
@@ -119,7 +119,7 @@ describe("agent lifecycle", () => {
       prompt: "test",
       baseBranch: "main",
       config: testConfig,
-      runtime: nonoRuntime,
+      runtime: createSrtRuntime(),
     });
 
     await destroyAgent(handle, repo);
@@ -147,7 +147,7 @@ describe("agent lifecycle", () => {
       prompt: "test",
       baseBranch: "main",
       config: testConfig,
-      runtime: nonoRuntime,
+      runtime: createSrtRuntime(),
     });
 
     await deleteTask(handle.taskId, repo);
@@ -180,7 +180,7 @@ describe("agent lifecycle", () => {
       prompt: "echo hello",
       baseBranch: "main",
       config: testConfig,
-      runtime: nonoRuntime,
+      runtime: createSrtRuntime(),
     });
     handles.push(firstHandle);
 
@@ -194,7 +194,7 @@ describe("agent lifecycle", () => {
       prompt: "should not be used",
       baseBranch: "main",
       config: testConfig,
-      runtime: nonoRuntime,
+      runtime: createSrtRuntime(),
       continueSession: {
         taskId: firstHandle.taskId,
         worktreePath: firstHandle.worktreePath,

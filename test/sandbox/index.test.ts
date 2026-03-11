@@ -3,7 +3,7 @@ import {
   launchSandbox,
   isTmuxSessionDead,
   captureTmuxPane,
-  nonoRuntime,
+  createSrtRuntime,
   type SandboxSession,
 } from "../../src/sandbox/index";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
@@ -43,7 +43,7 @@ describe("sandbox integration", () => {
       sessionName: name,
       worktreePath: dir,
       allowlist: [],
-      runtime: nonoRuntime,
+      runtime: createSrtRuntime(),
       command: ["sh", "-c", `echo "sandbox works" > ${dir}/result.txt`],
     });
     sessions.push(session);
@@ -65,7 +65,7 @@ describe("sandbox integration", () => {
       sessionName: name,
       worktreePath: dir,
       allowlist: [],
-      runtime: nonoRuntime,
+      runtime: createSrtRuntime(),
       command: ["sleep", "30"],
     });
     sessions.push(session);
@@ -84,12 +84,12 @@ describe("sandbox integration", () => {
       sessionName: name,
       worktreePath: dir,
       allowlist: [],
-      runtime: nonoRuntime,
+      runtime: createSrtRuntime(),
       command: ["true"], // exits immediately
     });
     sessions.push(session);
 
-    // Wait for the command to finish (nono + shell startup takes time)
+    // Wait for the command to finish (srt + shell startup takes time)
     await Bun.sleep(2000);
     const dead = await isTmuxSessionDead(name);
     expect(dead).toBe(true);
@@ -108,7 +108,7 @@ describe("sandbox integration", () => {
       sessionName: name,
       worktreePath: dir,
       allowlist: [],
-      runtime: nonoRuntime,
+      runtime: createSrtRuntime(),
       command: ["echo", "hello from sandbox"],
     });
     sessions.push(session);
@@ -134,7 +134,7 @@ describe("sandbox integration", () => {
       sessionName: name,
       worktreePath: dir,
       allowlist: [],
-      runtime: nonoRuntime,
+      runtime: createSrtRuntime(),
       command: ["sleep", "60"],
     });
 
@@ -154,7 +154,7 @@ describe("sandbox integration", () => {
       sessionName: name,
       worktreePath: dir,
       allowlist: [],
-      runtime: nonoRuntime,
+      runtime: createSrtRuntime(),
       command: ["sh", "-c", `echo "inside" > ${dir}/sandboxed.txt`],
     });
     sessions.push(session);
@@ -173,7 +173,7 @@ describe("sandbox integration", () => {
       worktreePath: dir,
       allowlist: [],
       env: { DEER_TEST_VAR: "it_works" },
-      runtime: nonoRuntime,
+      runtime: createSrtRuntime(),
       command: ["sh", "-c", `echo $DEER_TEST_VAR > ${dir}/env-result.txt`],
     });
     sessions.push(session);
@@ -183,7 +183,7 @@ describe("sandbox integration", () => {
     expect(content.trim()).toBe("it_works");
   });
 
-  test("sandbox has no direct network access (Landlock TCP)", async () => {
+  test("sandbox blocks direct network access", async () => {
     const dir = await makeTmpDir();
     const name = sessionName();
 
@@ -192,10 +192,9 @@ describe("sandbox integration", () => {
       sessionName: name,
       worktreePath: dir,
       allowlist: ["example.com"],
-      runtime: nonoRuntime,
+      runtime: createSrtRuntime(),
       command: [
         "sh", "-c",
-        // curl --noproxy bypasses HTTP_PROXY — should fail with Landlock TCP
         `curl --noproxy '*' --max-time 3 -s -o /dev/null -w '%{http_code}' https://example.com > ${dir}/direct.txt 2>&1 || echo "BLOCKED" > ${dir}/direct.txt`,
       ],
     });

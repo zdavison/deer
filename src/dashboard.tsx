@@ -4,7 +4,6 @@ import React, { useState, useEffect, useRef } from "react";
 import { loadConfig } from "./config";
 import type { DeerConfig } from "./config";
 import { availableActions, ACTION_BINDINGS } from "./state-machine";
-import { startClaudeConfigGuard, type ClaudeConfigGuard, type ConfigAlert } from "./sandbox/claude-config-guard";
 import { runPreflight, type PreflightResult } from "./preflight";
 import { PromptInput } from "./components/PromptInput";
 import { useAgentSync } from "./hooks/useAgentSync";
@@ -39,8 +38,6 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   const [preflight, setPreflight] = useState<PreflightResult | null>(null);
   const [logExpanded, setLogExpanded] = useState(false);
   const [animTick, setAnimTick] = useState(0);
-  const [configAlerts, setConfigAlerts] = useState<ConfigAlert[]>([]);
-  const guardRef = useRef<ClaudeConfigGuard | null>(null);
   const configRef = useRef<DeerConfig | null>(null);
 
   const { agents, setAgents, agentsRef, deletedTaskIdsRef, baseBranchRef, restoredProxiesRef, syncWithHistory } = useAgentSync(cwd, configRef);
@@ -105,15 +102,10 @@ export default function Dashboard({ cwd }: { cwd: string }) {
     runPreflight().then(setPreflight);
     loadConfig(cwd).then((cfg) => {
       configRef.current = cfg;
-      // Re-run sync immediately so bwrap proxies are restored for any
+      // Re-run sync immediately so proxies are restored for any
       // running cross-instance tasks without waiting for the 2s poll.
       syncWithHistory();
     });
-    startClaudeConfigGuard((alert) => {
-      setConfigAlerts((prev) => [...prev, alert]);
-    }).then((guard) => {
-      guardRef.current = guard;
-    }).catch(() => {});
   }, [cwd]);
 
   // ── Cleanup on unmount ────────────────────────────────────────────
@@ -135,7 +127,6 @@ export default function Dashboard({ cwd }: { cwd: string }) {
 
     return () => {
       process.removeListener("exit", cleanup);
-      guardRef.current?.stop();
     };
   }, [cwd]);
 
@@ -160,9 +151,8 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   const preflightOk = preflight?.ok ?? false;
 
   const chromeHeight = 6;
-  const alertHeight = configAlerts.length > 0 ? Math.min(configAlerts.length, 3) + 2 + (configAlerts.length > 3 ? 1 : 0) : 0;
   const detailHeight = logExpanded && selected ? Math.min(MAX_VISIBLE_LOGS + 1, 6) : 0;
-  const listHeight = Math.max(termHeight - chromeHeight - detailHeight - alertHeight, 3);
+  const listHeight = Math.max(termHeight - chromeHeight - detailHeight, 3);
   const hasPrEntries = agents.some((a) => a.result?.prUrl);
   const entryRows = hasPrEntries ? ENTRY_ROWS_WITH_PR : ENTRY_ROWS_BASE;
   const maxVisibleEntries = Math.max(Math.floor(listHeight / entryRows), 1);
@@ -198,24 +188,6 @@ export default function Dashboard({ cwd }: { cwd: string }) {
           {preflight.errors.map((e) => (
             <Text key={e} color="red">✗ {e}</Text>
           ))}
-        </Box>
-      )}
-
-      {/* Config tampering alerts */}
-      {configAlerts.length > 0 && (
-        <Box flexDirection="column" paddingX={1}>
-          <Text color="red" bold>
-            {`${configAlerts.some((a) => a.severity === "critical") ? "!! SECURITY" : " ! WARNING"}: ~/.claude modified while agents running`}
-          </Text>
-          {configAlerts.slice(-3).map((alert, i) => (
-            <Text key={i} color={alert.severity === "critical" ? "red" : "yellow"}>
-              {alert.severity === "critical" ? "!!" : " !"} {alert.type}: {alert.file.replace(process.env.HOME ?? "", "~")}
-            </Text>
-          ))}
-          {configAlerts.length > 3 && (
-            <Text dimColor>   ...and {configAlerts.length - 3} more</Text>
-          )}
-          <Text>{"─".repeat(termWidth - 2)}</Text>
         </Box>
       )}
 

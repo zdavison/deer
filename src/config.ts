@@ -18,15 +18,14 @@ export interface DeerConfig {
   sandbox: {
     /**
      * Sandbox runtime to use for process isolation.
-     * - "bwrap" — bubblewrap mount namespaces + CONNECT proxy
-     * - "nono" — Landlock-based (disabled pending nono#220)
-     * @default "bwrap"
+     * - "srt" — Anthropic Sandbox Runtime (cross-platform: bwrap on Linux, seatbelt on macOS)
+     * @default "srt"
      */
-    runtime: "bwrap" | "nono";
+    runtime: "srt";
     /**
      * Environment variable names to forward from the host into the sandbox.
      * Only these vars (plus PATH, HOME, TERM) reach the sandboxed process.
-     * @default ["CLAUDE_CODE_OAUTH_TOKEN", "GH_TOKEN"]
+     * @default ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"]
      */
     envPassthrough: string[];
   };
@@ -44,15 +43,10 @@ export const DEFAULT_CONFIG: DeerConfig = {
       "statsig.anthropic.com",
       "sentry.io",
       "registry.npmjs.org",
-      "pypi.org",
-      "github.com",
-      "objects.githubusercontent.com",
     ],
   },
   sandbox: {
-    // Using bwrap until nono#220 is resolved (Landlock inode issue with
-    // ~/.claude.json backup files causes intermittent EACCES errors).
-    runtime: "bwrap",
+    runtime: "srt",
     envPassthrough: [
       "CLAUDE_CODE_OAUTH_TOKEN",
       "ANTHROPIC_API_KEY",

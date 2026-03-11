@@ -2,8 +2,7 @@ import type { SandboxRuntime, SandboxCleanup } from "./runtime";
 import { HOME } from "../constants";
 
 export type { SandboxRuntime, SandboxRuntimeOptions, SandboxCleanup } from "./runtime";
-export { nonoRuntime } from "./nono";
-export { createBwrapRuntime } from "./bwrap";
+export { createSrtRuntime } from "./srt";
 
 export interface SandboxSession {
   /** The tmux session name */

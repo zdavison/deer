@@ -1,24 +1,22 @@
 /**
  * Agent lifecycle: worktree → sandbox → poll → finalize.
  *
- * Each agent runs Claude Code interactively inside a nono sandbox
+ * Each agent runs Claude Code interactively inside an SRT sandbox
  * within a tmux session. The user can attach at any time via tmux.
  */
 
 import { join, resolve } from "node:path";
 import { createWorktree, removeWorktree } from "./git/worktree";
 import { cleanupWorktree } from "./git/finalize";
-import { launchSandbox, isTmuxSessionDead, captureTmuxPane } from "./sandbox/index";
+import { launchSandbox, captureTmuxPane } from "./sandbox/index";
 import type { SandboxSession, SandboxRuntime } from "./sandbox/index";
 import { generateTaskId, dataDir } from "./task";
 import type { DeerConfig } from "./config";
 import {
-  AGENT_POLL_INTERVAL_MS,
   DEFAULT_MODEL,
   BYPASS_DIALOG_MAX_POLLS,
   BYPASS_DIALOG_POLL_MS,
   BYPASS_DIALOG_KEY_DELAY_MS,
-  HOME,
 } from "./constants";
 
 // ── Types ────────────────────────────────────────────────────────────

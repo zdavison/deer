@@ -1,9 +1,9 @@
 /**
  * Abstract sandbox runtime interface.
  *
- * Each runtime (nono, bwrap, none) implements this to produce the
- * command prefix that wraps the inner command with sandbox capabilities.
- * The tmux session management in index.ts is runtime-agnostic.
+ * The SRT runtime implements this to produce the command prefix that wraps
+ * the inner command with sandbox capabilities. The tmux session management
+ * in index.ts is runtime-agnostic.
  */
 
 export interface SandboxRuntimeOptions {
@@ -47,17 +47,13 @@ export interface SandboxRuntime {
   /**
    * Optional pre-launch hook for setup that must happen before the sandbox starts.
    * Returns a cleanup function that is called when the sandbox session is stopped.
-   *
-   * Use cases:
-   * - Starting a CONNECT proxy (bwrap) — cleanup stops the proxy
-   * - Pre-creating files for Landlock (nono) — cleanup is a no-op
    */
   prepare?(options: SandboxRuntimeOptions): Promise<SandboxCleanup>;
 
   /**
    * Restore runtime resources for a task that is already running (e.g. after
    * a deer restart). Returns a cleanup function, or null if restoration is not
-   * applicable (no port file, wrong runtime, etc.).
+   * applicable.
    *
    * @param worktreePath - Path to the task's git worktree
    * @param allowlist - Hosts to allow through the network proxy
