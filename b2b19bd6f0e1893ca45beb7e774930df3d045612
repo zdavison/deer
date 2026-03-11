@@ -1,0 +1,39 @@
+src/dashboard-utils.ts
+  a2c1b1578778d493 14
+src/git/finalize.ts
+  a2c1b1578778d493 45-46,216-217,219,223,225-227,229,235,239-240,244,246,249,254,258-259,262
+src/hooks/useKeyboardInput.ts
+  a2c1b1578778d493 32
+src/state-machine.ts
+  a2c1b1578778d493 15,24,59,64,84
+src/task.ts
+  a2c1b1578778d493 37
+src/components/LogDetailPanel.tsx
+  a2c1b1578778d493 17-20
+src/hooks/useAgentActions.ts
+  a2c1b1578778d493 379-380,390-393,397,399-403
+src/sandbox/srt.ts
+  a2c1b1578778d493 22-27,29-40,44,58-61,85-94,96
+src/dashboard.tsx
+  a2c1b1578778d493 211-214
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.10",
+  "base_commit_sha": "b2b19bd6f0e1893ca45beb7e774930df3d045612",
+  "prompts": {
+    "a2c1b1578778d493": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d8f26035-dda9-4554-bfa4-9df5cb6f0589",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "deer-agent <deer@noreply>",
+      "messages": [],
+      "total_additions": 88,
+      "total_deletions": 19,
+      "accepted_lines": 83,
+      "overriden_lines": 0
+    }
+  }
+}
