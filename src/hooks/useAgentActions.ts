@@ -165,7 +165,7 @@ export function useAgentActions({
 
   // ── Spawn agent ───────────────────────────────────────────────────
 
-  const spawnAgent = useCallback(async (prompt: string, baseBranch?: string, continueSession?: { taskId: string; worktreePath: string; branch: string }) => {
+  const spawnAgent = useCallback(async (prompt: string, baseBranch?: string, continueSession?: { taskId: string; worktreePath: string; branch: string }, createdAt?: string) => {
     if (!prompt.trim()) return;
     if (preflight && !preflight.ok) return;
 
@@ -182,7 +182,7 @@ export function useAgentActions({
       taskId,
       prompt: prompt.trim(),
       baseBranch: effectiveBranch,
-      createdAt: new Date().toISOString(),
+      createdAt: createdAt ?? new Date().toISOString(),
       ...(continueSession && {
         worktreePath: continueSession.worktreePath,
         branch: continueSession.branch,
@@ -458,7 +458,7 @@ export function useAgentActions({
       runtimeRef.current.delete(agent.taskId);
     }
 
-    const { prompt, baseBranch, worktreePath, branch, taskId } = agent;
+    const { prompt, baseBranch, worktreePath, branch, taskId, createdAt } = agent;
 
     if (worktreePath) {
       // Kill the tmux session but preserve the worktree for --continue
@@ -466,10 +466,10 @@ export function useAgentActions({
         stdout: "pipe", stderr: "pipe",
       }).exited.catch(() => {});
       setAgents((prev) => prev.filter((a) => a !== agent));
-      spawnAgent(prompt, baseBranch, { taskId, worktreePath, branch });
+      spawnAgent(prompt, baseBranch, { taskId, worktreePath, branch }, createdAt);
     } else {
       deleteAgent(agent);
-      spawnAgent(prompt, baseBranch);
+      spawnAgent(prompt, baseBranch, undefined, createdAt);
     }
   }, [spawnAgent, deleteAgent, setAgents]);
 
