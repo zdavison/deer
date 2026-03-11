@@ -6,15 +6,29 @@ import { join } from "path";
 import { MAX_DIFF_FOR_PR_METADATA } from "../constants";
 
 /**
- * Stage all changes and commit if there are uncommitted modifications.
- * No-op if the worktree is clean.
+ * Stage all changes without committing.
  */
-async function stageAndCommit(worktreePath: string, message = "deer: uncommitted changes from agent session"): Promise<void> {
+async function stageChanges(worktreePath: string): Promise<void> {
   await Bun.$`git -C ${worktreePath} add -A`.quiet();
+}
+
+/**
+ * Commit staged/unstaged changes if any exist. No-op if the worktree is clean.
+ */
+async function commitIfNeeded(worktreePath: string, message: string): Promise<void> {
   const status = await Bun.$`git -C ${worktreePath} status --porcelain`.quiet();
   if (status.stdout.toString().trim().length > 0) {
     await Bun.$`git -C ${worktreePath} commit -m ${message}`.quiet();
   }
+}
+
+/**
+ * Stage all changes and commit if there are uncommitted modifications.
+ * No-op if the worktree is clean.
+ */
+async function stageAndCommit(worktreePath: string, message = "deer: uncommitted changes from agent session"): Promise<void> {
+  await stageChanges(worktreePath);
+  await commitIfNeeded(worktreePath, message);
 }
 
 /**
@@ -243,8 +257,10 @@ export async function createPullRequest(options: CreatePROptions): Promise<Creat
   const { repoPath, worktreePath, branch, baseBranch, prompt, onLog } = options;
   const log = onLog ?? (() => {});
 
-  log(`[pr] Staging and committing changes...`);
-  await stageAndCommit(worktreePath);
+  // Stage changes first so they're visible in git status, then generate metadata
+  // and use the generated title as the commit message.
+  log(`[pr] Staging changes...`);
+  await stageChanges(worktreePath);
 
   // Generate PR metadata using Claude
   log(`[pr] Finding PR template...`);
@@ -254,6 +270,9 @@ export async function createPullRequest(options: CreatePROptions): Promise<Creat
   log(`[pr] Generating PR metadata via Claude...`);
   const metadata = await generatePRMetadata(worktreePath, baseBranch, prompt, prTemplate, onLog);
   log(`[pr] Metadata: branch=${metadata.branchName} title=${metadata.title}`);
+
+  log(`[pr] Committing staged changes...`);
+  await commitIfNeeded(worktreePath, metadata.title);
 
   // Rename the branch if Claude provided a name
   let finalBranch = branch;
@@ -322,14 +341,10 @@ export async function updatePullRequest(options: UpdatePROptions): Promise<void>
   // Remove deer internal files before staging
   await Bun.$`rm -rf ${worktreePath}/.deer-claude-config ${worktreePath}/.deer-prompt`.quiet().nothrow();
 
-  log(`[pr] Staging and committing changes...`);
-  await stageAndCommit(worktreePath);
+  log(`[pr] Staging changes...`);
+  await stageChanges(worktreePath);
 
-  log(`[pr] Pushing branch ${finalBranch}...`);
-  await pushBranch(worktreePath, finalBranch);
-  log(`[pr] Push succeeded`);
-
-  // Regenerate PR metadata from the updated diff
+  // Regenerate PR metadata from the updated diff, then use the title as commit message
   log(`[pr] Finding PR template...`);
   const prTemplate = await findPRTemplate(repoPath);
   log(`[pr] PR template: ${prTemplate ? "found" : "none"}`);
@@ -337,6 +352,13 @@ export async function updatePullRequest(options: UpdatePROptions): Promise<void>
   log(`[pr] Generating PR metadata via Claude...`);
   const metadata = await generatePRMetadata(worktreePath, baseBranch, prompt, prTemplate, onLog);
   log(`[pr] Metadata: title=${metadata.title}`);
+
+  log(`[pr] Committing staged changes...`);
+  await commitIfNeeded(worktreePath, metadata.title);
+
+  log(`[pr] Pushing branch ${finalBranch}...`);
+  await pushBranch(worktreePath, finalBranch);
+  log(`[pr] Push succeeded`);
 
   // Update the PR title and body
   log(`[pr] Running gh pr edit ${prUrl}...`);
