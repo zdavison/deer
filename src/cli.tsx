@@ -10,9 +10,27 @@ import { render } from "ink";
 import React from "react";
 import { detectRepo } from "./git/worktree.ts";
 import Dashboard from "./dashboard.tsx";
+import DemoDashboard from "./demo-dashboard.tsx";
 import { checkAndUpdate } from "./updater.ts";
 
 async function main() {
+  const isDemo = process.argv.includes("--demo");
+
+  if (isDemo) {
+    // Enter alternate screen buffer
+    process.stdout.write("\x1b[?1049h");
+
+    const instance = render(<DemoDashboard />, {
+      kittyKeyboard: { flags: ["disambiguateEscapeCodes"] },
+    });
+
+    await instance.waitUntilExit();
+
+    // Restore terminal
+    process.stdout.write("\x1b[?1049l");
+    return;
+  }
+
   await checkAndUpdate();
 
   const startDir = process.cwd();
