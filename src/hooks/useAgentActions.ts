@@ -26,7 +26,6 @@ import {
 import {
   DEFAULT_MODEL,
   DASHBOARD_POLL_MS,
-  IDLE_THRESHOLD,
 } from "../constants";
 
 // ── Runtime handle map ───────────────────────────────────────────────
@@ -314,11 +313,6 @@ export function useAgentActions({
     if (!agent.taskId) return;
     const sessionName = `deer-${agent.taskId}`;
 
-    // Snapshot the pane before attaching so we can detect whether anything
-    // actually changed while we were in the session.
-    const preAttachLines = await captureTmuxPane(sessionName);
-    const preAttachSnapshot = preAttachLines ? captureSnapshot(preAttachLines) : null;
-
     await withSuspendedTerminal(setSuspended, async () => {
       // Small delay to let any pending keypress (e.g. the Enter that triggered
       // attach) flush through before tmux takes over stdin.
@@ -329,44 +323,16 @@ export function useAgentActions({
       });
     });
 
-    // After detach, eagerly check whether Claude is still idle rather than
-    // waiting for the poll loop to accumulate IDLE_THRESHOLD stable polls.
+    // Default to idle on detach and seed the pane state with the current
+    // snapshot. If Claude is actually doing something, the poll loop will
+    // detect the pane changing and flip idle back to false within one tick.
     if (agent.status === "running") {
-      // Let the pane settle after the detach event
-      await Bun.sleep(DASHBOARD_POLL_MS);
-      const linesA = await captureTmuxPane(sessionName);
-
-      if (linesA) {
-        const snapA = captureSnapshot(linesA);
-
-        if (preAttachSnapshot !== null && snapA === preAttachSnapshot) {
-          // Pane is identical to what it was before we attached — nothing
-          // changed during the session. Restore idle immediately.
-          paneStateRef.current.set(agent.taskId, seedIdleState(snapA));
-          agent.idle = true;
-          agent.lastActivity = "Idle \u2014 press \u23CE to attach";
-        } else {
-          // Content changed. Take a second snapshot to see if it has stabilised.
-          await Bun.sleep(DASHBOARD_POLL_MS);
-          const linesB = await captureTmuxPane(sessionName);
-
-          if (linesB) {
-            const snapB = captureSnapshot(linesB);
-
-            if (snapA === snapB) {
-              // Pane is stable — seed the poll loop's counter so idle is
-              // recognised on the very next tick, and update the UI immediately.
-              paneStateRef.current.set(agent.taskId, seedIdleState(snapB));
-              agent.idle = true;
-              agent.lastActivity = "Idle \u2014 press \u23CE to attach";
-            } else {
-              // Pane is changing — Claude started working; let poll loop handle it.
-              const lastLine = linesB.map(stripAnsi).map((l) => l.trim()).filter(Boolean).pop();
-              if (lastLine) agent.lastActivity = truncate(lastLine, 120);
-            }
-          }
-        }
+      const lines = await captureTmuxPane(sessionName);
+      if (lines) {
+        paneStateRef.current.set(agent.taskId, seedIdleState(captureSnapshot(lines)));
       }
+      agent.idle = true;
+      agent.lastActivity = "Idle \u2014 press \u23CE to attach";
       setAgents((prev) => [...prev]);
     }
   }, [setSuspended]);
