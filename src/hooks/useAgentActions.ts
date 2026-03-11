@@ -22,6 +22,7 @@ import {
   captureSnapshot,
   truncate,
   withSuspendedTerminal,
+  parseCostFromPane,
 } from "../dashboard-utils";
 import {
   DEFAULT_MODEL,
@@ -52,6 +53,7 @@ function toTaskStateFile(agent: AgentState): TaskStateFile {
     createdAt: agent.createdAt,
     ownerPid: process.pid,
     worktreePath: agent.worktreePath,
+    cost: agent.cost ?? null,
   };
 }
 
@@ -80,6 +82,7 @@ async function saveToHistory(agent: AgentState, repoPath: string): Promise<void>
     finalBranch: agent.result?.finalBranch ?? null,
     error: agent.error || null,
     lastActivity: agent.lastActivity,
+    cost: agent.cost ?? null,
   };
   await upsertHistory(repoPath, task);
 }
@@ -132,6 +135,12 @@ export function useAgentActions({
       const prev = paneStateRef.current.get(agent.taskId) ?? { snapshot: "", unchangedCount: 0 };
       const next = advancePaneState(prev, snapshot);
       paneStateRef.current.set(agent.taskId, next);
+
+      // Parse cost from pane output (only meaningful for API key users)
+      const parsedCost = parseCostFromPane(lines);
+      if (parsedCost !== null && parsedCost !== agent.cost) {
+        agent.cost = parsedCost;
+      }
 
       if (next.unchangedCount === 0) {
         // Update lastActivity with the latest bullet line (Claude's text output)

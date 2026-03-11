@@ -43,6 +43,8 @@ export interface TaskMetadata {
   /** @example "deer/fix-login-bug" */
   finalBranch: string | null;
   error: string | null;
+  /** Cumulative API cost in USD (only set when using pay-as-you-go API key) */
+  cost: number | null;
 }
 
 // ── Task History Persistence ──────────────────────────────────────────

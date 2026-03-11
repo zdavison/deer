@@ -16,6 +16,7 @@ import {
   STATUS_DISPLAY,
   truncate,
   formatTime,
+  formatCost,
   isActive,
   prStateColor,
 } from "./dashboard-utils";
@@ -172,6 +173,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
   const hasPrEntries = agents.some((a) => a.result?.prUrl);
   const entryRows = hasPrEntries ? ENTRY_ROWS_WITH_PR : ENTRY_ROWS_BASE;
   const maxVisibleEntries = Math.max(Math.floor(listHeight / entryRows), 1);
+  const isApiToken = preflight?.credentialType === "api-token";
 
   // ── Render ────────────────────────────────────────────────────────
 
@@ -226,13 +228,14 @@ export default function Dashboard({ cwd }: { cwd: string }) {
             );
             const filteredLogs = verboseMode ? normalizedLogs : normalizedLogs.filter((l) => !l.verbose);
             const recentLogs = filteredLogs.slice(-LOG_LINES_PER_ENTRY);
-            const titleOverhead = 11;
             const prBadge = agent.result?.prUrl && agent.prState
               ? {
                   icon: agent.prState === "merged" ? "🟣" : agent.prState === "closed" ? "🔴" : "🟢",
                   color: prStateColor(agent.prState),
                 }
               : null;
+            const costStr = isApiToken && agent.cost != null ? formatCost(agent.cost) : null;
+            const titleOverhead = 11 + (costStr ? costStr.length + 1 : 0);
             const titleWidth = Math.max(termWidth - titleOverhead - (prBadge ? 3 : 0), 5);
             const logWidth = Math.max(termWidth - 5, 5);
 
@@ -259,6 +262,7 @@ export default function Dashboard({ cwd }: { cwd: string }) {
                   </Box>
                   {prBadge && <Text>{prBadge.icon}</Text>}
                   <Text dimColor>{formatTime(agent.elapsed)}</Text>
+                  {costStr && <Text dimColor>{costStr}</Text>}
                 </Box>
                 {/* PR link line */}
                 {agent.result?.prUrl && (

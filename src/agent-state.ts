@@ -49,6 +49,8 @@ export interface AgentState {
   worktreePath: string;
   /** Git branch name for this task */
   branch: string;
+  /** Cumulative API cost in USD (only set when using pay-as-you-go API key) */
+  cost: number | null;
 }
 
 // ── Factory ──────────────────────────────────────────────────────────
@@ -74,6 +76,7 @@ export function createAgentState(overrides: Partial<AgentState>): AgentState {
     createdAt: new Date().toISOString(),
     worktreePath: "",
     branch: "",
+    cost: null,
     ...overrides,
   };
 }
@@ -98,6 +101,7 @@ export function historicalAgent(task: PersistedTask): AgentState {
     createdAt: task.createdAt,
     worktreePath: task.worktreePath || "",
     branch: task.finalBranch ?? `deer/${task.taskId}`,
+    cost: task.cost ?? null,
   });
 }
 
@@ -123,6 +127,7 @@ export function liveTaskFromStateFile(stateFile: TaskStateFile): AgentState {
     createdAt: stateFile.createdAt,
     worktreePath: stateFile.worktreePath,
     branch: stateFile.finalBranch ?? `deer/${stateFile.taskId}`,
+    cost: stateFile.cost ?? null,
   });
 }
 
@@ -153,5 +158,6 @@ export function historicalAgentFromStateFile(stateFile: TaskStateFile): AgentSta
     createdAt: stateFile.createdAt,
     worktreePath: stateFile.worktreePath,
     branch: stateFile.finalBranch ?? `deer/${stateFile.taskId}`,
+    cost: stateFile.cost ?? null,
   });
 }
