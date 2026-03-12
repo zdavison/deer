@@ -63,6 +63,8 @@ export function PromptInput({
 
   useInput(
     (input, key) => {
+      if (key.eventType === "release") return;
+
       if (
         key.upArrow ||
         key.downArrow ||

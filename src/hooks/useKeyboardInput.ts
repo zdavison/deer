@@ -268,6 +268,7 @@ export function useKeyboardInput({
 
   useInput((input, key) => {
     if (suspended) return;
+    if (key.eventType === "release") return;
 
     if (handleSearchInput(input, key)) return;
     if (handleQuitInput(input)) return;
