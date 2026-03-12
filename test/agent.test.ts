@@ -1,4 +1,5 @@
 import { test, expect, describe, afterEach, setDefaultTimeout, beforeEach } from "bun:test";
+import { dirname, join } from "node:path";
 
 setDefaultTimeout(30_000);
 import { startAgent, getAgentOutput, destroyAgent, deleteTask, resolveProxyUpstreams } from "../src/agent";
@@ -234,6 +235,26 @@ describe("agent lifecycle", () => {
     ...DEFAULT_CONFIG,
     network: { allowlist: [] },
   };
+
+  test("startAgent writes a minimal gitconfig to the task dir", async () => {
+    const repo = await createTestRepo();
+    repos.push(repo);
+
+    const handle = await startAgent({
+      repoPath: repo,
+      prompt: "test",
+      baseBranch: "main",
+      config: testConfig,
+      runtime: createSrtRuntime(),
+    });
+    handles.push(handle);
+
+    const gitconfigPath = join(dirname(handle.worktreePath), "gitconfig");
+    const content = await Bun.file(gitconfigPath).text();
+    expect(content).toContain("[user]");
+    expect(content).toContain("name = deer-agent");
+    expect(content).toContain("email = deer@noreply");
+  });
 
   test("startAgent creates a worktree and tmux session", async () => {
     const repo = await createTestRepo();

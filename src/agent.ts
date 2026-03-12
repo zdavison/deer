@@ -219,6 +219,11 @@ export async function startAgent(options: AgentRunOptions): Promise<AgentHandle>
     await Bun.$`git -C ${worktreePath} config user.email "deer@noreply"`.quiet();
   }
 
+  // Write a minimal gitconfig to the task dir so git never reads ~/.gitconfig
+  // (which is blocked by the sandbox). GIT_CONFIG_GLOBAL points here instead.
+  const gitconfigPath = join(dirname(worktreePath), "gitconfig");
+  await Bun.write(gitconfigPath, "[user]\n\tname = deer-agent\n\temail = deer@noreply\n");
+
   onStatus?.({ phase: "setup", message: "Starting sandbox..." });
 
   // Resolve credentials → MITM proxy upstreams + sandbox env vars.
@@ -249,6 +254,8 @@ export async function startAgent(options: AgentRunOptions): Promise<AgentHandle>
   // exposing the real credential. The MITM proxy replaces them before forwarding.
   const lang = detectLang();
   const sandboxEnvFinal = {
+    GIT_CONFIG_GLOBAL: gitconfigPath,
+    GIT_CONFIG_NOSYSTEM: "1",
     ...buildPassthroughEnv(config.sandbox.envPassthrough),
     ...(lang !== "en" ? { CLAUDE_CODE_LOCALE: lang } : {}),
     ...placeholderEnv,
