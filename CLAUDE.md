@@ -32,24 +32,50 @@ Each agent task:
 |------|---------|
 | `src/cli.tsx` | Entry point — detects repo, renders dashboard |
 | `src/dashboard.tsx` | Ink TUI dashboard |
+| `src/demo-dashboard.tsx` | Demo mode dashboard using mock agents |
 | `src/agent.ts` | Agent lifecycle: worktree → sandbox → tmux → finalize |
+| `src/agent-state.ts` | `AgentState` type, constructors for live/historical agents |
+| `src/task-state.ts` | Per-task `state.json` read/write, owner-alive checks, live task scan |
+| `src/state-machine.ts` | Per-task state machine: statuses, events, actions, keybindings |
 | `src/config.ts` | Config loading/merging (global + repo-local + CLI) |
-| `src/task.ts` | Task ID generation, history persistence (JSONL) |
+| `src/constants.ts` | All tunable constants (poll intervals, model, etc.) |
+| `src/preflight.ts` | Preflight checks (srt/bwrap/tmux/claude/gh) and credential resolution |
+| `src/github.ts` | GitHub token retrieval, PR URL parsing, PR state queries |
+| `src/dashboard-utils.ts` | Shared TUI helpers: formatting, ANSI stripping, terminal suspend/restore |
+| `src/fuzzy.ts` | Fuzzy search for agent list filtering |
+| `src/i18n.ts` | Locale detection and UI string translations |
+| `src/pane-idle.ts` | Tmux pane idle detection heuristics |
+| `src/updater.ts` | Self-update check logic |
+| `src/mock-agents.ts` | Static mock agent data for demo mode |
+| `src/task.ts` | Task ID generation, JSONL history persistence, prompt history |
 | `src/sandbox/index.ts` | Sandbox launch, tmux session management |
+| `src/sandbox/runtime.ts` | `SandboxRuntime` interface |
+| `src/sandbox/resolve.ts` | `resolveRuntime()` — maps config string to `SandboxRuntime` |
 | `src/sandbox/srt.ts` | SRT runtime implementation |
 | `src/sandbox/auth-proxy.ts` | Host-side MITM proxy for credential injection |
 | `src/git/worktree.ts` | Git worktree create/remove/detect |
 | `src/git/finalize.ts` | PR creation and worktree cleanup |
-| `src/state-machine.ts` | Per-task state machine |
-| `src/constants.ts` | All tunable constants (poll intervals, model, etc.) |
+| `src/hooks/useAgentSync.ts` | Cross-instance state sync via fs.watch + poll |
+| `src/hooks/useAgentActions.ts` | Action dispatch for TUI agent cards |
+| `src/hooks/useKeyboardInput.ts` | Global keyboard input handling for the dashboard |
+| `src/hooks/usePromptHistory.ts` | Prompt input history load/save/navigation |
+| `src/hooks/useLivePRState.ts` | Live GitHub PR state polling |
+| `src/components/LogDetailPanel.tsx` | Expanded log detail panel component |
+| `src/components/PromptInput.tsx` | Multi-line prompt input with bracketed paste support |
+| `src/components/ShortcutsBar.tsx` | Contextual keyboard shortcuts bar |
 
 ### Data layout
 
 ```
 ~/.local/share/deer/
-  tasks/<taskId>/worktree/   # git worktree (only writable path in sandbox)
-  history/<repohash>.jsonl   # per-repo task history
+  tasks/<taskId>/
+    worktree/          # git worktree (only writable path in sandbox)
+    state.json         # live task state (ownerPid, logs, idle, elapsed, lastActivity)
+    srt-settings.json  # SRT sandbox config
+    gitconfig          # minimal gitconfig for sandbox
+  history/<repohash>.jsonl   # per-repo task history (completed tasks)
   prompt-history.json        # TUI prompt input history
+  node_modules/              # srt binary location for compiled binary
 ```
 
 ### Config hierarchy (later wins)
