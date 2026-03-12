@@ -12,6 +12,7 @@ import { launchSandbox, captureTmuxPane } from "./sandbox/index";
 import type { SandboxSession, SandboxRuntime } from "./sandbox/index";
 import { generateTaskId, dataDir } from "./task";
 import type { DeerConfig, ProxyCredential } from "./config";
+import { detectLang } from "./i18n";
 import {
   DEFAULT_MODEL,
   BYPASS_DIALOG_MAX_POLLS,
@@ -246,8 +247,10 @@ export async function startAgent(options: AgentRunOptions): Promise<AgentHandle>
   // env vars. Placeholders make the sandboxed tool enter the right auth mode
   // (e.g. CLAUDE_CODE_OAUTH_TOKEN=proxy-managed → OAuth mode) without
   // exposing the real credential. The MITM proxy replaces them before forwarding.
+  const lang = detectLang();
   const sandboxEnvFinal = {
     ...buildPassthroughEnv(config.sandbox.envPassthrough),
+    ...(lang !== "en" ? { CLAUDE_CODE_LOCALE: lang } : {}),
     ...placeholderEnv,
     ...sandboxEnv,
   };
