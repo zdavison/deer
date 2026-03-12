@@ -1,3 +1,7 @@
+---
+nav_exclude: true
+---
+
 # E2E Test Plan for deer
 
 This document describes the E2E test suite to be built for deer. The goal is to catch real-world integration bugs that only surface when running actual deer — things like the TUI not rendering correctly, state sync failing between instances, or the full agent lifecycle breaking.
