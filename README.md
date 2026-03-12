@@ -6,6 +6,10 @@ If you want to parallelize `claude` agents, but don't like the complexity of age
 
 ![the deer dashboard TUI](assets/demo-dashboard.png)
 
+## Screencast
+
+https://youtu.be/1hvmO04NFNc
+
 ## Goals
 
 1. Quickly run and work with multiple `claude` instances at once.
