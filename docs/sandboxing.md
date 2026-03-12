@@ -72,11 +72,10 @@ The built-in allowlist covers what Claude Code needs to function:
 
 ```
 api.anthropic.com
+claude.ai
 statsig.anthropic.com
 sentry.io
 registry.npmjs.org
-github.com
-... (full list in src/constants.ts)
 ```
 
 You can extend it per-repo in `deer.toml`:
