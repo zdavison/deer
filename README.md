@@ -8,7 +8,7 @@ If you want to parallelize `claude` agents, but don't like the complexity of age
 
 ## Screencast
 
-https://youtu.be/1hvmO04NFNc
+[![snapshot from the screencast](assets/screencast-cover.png)](https://youtu.be/1hvmO04NFNc)
 
 ## Goals
 
