@@ -81,7 +81,7 @@ export function ShortcutsBar({
     for (const action of mainActions) {
       if (action === "toggle_logs") break;
       const b = ACTION_BINDINGS[action];
-      logOffset += itemWidth(b.keyDisplay + " " + b.label) + gap;
+      logOffset += itemWidth(b.keyDisplay + " " + t(("action_" + action) as StringKey)) + gap;
     }
   }
 
