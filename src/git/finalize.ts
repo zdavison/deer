@@ -4,6 +4,7 @@
 
 import { join } from "path";
 import { MAX_DIFF_FOR_PR_METADATA } from "../constants";
+import { getPRLanguage } from "../i18n";
 
 /**
  * Stage all changes without committing.
@@ -158,6 +159,11 @@ async function generatePRMetadata(worktreePath: string, baseBranch: string, prom
     ? "body: follow the PR template structure above, filling in relevant sections based on the changes. Start with a ## Task section containing the original task prompt as a blockquote. End with a horizontal rule and \"> Created by [deer](https://github.com/zdavison/deer) — review carefully.\""
     : "body: markdown starting with a ## Task section containing the original task prompt as a blockquote, followed by a ## Summary section describing what changed and why, then a ## Changes section with bullet points of key changes. End with a horizontal rule and \"> Created by [deer](https://github.com/zdavison/deer) — review carefully.\"";
 
+  const prLang = getPRLanguage();
+  const languageRule = prLang
+    ? `\n- Language: Write the title and body in ${prLang}. branchName must remain short kebab-case ASCII English regardless of language.`
+    : "";
+
   const metadataPrompt = `You are generating metadata for a pull request. Analyze the following task prompt, commits, and diff, then produce EXACTLY the following JSON (no markdown fences, no extra text):
 
 {"branchName": "<short-kebab-case-name>", "title": "<PR title under 70 chars>", "body": "<PR body in markdown>"}
@@ -166,7 +172,7 @@ Rules:
 - branchName: short, descriptive, kebab-case (e.g. "fix-login-redirect", "add-user-search"). Do NOT include any prefix like "deer/" — just the name itself.
 - title: concise, imperative mood (e.g. "Fix login redirect loop", "Add user search endpoint")
 - ${bodyInstruction}
-- CRITICAL: The Changes section MUST only reference files that actually appear in the diff below. Do NOT infer or guess file changes based on the task prompt. The changed files are EXACTLY: ${changedFiles || "(none)"}
+- CRITICAL: The Changes section MUST only reference files that actually appear in the diff below. Do NOT infer or guess file changes based on the task prompt. The changed files are EXACTLY: ${changedFiles || "(none)"}${languageRule}
 ${templateSection}
 Task prompt:
 ${prompt}

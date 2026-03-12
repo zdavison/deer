@@ -2,6 +2,7 @@ import { HOME } from "./constants";
 import { createRequire } from "node:module";
 import { accessSync } from "node:fs";
 import { join } from "node:path";
+import { t } from "./i18n";
 
 export interface PreflightResult {
   ok: boolean;
@@ -27,7 +28,7 @@ export async function runPreflight(): Promise<PreflightResult> {
     } catch { /* not in deer data dir either */ }
   }
   if (!srtFound) {
-    errors.push("@anthropic-ai/sandbox-runtime not installed — run: bunx @zdavison/deer install");
+    errors.push(t("preflight_srt_missing"));
   }
 
   // Check platform-specific sandbox dependencies
@@ -36,19 +37,19 @@ export async function runPreflight(): Promise<PreflightResult> {
     try {
       const p = Bun.spawn(["sandbox-exec", "-n", "no-network", "true"], { stdout: "pipe", stderr: "pipe" });
       const code = await p.exited;
-      if (code !== 0) errors.push("sandbox-exec not working — ensure /usr/bin is in PATH");
+      if (code !== 0) errors.push(t("preflight_sandbox_exec_broken"));
     } catch {
-      errors.push("sandbox-exec not available — required on macOS for srt sandboxing");
+      errors.push(t("preflight_sandbox_exec_missing"));
     }
   } else {
     try {
       const p = Bun.spawn(["bwrap", "--version"], { stdout: "pipe", stderr: "pipe" });
       const code = await p.exited;
       if (code !== 0) {
-        errors.push("bwrap not available — install bubblewrap (required by srt on Linux)");
+        errors.push(t("preflight_bwrap_missing"));
       }
     } catch {
-      errors.push("bwrap not available — install bubblewrap (required by srt on Linux)");
+      errors.push(t("preflight_bwrap_missing"));
     }
   }
 
@@ -56,27 +57,27 @@ export async function runPreflight(): Promise<PreflightResult> {
   try {
     const p = Bun.spawn(["tmux", "-V"], { stdout: "pipe", stderr: "pipe" });
     const code = await p.exited;
-    if (code !== 0) errors.push("tmux not available");
+    if (code !== 0) errors.push(t("preflight_tmux_missing"));
   } catch {
-    errors.push("tmux not available");
+    errors.push(t("preflight_tmux_missing"));
   }
 
   // Check claude
   try {
     const p = Bun.spawn(["claude", "--version"], { stdout: "pipe", stderr: "pipe" });
     const code = await p.exited;
-    if (code !== 0) errors.push("claude CLI not available");
+    if (code !== 0) errors.push(t("preflight_claude_missing"));
   } catch {
-    errors.push("claude CLI not available");
+    errors.push(t("preflight_claude_missing"));
   }
 
   // Check gh auth
   try {
     const p = Bun.spawn(["gh", "auth", "token"], { stdout: "pipe", stderr: "pipe" });
     const code = await p.exited;
-    if (code !== 0) errors.push("gh auth not configured — run 'gh auth login'");
+    if (code !== 0) errors.push(t("preflight_gh_auth_missing"));
   } catch {
-    errors.push("gh CLI not available");
+    errors.push(t("preflight_gh_missing"));
   }
 
   // Check credentials — OAuth token preferred, API key accepted as fallback.
@@ -120,7 +121,7 @@ export async function runPreflight(): Promise<PreflightResult> {
   } else if (process.env.ANTHROPIC_API_KEY) {
     credentialType = "api-token";
   } else {
-    errors.push("No credentials — set CLAUDE_CODE_OAUTH_TOKEN, create ~/.claude/agent-oauth-token, or set ANTHROPIC_API_KEY");
+    errors.push(t("preflight_no_credentials"));
   }
 
   return { ok: errors.length === 0, errors, credentialType };

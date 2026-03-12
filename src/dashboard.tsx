@@ -28,6 +28,7 @@ import {
   ENTRY_ROWS_WITH_PR,
 } from "./constants";
 import type { AgentState } from "./agent-state";
+import { t } from "./i18n";
 
 export { stripAnsi } from "./dashboard-utils";
 
@@ -183,8 +184,8 @@ export default function Dashboard({ cwd, mockAgents }: { cwd: string; mockAgents
     <Box flexDirection="column" width={termWidth} height={termHeight}>
       {/* Header */}
       <Box paddingX={1} justifyContent="space-between">
-        <Text bold>🦌 deer</Text>
-        <Text dimColor>{activeCount > 0 ? `${activeCount} active` : "idle"}</Text>
+        <Text bold>{t("header_title")}</Text>
+        <Text dimColor>{activeCount > 0 ? t("header_active", { n: activeCount }) : t("header_idle")}</Text>
       </Box>
       <Text>{"─".repeat(termWidth)}</Text>
 
@@ -197,7 +198,7 @@ export default function Dashboard({ cwd, mockAgents }: { cwd: string; mockAgents
       {confirmQuit && (
         <Box paddingX={1}>
           <Text color="yellow" bold>
-            {activeCount} agent{activeCount !== 1 ? "s" : ""} running — quit? (y/n)
+            {t("quit_confirm", { n: activeCount, s: activeCount !== 1 ? "s" : "" })}
           </Text>
         </Box>
       )}
@@ -215,7 +216,7 @@ export default function Dashboard({ cwd, mockAgents }: { cwd: string; mockAgents
       <Box flexDirection="column" height={listHeight} paddingX={1}>
         {agents.length === 0 ? (
           <Box justifyContent="center" paddingY={1}>
-            <Text dimColor>Type a prompt below and press Enter to launch an agent</Text>
+            <Text dimColor>{t("agents_empty")}</Text>
           </Box>
         ) : (
           agents.slice(0, maxVisibleEntries).map((agent, i) => {
@@ -318,7 +319,7 @@ export default function Dashboard({ cwd, mockAgents }: { cwd: string; mockAgents
               </Text>
             )}
             {searchQuery.length > 0 && searchMatches.length === 0 && (
-              <Text dimColor color="red">no matches</Text>
+              <Text dimColor color="red">{t("search_no_matches")}</Text>
             )}
           </>
         ) : (
@@ -327,7 +328,7 @@ export default function Dashboard({ cwd, mockAgents }: { cwd: string; mockAgents
             {inputFocused ? (
               <PromptInput
                 key={inputKey}
-                placeholder={!preflightOk ? "preflight checks failed" : "type prompt and press Enter to launch agent (Shift+Enter or /↵ for newline)"}
+                placeholder={!preflightOk ? t("input_preflight_failed") : t("input_placeholder")}
                 isDisabled={!preflightOk}
                 defaultValue={inputDefault}
                 onSubmit={(value) => {
@@ -338,7 +339,7 @@ export default function Dashboard({ cwd, mockAgents }: { cwd: string; mockAgents
                 }}
               />
             ) : (
-              <Text dimColor italic>press Tab to type a prompt</Text>
+              <Text dimColor italic>{t("input_tab_hint")}</Text>
             )}
           </>
         )}

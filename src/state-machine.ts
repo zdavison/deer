@@ -143,6 +143,8 @@ export function availableActions(ctx: AgentContext): AgentAction[] {
 
 // ── Confirmation Messages ─────────────────────────────────────────────
 
+import { t } from "./i18n";
+
 const ACTIVE_STATES = new Set<AgentStatus>(["setup", "running", "teardown"]);
 
 /**
@@ -152,21 +154,21 @@ const ACTIVE_STATES = new Set<AgentStatus>(["setup", "running", "teardown"]);
 export function confirmationMessage(action: AgentAction, ctx: AgentContext): string | null {
   switch (action) {
     case "kill":
-      return "Kill this agent? (y/n)";
+      return t("confirm_kill");
     case "delete":
       if (ctx.hasPrUrl) {
         return null;
       }
       if (ACTIVE_STATES.has(ctx.status)) {
-        return "Agent is still running — delete? (y/n)";
+        return t("confirm_delete_running");
       }
       if (ctx.hasFinalBranch) {
-        return "No PR created — delete and lose work? (y/n)";
+        return t("confirm_delete_no_pr");
       }
       return null;
     case "retry":
       if (ACTIVE_STATES.has(ctx.status)) {
-        return "Agent is still running — kill and retry? (y/n)";
+        return t("confirm_retry_running");
       }
       return null;
     default:

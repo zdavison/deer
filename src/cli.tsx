@@ -12,6 +12,9 @@ import { detectRepo } from "./git/worktree.ts";
 import Dashboard from "./dashboard.tsx";
 import DemoDashboard from "./demo-dashboard.tsx";
 import { checkAndUpdate } from "./updater.ts";
+import { setLang, detectLang } from "./i18n.ts";
+
+setLang(detectLang());
 
 async function main() {
   const isDemo = process.argv.includes("--demo");

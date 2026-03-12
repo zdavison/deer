@@ -29,6 +29,7 @@ import {
   DASHBOARD_POLL_MS,
   IDLE_THRESHOLD,
 } from "../constants";
+import { t } from "../i18n";
 
 // ── Runtime handle map ───────────────────────────────────────────────
 
@@ -124,7 +125,7 @@ export function useAgentActions({
 
       const dead = await isTmuxSessionDead(sessionName);
       if (dead) {
-        appendLog(agent, "[tmux] Claude process exited");
+        appendLog(agent, t("log_tmux_exited"));
         return;
       }
 
@@ -163,8 +164,8 @@ export function useAgentActions({
       // Claude is idle when the pane hasn't changed for several consecutive polls
       if (isIdleState(next, IDLE_THRESHOLD) && !agent.idle) {
         agent.idle = true;
-        agent.lastActivity = "Idle \u2014 press \u23CE to attach";
-        appendLog(agent, "[deer] Claude is idle");
+        agent.lastActivity = t("activity_idle_attach");
+        appendLog(agent, t("log_deer_idle"));
         await persistStateAsync(agent);
         setAgents((prev) => [...prev]);
       } else if (next.unchangedCount === 0 && agent.idle) {
@@ -208,8 +209,8 @@ export function useAgentActions({
 
     try {
       // Phase 1: Start the sandboxed agent
-      appendLog(agent, continueSession ? "[setup] Resuming session..." : "[setup] Creating worktree and sandbox...");
-      agent.lastActivity = "Setting up sandbox...";
+      appendLog(agent, continueSession ? t("log_setup_resuming") : t("log_setup_creating"));
+      agent.lastActivity = t("activity_setting_up");
       setAgents((prev) => [...prev]);
 
       const handle = await startAgent({
@@ -249,8 +250,8 @@ export function useAgentActions({
       await persistStateAsync(agent);
 
       agent.status = transition(agent.status, "SETUP_COMPLETE") ?? agent.status;
-      appendLog(agent, `[running] Claude started in tmux session: ${handle.sessionName}`);
-      agent.lastActivity = "Claude running...";
+      appendLog(agent, t("log_running_started", { session: handle.sessionName }));
+      agent.lastActivity = t("activity_running");
       setAgents((prev) => [...prev]);
 
       // Phase 2: Poll for completion
@@ -263,8 +264,8 @@ export function useAgentActions({
       const existingPrUrl = agent.result?.prUrl || "";
       agent.result = { finalBranch: agent.result?.finalBranch || handle.branch, prUrl: existingPrUrl };
       agent.lastActivity = existingPrUrl
-        ? "Idle \u2014 press u to update PR, \u23CE to attach"
-        : "Idle \u2014 press p to create PR, \u23CE to attach";
+        ? t("activity_idle_update_pr")
+        : t("activity_idle_create_pr");
     } catch (err) {
       if (!abortController.signal.aborted) {
         agent.status = transition(agent.status, "ERROR") ?? "failed";
@@ -292,7 +293,7 @@ export function useAgentActions({
   const killAgent = useCallback((agent: AgentState) => {
     if (!isActive(agent)) return;
     agent.status = transition(agent.status, "USER_KILL") ?? "cancelled";
-    agent.lastActivity = "Cancelled by user";
+    agent.lastActivity = t("activity_cancelled");
 
     const runtime = runtimeRef.current.get(agent.taskId);
     if (runtime) {
@@ -346,7 +347,7 @@ export function useAgentActions({
         paneStateRef.current.set(agent.taskId, seedIdleState(captureSnapshot(lines)));
       }
       agent.idle = true;
-      agent.lastActivity = "Idle \u2014 press \u23CE to attach";
+      agent.lastActivity = t("activity_idle_attach");
       setAgents((prev) => [...prev]);
     }
   }, [setSuspended]);
@@ -376,8 +377,8 @@ export function useAgentActions({
     if (!agent.worktreePath || agent.result?.prUrl) return;
 
     agent.creatingPr = true;
-    agent.lastActivity = "Creating PR...";
-    appendLog(agent, `[pr] Starting PR creation...`, true);
+    agent.lastActivity = t("activity_creating_pr");
+    appendLog(agent, t("log_pr_starting_create"), true);
     appendLog(agent, `[pr] worktreePath=${agent.worktreePath} branch=${agent.branch} baseBranch=${agent.baseBranch}`, true);
     setAgents((prev) => [...prev]);
 
@@ -394,13 +395,13 @@ export function useAgentActions({
         },
       });
       agent.result = { finalBranch: result.finalBranch, prUrl: result.prUrl };
-      agent.lastActivity = "PR created";
-      appendLog(agent, `[pr] PR created: ${result.prUrl}`, true);
+      agent.lastActivity = t("activity_pr_created");
+      appendLog(agent, t("log_pr_created", { url: result.prUrl }), true);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       agent.status = transition(agent.status, "PR_FAILED") ?? agent.status;
       agent.error = msg;
-      agent.lastActivity = `PR failed: ${truncate(msg, 120)}`;
+      agent.lastActivity = t("activity_pr_failed", { msg: truncate(msg, 120) });
     } finally {
       agent.creatingPr = false;
     }
@@ -416,8 +417,8 @@ export function useAgentActions({
     const worktreePath = `${dataDir()}/tasks/${agent.taskId}/worktree`;
 
     agent.updatingPr = true;
-    agent.lastActivity = "Updating PR...";
-    appendLog(agent, `[pr] Starting PR update...`, true);
+    agent.lastActivity = t("activity_updating_pr");
+    appendLog(agent, t("log_pr_starting_update"), true);
     appendLog(agent, `[pr] worktreePath=${worktreePath} branch=${agent.result.finalBranch} baseBranch=${agent.baseBranch}`, true);
     setAgents((prev) => [...prev]);
 
@@ -434,11 +435,11 @@ export function useAgentActions({
           setAgents((prev) => [...prev]);
         },
       });
-      agent.lastActivity = "PR updated";
-      appendLog(agent, `[pr] PR updated: ${agent.result.prUrl}`, true);
+      agent.lastActivity = t("activity_pr_updated");
+      appendLog(agent, t("log_pr_updated", { url: agent.result.prUrl }), true);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      agent.lastActivity = `PR update failed: ${truncate(msg, 120)}`;
+      agent.lastActivity = t("activity_pr_update_failed", { msg: truncate(msg, 120) });
     } finally {
       agent.updatingPr = false;
     }
@@ -515,7 +516,7 @@ export function useAgentActions({
       agent.historical = true;
       agent.status = "interrupted";
       agent.idle = false;
-      agent.lastActivity = "Interrupted — deer was closed";
+      agent.lastActivity = t("activity_interrupted");
       setAgents((prev) => [...prev]);
       return;
     }
@@ -532,7 +533,7 @@ export function useAgentActions({
 
     runtimeRef.current.set(agent.taskId, { abortController, timer });
     await persistStateAsync(agent); // Claim ownership: update ownerPid
-    appendLog(agent, "[deer] Resuming session after restart...");
+    appendLog(agent, t("log_deer_resuming"));
     setAgents((prev) => [...prev]);
 
     try {
@@ -542,7 +543,7 @@ export function useAgentActions({
 
       agent.idle = true;
       agent.result = { finalBranch: agent.branch, prUrl: agent.result?.prUrl ?? "" };
-      agent.lastActivity = "Idle \u2014 press p to create PR, \u23CE to attach";
+      agent.lastActivity = t("activity_idle_create_pr");
     } catch (err) {
       if (!abortController.signal.aborted) {
         agent.status = transition(agent.status, "ERROR") ?? "failed";

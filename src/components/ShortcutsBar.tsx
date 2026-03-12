@@ -4,6 +4,7 @@ import { availableActions, ACTION_BINDINGS } from "../state-machine";
 import type { AgentAction } from "../state-machine";
 import type { PreflightResult } from "../preflight";
 import type { AgentState } from "../agent-state";
+import { t, type StringKey } from "../i18n";
 
 interface ShortcutsBarProps {
   selected: AgentState | null;
@@ -41,8 +42,14 @@ export function ShortcutsBar({
 
   // Calculate character offset of "l logs" on line 1 so sub-actions align beneath it.
   // Layout: paddingX(1) + items joined by gap(2). Each item = "key label".
+  // Note: CJK characters are 2 columns wide but counted as 1 here — alignment
+  // will be approximate in Japanese (a full CJK-aware layout pass isn't warranted yet).
   const gap = 2;
-  const fixedItems = ["Tab focus", "j/k ↑↓", "/ search"];
+  const fixedItems = [
+    `Tab ${t("shortcuts_focus")}`,
+    `j/k ${t("shortcuts_nav")}`,
+    `/ ${t("shortcuts_search")}`,
+  ];
   const itemWidth = (s: string) => s.length;
   let logOffset = 1; // paddingX left
   if (!inputFocused && !searchMode) {
@@ -62,24 +69,24 @@ export function ShortcutsBar({
       <Box paddingX={1} gap={2}>
         {searchMode ? (
           <>
-            <Text><Text bold color="white">j/k</Text><Text dimColor> ↑↓</Text></Text>
-            <Text><Text bold color="white">⏎</Text><Text dimColor> select</Text></Text>
-            <Text><Text bold color="white">Esc</Text><Text dimColor> cancel</Text></Text>
+            <Text><Text bold color="white">j/k</Text><Text dimColor> {t("shortcuts_nav")}</Text></Text>
+            <Text><Text bold color="white">⏎</Text><Text dimColor> {t("shortcuts_select")}</Text></Text>
+            <Text><Text bold color="white">Esc</Text><Text dimColor> {t("shortcuts_cancel")}</Text></Text>
           </>
         ) : (
           <>
-            <Text><Text bold color="white">Tab</Text><Text dimColor> focus</Text></Text>
+            <Text><Text bold color="white">Tab</Text><Text dimColor> {t("shortcuts_focus")}</Text></Text>
             {!inputFocused && (
               <>
-                <Text><Text bold color="white">j/k</Text><Text dimColor> ↑↓</Text></Text>
-                <Text><Text bold color="white">/</Text><Text dimColor> search</Text></Text>
+                <Text><Text bold color="white">j/k</Text><Text dimColor> {t("shortcuts_nav")}</Text></Text>
+                <Text><Text bold color="white">/</Text><Text dimColor> {t("shortcuts_search")}</Text></Text>
                 {mainActions.map((action) => (
                   <Text key={action}>
                     <Text bold color="white">{ACTION_BINDINGS[action].keyDisplay}</Text>
-                    <Text dimColor> {ACTION_BINDINGS[action].label}</Text>
+                    <Text dimColor> {t(("action_" + action) as StringKey)}</Text>
                   </Text>
                 ))}
-                <Text><Text bold color="white">q</Text><Text dimColor> quit</Text></Text>
+                <Text><Text bold color="white">q</Text><Text dimColor> {t("shortcuts_quit")}</Text></Text>
               </>
             )}
           </>
@@ -91,12 +98,12 @@ export function ShortcutsBar({
           {logSubActions.includes("copy_logs") ? (
             <Text>
               <Text bold color="white">{ACTION_BINDINGS.copy_logs.keyDisplay}</Text>
-              <Text dimColor> {ACTION_BINDINGS.copy_logs.label}</Text>
+              <Text dimColor> {t("action_copy_logs")}</Text>
             </Text>
           ) : <Text>{" "}</Text>}
         </Box>
         {preflight && (
-          <Text color="blue">agent</Text>
+          <Text color="blue">{t("label_agent")}</Text>
         )}
       </Box>
       {/* Line 3: "v verbose" under "c copy" | credential type right-aligned */}
@@ -105,14 +112,14 @@ export function ShortcutsBar({
           {logSubActions.includes("toggle_verbose") ? (
             <Text>
               <Text bold color="white">{ACTION_BINDINGS.toggle_verbose.keyDisplay}</Text>
-              <Text dimColor> {ACTION_BINDINGS.toggle_verbose.label}</Text>
-              {verboseMode && <Text dimColor italic> (on)</Text>}
+              <Text dimColor> {t("action_toggle_verbose")}</Text>
+              {verboseMode && <Text dimColor italic>{t("shortcuts_verbose_on")}</Text>}
             </Text>
           ) : <Text>{" "}</Text>}
         </Box>
         {preflight && (
           <Text dimColor={preflight.credentialType !== "none"} color={preflight.credentialType === "none" ? "red" : undefined}>
-            {preflight.credentialType === "subscription" ? "subscription" : preflight.credentialType === "api-token" ? "api-token" : "no credentials"}
+            {preflight.credentialType === "subscription" ? t("cred_subscription") : preflight.credentialType === "api-token" ? t("cred_api_token") : t("cred_none")}
           </Text>
         )}
       </Box>
