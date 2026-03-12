@@ -35,7 +35,7 @@ Configuration is layered — later sources override earlier ones:
 | Language | `--lang=` value | LLM-translated |
 |----------|----------------|:--------------:|
 | English | *(default)* | |
-| Japanese (日本語) | `ja` | |
+| Japanese (日本語) | `ja` | ✓ |
 | Chinese Simplified (简体中文) | `zh` | ✓ |
 | Korean (한국어) | `ko` | ✓ |
 | Russian (русский) | `ru` | ✓ |

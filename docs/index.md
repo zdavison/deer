@@ -128,7 +128,7 @@ The dashboard UI and generated PR content can be displayed in multiple languages
 | Language | `--lang=` value | LLM-translated |
 |----------|----------------|:--------------:|
 | English | *(default)* | |
-| Japanese (日本語) | `ja` | |
+| Japanese (日本語) | `ja` | ✓ |
 | Chinese Simplified (简体中文) | `zh` | ✓ |
 | Korean (한국어) | `ko` | ✓ |
 | Russian (русский) | `ru` | ✓ |
