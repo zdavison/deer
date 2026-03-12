@@ -1,9 +1,12 @@
 import { Text } from "ink";
-import React, { useState, useRef, useMemo } from "react";
+import React, { useState, useRef, useMemo, useEffect } from "react";
 import { useInput } from "ink";
 
-/** Number of newlines required for pasted text to be shown collapsed. */
+/** Number of newlines required for pasted text to be shown collapsed (fallback without bracketed paste mode). */
 const PASTE_LINE_THRESHOLD = 5;
+
+const PASTE_START = "\x1b[200~";
+const PASTE_END = "\x1b[201~";
 
 type PasteBlock = { start: number; end: number; id: number };
 
@@ -39,6 +42,16 @@ export function PromptInput({
   valueRef.current = value;
   cursorOffsetRef.current = cursorOffset;
   pasteBlocksRef.current = pasteBlocks;
+
+  // Enable bracketed paste mode so the terminal wraps pasted text in
+  // \x1b[200~ ... \x1b[201~ markers, delivering it as a single input event.
+  useEffect(() => {
+    if (isDisabled) return;
+    process.stdout.write("\x1b[?2004h");
+    return () => {
+      process.stdout.write("\x1b[?2004l");
+    };
+  }, [isDisabled]);
 
   // Ink v6 Kitty keyboard protocol is opt-in via render()'s kittyKeyboard
   // option (set in cli.tsx). When active, \x1b[13;2u is parsed into
@@ -131,11 +144,24 @@ export function PromptInput({
         }
       } else if (input) {
         // Strip Kitty keyboard protocol responses (e.g. \x1b[?0u) that the
-        // terminal sends back when the protocol is enabled. In compiled binaries
-        // startup is fast enough that the response arrives after Ink's input
-        // handler is active and gets passed through as raw text.
-        const cleaned = input.replace(/\[\?\d+u/g, "");
+        // terminal sends back when the protocol is enabled. Also detect and
+        // strip bracketed paste markers (\x1b[200~ ... \x1b[201~).
+        let cleaned = input.replace(/\[\?\d+u/g, "");
         if (!cleaned) return;
+
+        let isBracketedPaste = false;
+        const pasteStartIdx = cleaned.indexOf(PASTE_START);
+        if (pasteStartIdx !== -1) {
+          const pasteEndIdx = cleaned.indexOf(PASTE_END, pasteStartIdx + PASTE_START.length);
+          if (pasteEndIdx !== -1) {
+            cleaned = cleaned.slice(pasteStartIdx + PASTE_START.length, pasteEndIdx);
+            isBracketedPaste = true;
+          } else {
+            cleaned = cleaned.slice(pasteStartIdx + PASTE_START.length);
+            isBracketedPaste = true;
+          }
+          if (!cleaned) return;
+        }
 
         const cur = cursorOffsetRef.current;
         const val = valueRef.current;
@@ -147,7 +173,7 @@ export function PromptInput({
 
         const lineCount = (cleaned.match(/\n/g) ?? []).length;
         let newBlocks: PasteBlock[];
-        if (lineCount >= PASTE_LINE_THRESHOLD) {
+        if (isBracketedPaste || lineCount >= PASTE_LINE_THRESHOLD) {
           const pasteId = ++pasteCountRef.current;
           newBlocks = [...shiftedBlocks, { start: cur, end: cur + cleaned.length, id: pasteId }];
         } else {
