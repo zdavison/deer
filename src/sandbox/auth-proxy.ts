@@ -23,7 +23,7 @@
 
 import { spawn } from "node:child_process";
 import { join } from "node:path";
-import { mkdirSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 
 import authProxySource from "./auth-proxy-server.mjs" with { type: "text" };
@@ -57,12 +57,9 @@ export interface AuthProxy {
 function ensureServerScript(): string {
   const dataDir = join(process.env.HOME ?? "/root", ".local", "share", "deer");
   const scriptPath = join(dataDir, "auth-proxy-server.mjs");
-
-  if (!existsSync(scriptPath)) {
-    mkdirSync(dataDir, { recursive: true });
-    writeFileSync(scriptPath, authProxySource, "utf-8");
-  }
-
+  // Always overwrite so the cached copy stays in sync with the compiled binary.
+  mkdirSync(dataDir, { recursive: true });
+  writeFileSync(scriptPath, authProxySource, "utf-8");
   return scriptPath;
 }
 
@@ -76,11 +73,12 @@ export async function startAuthProxy(
   socketPath: string,
   upstreams: ProxyUpstream[],
   onLog?: (message: string) => void,
+  onTokenRefresh?: (domain: string) => Promise<Record<string, string> | null>,
 ): Promise<AuthProxy> {
   const serverScript = ensureServerScript();
 
   const child = spawn("node", [serverScript, socketPath, JSON.stringify(upstreams)], {
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: ["pipe", "pipe", "pipe"],
   });
 
   // Forward stderr for debugging
@@ -101,11 +99,24 @@ export async function startAuthProxy(
         const msg = JSON.parse(line);
         if (msg.ready) {
           child.removeListener("exit", onExit);
-          // Continue reading log lines after ready
+          // Continue reading messages after ready: logs and token refresh requests.
           rl.on("line", (logLine: string) => {
             try {
-              const logMsg = JSON.parse(logLine);
-              if (logMsg.log) onLog?.(logMsg.log);
+              const msg = JSON.parse(logLine);
+              if (msg.log) {
+                onLog?.(msg.log);
+              } else if (msg.type === "refresh_request") {
+                const respond = (headers: Record<string, string> | null) => {
+                  child.stdin!.write(
+                    JSON.stringify({ type: "refresh_response", requestId: msg.requestId, headers }) + "\n",
+                  );
+                };
+                if (onTokenRefresh) {
+                  onTokenRefresh(msg.domain).then(respond).catch(() => respond(null));
+                } else {
+                  respond(null);
+                }
+              }
             } catch { /* ignore malformed */ }
           });
           resolve();

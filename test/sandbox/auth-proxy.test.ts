@@ -161,4 +161,58 @@ describe("auth-proxy (Unix socket MITM)", () => {
     const exists = await Bun.file(socketPath).exists();
     expect(exists).toBe(false);
   });
+
+  test("transparently retries with refreshed headers on 401", async () => {
+    const dir = await makeTmpDir();
+    const socketPath = join(dir, "auth.sock");
+
+    let requestCount = 0;
+    const receivedTokens: string[] = [];
+
+    // Mock upstream: returns 401 on first request, 200 on retry
+    const mock = await new Promise<{ port: number; server: Server }>((resolve) => {
+      const server = createServer((req, res) => {
+        requestCount++;
+        receivedTokens.push(req.headers["authorization"] as string);
+        if (requestCount === 1) {
+          res.writeHead(401, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "unauthorized" }));
+        } else {
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: true, headers: req.headers }));
+        }
+      });
+      server.listen(0, "127.0.0.1", () => {
+        const addr = server.address() as { port: number };
+        cleanups.push(() => new Promise<void>((r) => server.close(() => r())));
+        resolve({ port: addr.port, server });
+      });
+    });
+
+    const upstream: ProxyUpstream = {
+      domain: "api.example.com",
+      target: `http://127.0.0.1:${mock.port}`,
+      headers: { authorization: "Bearer old-token" },
+    };
+
+    const proxy = await startAuthProxy(socketPath, [upstream], undefined, async (domain) => {
+      // Simulate fetching a fresh token for the domain
+      expect(domain).toBe("api.example.com");
+      return { authorization: "Bearer new-token" };
+    });
+    cleanups.push(() => proxy.close());
+
+    const { status, body } = await proxyRequest(socketPath, "http://api.example.com/v1/messages");
+
+    // Client should see 200 — the retry was transparent
+    expect(status).toBe(200);
+    expect(body.ok).toBe(true);
+
+    // Upstream received exactly two requests
+    expect(requestCount).toBe(2);
+
+    // First attempt used stale token, retry used refreshed token
+    expect(receivedTokens[0]).toBe("Bearer old-token");
+    expect(receivedTokens[1]).toBe("Bearer new-token");
+  });
 });
