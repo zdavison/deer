@@ -24,6 +24,21 @@ Configuration is layered — later sources override earlier ones:
 
 ---
 
+## CLI flags
+
+| Flag | Description |
+|------|-------------|
+| `--lang=<locale>` | Set the display language. Accepted values: `jp` or `ja` (Japanese). Omit for English (default). Also localises generated PR titles and descriptions; branch names stay ASCII. |
+
+**Language detection priority** (first match wins):
+
+1. `--lang=jp` / `--lang=ja` CLI flag
+2. `CLAUDE_CODE_LOCALE` environment variable (e.g. `CLAUDE_CODE_LOCALE=ja`)
+3. System `LANG` environment variable (e.g. `LANG=ja_JP.UTF-8`)
+4. Default: English
+
+---
+
 ## Global config
 
 **Location:** `~/.config/deer/config.toml`

@@ -115,6 +115,29 @@ While attached, a `tmux` status bar is displayed with basic instructions on how 
 
 ---
 
+## Language
+
+You can change language using `--lang=` flag on start.
+
+Only `jp` (Japanese) is supported currently.
+
+```sh
+deer --lang=jp
+```
+
+Language is detected in this order (first match wins):
+
+1. `--lang=jp` or `--lang=ja` CLI flag
+2. `CLAUDE_CODE_LOCALE` environment variable (e.g. `CLAUDE_CODE_LOCALE=ja`)
+3. System `LANG` environment variable (e.g. `LANG=ja_JP.UTF-8`)
+4. Default: English
+
+PR titles/descriptions will also be written in your chosen language.
+
+PR branch names will remaing in English.
+
+---
+
 ## Configuration
 
 Configuration is layered. Later sources override earlier ones:
