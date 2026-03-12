@@ -110,8 +110,11 @@ export const ACTION_BINDINGS: Record<AgentAction, ActionBinding> = {
 export function availableActions(ctx: AgentContext): AgentAction[] {
   const base = [...ACTIONS_BY_STATE[ctx.status]];
   // Idle agents can create/update PRs and retry (Claude is at rest)
-  if (ctx.isIdle && !base.includes("create_pr")) {
-    base.push("create_pr", "open_pr", "update_pr", "retry");
+  if (ctx.isIdle) {
+    if (!base.includes("create_pr")) base.push("create_pr");
+    if (!base.includes("open_pr")) base.push("open_pr");
+    if (!base.includes("update_pr")) base.push("update_pr");
+    if (!base.includes("retry")) base.push("retry");
   }
   // copy_logs and toggle_verbose are available when the log panel is open
   if (ctx.logExpanded) {
