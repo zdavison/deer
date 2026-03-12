@@ -5,7 +5,7 @@ import {
   removeWorktree,
 } from "../../src/git/worktree";
 import { generateTaskId, dataDir } from "../../src/task";
-import { mkdtemp, rm, mkdir } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -41,7 +41,7 @@ describe("detectRepo", () => {
   let tmpDir: string;
 
   beforeEach(async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "deer-git-test-"));
+    tmpDir = await realpath(await mkdtemp(join(tmpdir(), "deer-git-test-")));
   });
 
   afterEach(async () => {
