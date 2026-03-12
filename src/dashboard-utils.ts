@@ -93,6 +93,10 @@ export async function withSuspendedTerminal(
   try {
     await fn();
   } finally {
+    // Drain any keystrokes buffered while the child process had stdin
+    // (e.g. ctrl+c typed inside tmux), so they don't reach Ink's handlers.
+    let chunk: Buffer | string | null;
+    while ((chunk = process.stdin.read()) !== null) { /* discard */ }
     process.stdin.resume();
     if (process.stdin.setRawMode) process.stdin.setRawMode(true);
     process.stdout.write("\x1b[?1049h\x1b[2J\x1b[H");
