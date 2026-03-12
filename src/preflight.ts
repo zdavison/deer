@@ -117,7 +117,9 @@ export async function runPreflight(): Promise<PreflightResult> {
   }
   let credentialType: PreflightResult["credentialType"] = "none";
   if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-    credentialType = "subscription";
+    // sk-ant-oat* tokens are API OAuth tokens, not subscription OAuth
+    const token = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+    credentialType = token.startsWith("sk-ant-") ? "api-token" : "subscription";
   } else if (process.env.ANTHROPIC_API_KEY) {
     credentialType = "api-token";
   } else {
