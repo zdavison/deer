@@ -121,6 +121,25 @@ While attached, a `tmux` status bar is displayed with basic instructions on how 
 
 ---
 
+## Language
+
+The dashboard UI and generated PR content can be displayed in Japanese:
+
+```sh
+deer --lang=jp
+```
+
+Language is detected in this order (first match wins):
+
+1. `--lang=jp` or `--lang=ja` CLI flag
+2. `CLAUDE_CODE_LOCALE` environment variable (e.g. `CLAUDE_CODE_LOCALE=ja`)
+3. System `LANG` environment variable (e.g. `LANG=ja_JP.UTF-8`)
+4. Default: English
+
+Setting a non-English language also instructs the agent to write PR titles and descriptions in that language. Branch names remain short kebab-case ASCII English regardless of the selected language.
+
+---
+
 ## Configuration
 
 Configuration is layered. Later sources override earlier ones:
