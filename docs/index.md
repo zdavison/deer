@@ -4,144 +4,217 @@ title: Home
 nav_order: 1
 ---
 
-<div class="home-hero">
-  <h1>deer</h1>
-  <p class="tagline">Run multiple Claude Code agents safely in parallel — unattended.</p>
-  <div class="badges">
-    <a href="https://github.com/zdavison/deer/releases"><img src="https://img.shields.io/github/v/release/zdavison/deer" alt="Latest release"></a>
-    <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-blue" alt="Platform">
-    <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
-  </div>
-</div>
+# 🦌 deer
 
-`deer` is the simplest tool for running multiple unattended `claude` instances safely. Each agent gets its own git worktree and sandbox — isolated filesystem, filtered network, no credential leakage.
+`deer` is what I consider the simplest tool for running multiple unattended `claude` instances safely.
 
-```sh
-bunx @zdavison/deer install
-```
+If you want to parallelize `claude` agents, but don't like the complexity of agent orchestrators like [`multiclaude`](https://github.com/dlorenc/multiclaude) and [`claude-squad`](https://github.com/smtg-ai/claude-squad), `deer` may be for you.
+
+![the deer dashboard TUI](assets/demo-dashboard.png)
+
+## Goals
+
+1. Quickly run and work with multiple `claude` instances at once.
+2. Enable running with `--dangerously-skip-permissions` safely.
+3. Use the users Claude Code subscription for everything.
+4. Feel like `claude`.
 
 ---
 
 ## How it works
 
-<div class="feature-grid">
-  <div class="feature-card">
-    <div class="feature-icon">Send a prompt</div>
-    <h3>Type and submit</h3>
-    <p>Type a task in the dashboard prompt bar and press Enter. deer creates a git worktree and launches an agent.</p>
-  </div>
-  <div class="feature-card">
-    <div class="feature-icon">Sandboxed</div>
-    <h3>Isolated execution</h3>
-    <p>Each agent runs in an SRT sandbox — write access limited to its worktree, network filtered by domain allowlist.</p>
-  </div>
-  <div class="feature-card">
-    <div class="feature-icon">Secure</div>
-    <h3>Credential safety</h3>
-    <p>Secrets never enter the sandbox. A host-side MITM proxy injects auth headers for approved domains only.</p>
-  </div>
-  <div class="feature-card">
-    <div class="feature-icon">Parallel</div>
-    <h3>Multiple agents</h3>
-    <p>Run as many agents as you like. Monitor all of them from the TUI dashboard and attach to any live session.</p>
-  </div>
-  <div class="feature-card">
-    <div class="feature-icon">PRs</div>
-    <h3>GitHub integration</h3>
-    <p>Press <code>p</code> when an agent is done. deer generates a branch, title, and description and opens the PR.</p>
-  </div>
-  <div class="feature-card">
-    <div class="feature-icon">Subscription</div>
-    <h3>Uses your plan</h3>
-    <p>Uses your Claude Code OAuth token automatically on macOS — no API key needed.</p>
-  </div>
-</div>
+1. Launch `deer`.
+2. Send prompts (each prompt is a worktree and agent isolated from filesystem and network).
+3. Monitor agents and attach into them if necessary.
+4. Press `p` to open a PR when finished.
 
 ---
 
-## Quick start
+## Installation
 
 ```sh
-# Install
 bunx @zdavison/deer install
-
-# Run from inside any git repo
-cd your-project
-deer
 ```
 
-Type a task prompt and press `Enter`. deer handles the rest.
+### Supported platforms
 
----
-
-## Keyboard shortcuts
-
-**Input mode** (prompt bar focused):
-
-| Key | Action |
-|-----|--------|
-| `Enter` | Submit prompt |
-| `↑` / `↓` | Navigate prompt history |
-| `Tab` | Switch to agent list |
-
-**Agent list mode** (`Tab` to enter):
-
-| Key | Action |
-|-----|--------|
-| `Enter` | Attach to agent's tmux session |
-| `j` / `k` | Select next / previous agent |
-| `/` | Fuzzy-search agents |
-| `x` | Kill running agent |
-| `r` | Retry agent |
-| `p` | Create / open PR |
-| `u` | Update existing PR |
-| `s` | Open shell in worktree |
-| `l` | Toggle log panel |
-| `Backspace` | Delete agent entry |
-| `q` | Quit |
+| OS    | Arch  |
+|-------|-------|
+| macOS | x64, arm64 |
+| Linux | x64, arm64 |
 
 ---
 
 ## Authentication
 
-deer checks for credentials in this order:
+deer uses your Claude credentials to power the agent. It checks for credentials in this order:
 
 1. `CLAUDE_CODE_OAUTH_TOKEN` environment variable
-2. `~/.claude/agent-oauth-token` file
-3. macOS Keychain (Claude Code's stored credentials — no extra setup on macOS)
-4. `ANTHROPIC_API_KEY` environment variable
+2. `~/.claude/agent-oauth-token` file (plain text token)
+3. macOS Keychain (automatically extracted from Claude Code's stored credentials)
+4. `ANTHROPIC_API_KEY` environment variable (fallback — API key)
 
-If you have Claude Code installed and logged in on macOS, deer will use your subscription automatically.
+If you have Claude Code installed and logged in, deer will use your subscription automatically on macOS with no extra setup.
+
+Subscriptions are prioritized over API keys, so if you have both setup, `deer` will use your subscription.
+
+---
+
+## Usage
+
+```sh
+# Run from inside a git repo
+cd your-project
+deer
+```
+
+### Dashboard
+
+#### Keyboard shortcuts
+
+**Input mode** (default — prompt bar is active):
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Submit prompt and launch agent |
+| `↑` / `↓` | Navigate prompt history |
+| `Tab` | Switch focus to agent list |
+
+**Agent list mode** (press `Tab` from input to enter):
+
+| Key | Action |
+|-----|--------|
+| `Tab` | Switch focus back to input |
+| `j` / `↓` | Select next agent |
+| `k` / `↑` | Select previous agent |
+| `/` | Fuzzy-search agents |
+| `Enter` | Attach to agent's tmux session |
+| `x` | Kill running agent |
+| `r` | Retry (re-run agent from scratch) |
+| `p` | Create PR (or open PR if one exists) |
+| `u` | Update existing PR |
+| `s` | Open a shell in the agent's worktree |
+| `l` | Toggle log detail panel |
+| `c` | Copy logs to clipboard (when log panel open) |
+| `v` | Toggle verbose log mode (when log panel open) |
+| `Backspace` | Delete agent entry |
+| `q` | Quit (confirms if agents are still running) |
+
+**Search mode** (press `/` from agent list):
+
+| Key | Action |
+|-----|--------|
+| `j` / `↓` | Next match |
+| `k` / `↑` | Previous match |
+| `Enter` | Select highlighted match |
+| `Esc` | Cancel search |
+
+> Actions that require confirmation (kill, delete with uncommitted work, retry while running) prompt `(y/n)` before executing.
+
+### Attaching to a running agent
+
+Each task runs in a named tmux session. You can attach directly to watch the agent in real time by pressing `Enter` while the agent is selected.
+
+While attached, a `tmux` status bar is displayed with basic instructions on how to detach (`Ctrl+b`, `d`).
+
+![the deer tmux status bar](assets/deer-status-bar.png)
 
 ---
 
 ## Configuration
 
-Configuration is layered — later sources override earlier ones:
+Configuration is layered. Later sources override earlier ones:
 
 1. Built-in defaults
-2. `~/.config/deer/config.toml` — global
-3. `deer.toml` in your repo root — repo-local
+2. `~/.config/deer/config.toml` — global config
+3. `deer.toml` in your repo root — repo-local config
 4. CLI flags
 
+### Global config (`~/.config/deer/config.toml`)
+
 ```toml
-# deer.toml (repo-local, safe to commit)
-base_branch = "master"
-setup_command = "pnpm install"
+[defaults]
+base_branch = "main"       # default base branch for PRs
+timeout_ms = 1800000       # agent timeout in ms (default: 30 minutes)
+setup_command = ""         # command to run inside the worktree before the agent starts
 
 [network]
-allowlist_extra = ["npm.pkg.github.com"]
+# Replaces the built-in allowlist entirely (see repo-local allowlist_extra to extend it)
+allowlist = [
+  "api.anthropic.com",
+  "registry.npmjs.org",
+  # ...
+]
+
+[sandbox]
+runtime = "srt"            # ths is the only runtime for now
+env_passthrough = []       # host env vars to forward into the sandbox
 ```
+
+### Repo-local config (`deer.toml`)
+
+Place this in your repo root — it is safe to commit.
+
+You only need this if the defaults are not sufficient for you.
+
+```toml
+# Override the base branch for this repo
+base_branch = "master"
+
+# Run a setup command inside the worktree before the agent starts
+setup_command = "pnpm install"
+
+# Extend the network allowlist (merged with global allowlist)
+[network]
+allowlist_extra = ["npm.pkg.github.com"]
+
+# Forward additional host env vars into the sandbox
+[sandbox]
+env_passthrough_extra = ["NODE_ENV", "MY_VAR"]
+
+# Inject extra credentials via the host-side auth proxy.
+# The sandbox never sees the real token — the proxy injects it as an auth header.
+# [[sandbox.proxy_credentials_extra]]
+# domain = "your-registry.example.com"
+# target = "https://your-registry.example.com"
+# [sandbox.proxy_credentials_extra.hostEnv]
+# key = "MY_REGISTRY_TOKEN"
+# [sandbox.proxy_credentials_extra.headerTemplate]
+# authorization = "Bearer ${value}"
+# [sandbox.proxy_credentials_extra.sandboxEnv]
+# key = "NPM_CONFIG_REGISTRY"
+# value = "http://your-registry.example.com"
+```
+
+See `deer.toml.example` for a full annotated example.
 
 ---
 
 ## Security model
 
-<div class="callout">
-<p><strong>deer runs each agent in an Anthropic SRT sandbox.</strong> The agent cannot access your host filesystem, cannot reach arbitrary network endpoints, and never sees your credentials.</p>
-</div>
+`deer` runs each agent in an isolated sandbox using the [Anthropic Sandbox Runtime (SRT)](https://github.com/anthropic-ai/sandbox-runtime):
 
-- **Filesystem** — agent writes only to its git worktree
-- **Network** — domain allowlist, all other traffic blocked
-- **Credentials** — injected by host-side proxy; never forwarded to the sandbox
-- **Environment** — only explicitly listed vars are passed through
+- **Filesystem**: the agent can only write to its git worktree; the rest of the filesystem is read-only or inaccessible.
+- **Network**: outbound traffic is filtered through a domain allowlist; only explicitly permitted domains are reachable.
+- **Credentials**: API keys and OAuth tokens never enter the sandbox — a host-side MITM proxy intercepts requests to credentialed domains and injects auth headers transparently. By default this applies to `claude` keys/OAuth tokens only, but you can add additional ones if necessary.
+- **Environment**: only explicitly listed env vars are forwarded; host secrets are not leaked via the process environment.
+
+---
+
+## How PRs are created
+
+Press `p` on an idle task to create a pull request.
+
+This will generate a branch name, PR title, and PR description that describes the work done and push it to the repo.
+
+Your PR template (`.github/PULL_REQUEST_TEMPLATE.md`) is conformed to automatically.
+
+---
+
+## Contributing
+
+```sh
+bun install
+bun test
+bun dev
+```
