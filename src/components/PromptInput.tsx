@@ -5,8 +5,12 @@ import { useInput } from "ink";
 /** Number of newlines required for pasted text to be shown collapsed (fallback without bracketed paste mode). */
 const PASTE_LINE_THRESHOLD = 5;
 
+// Bracketed paste markers — with and without the leading ESC byte, since Ink
+// may strip \x1b before delivering the raw input string to useInput handlers.
 const PASTE_START = "\x1b[200~";
+const PASTE_START_ALT = "[200~";
 const PASTE_END = "\x1b[201~";
+const PASTE_END_ALT = "[201~";
 
 type PasteBlock = { start: number; end: number; id: number };
 
@@ -150,17 +154,26 @@ export function PromptInput({
         if (!cleaned) return;
 
         let isBracketedPaste = false;
-        const pasteStartIdx = cleaned.indexOf(PASTE_START);
+        let pasteStartIdx = cleaned.indexOf(PASTE_START);
+        let pasteStartLen = PASTE_START.length;
+        if (pasteStartIdx === -1) {
+          pasteStartIdx = cleaned.indexOf(PASTE_START_ALT);
+          pasteStartLen = PASTE_START_ALT.length;
+        }
         if (pasteStartIdx !== -1) {
-          const pasteEndIdx = cleaned.indexOf(PASTE_END, pasteStartIdx + PASTE_START.length);
+          const searchFrom = pasteStartIdx + pasteStartLen;
+          let pasteEndIdx = cleaned.indexOf(PASTE_END, searchFrom);
+          if (pasteEndIdx === -1) pasteEndIdx = cleaned.indexOf(PASTE_END_ALT, searchFrom);
           if (pasteEndIdx !== -1) {
-            cleaned = cleaned.slice(pasteStartIdx + PASTE_START.length, pasteEndIdx);
-            isBracketedPaste = true;
+            cleaned = cleaned.slice(searchFrom, pasteEndIdx);
           } else {
-            cleaned = cleaned.slice(pasteStartIdx + PASTE_START.length);
-            isBracketedPaste = true;
+            cleaned = cleaned.slice(searchFrom);
           }
+          isBracketedPaste = true;
           if (!cleaned) return;
+        } else if (cleaned === PASTE_END || cleaned === PASTE_END_ALT) {
+          // Standalone end marker from a split bracketed-paste event — discard.
+          return;
         }
 
         const cur = cursorOffsetRef.current;
