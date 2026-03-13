@@ -30,6 +30,7 @@ import {
   liveTaskFromStateFile,
   historicalAgentFromStateFile,
   historicalAgent,
+  liveAgentFromHistory,
 } from "../../src/agent-state";
 
 const e2e = process.env.DEER_E2E ? describe : describe.skip;
@@ -225,6 +226,16 @@ e2e("JSONL history", () => {
 
     expect(agent.status).toBe("interrupted");
     expect(agent.lastActivity).toBe("Interrupted — deer was closed");
+  });
+
+  test("liveAgentFromHistory builds a running historical agent from a persisted task", async () => {
+    const task = makePersistedTask({ status: "running", lastActivity: "● Doing work" });
+    const agent = liveAgentFromHistory(task);
+
+    expect(agent.status).toBe("running");
+    expect(agent.historical).toBe(true);
+    expect(agent.lastActivity).toBe("● Doing work");
+    expect(agent.taskId).toBe(task.taskId);
   });
 
   test("removeFromHistory removes the task from loadHistory results", async () => {

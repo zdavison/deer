@@ -132,6 +132,30 @@ export function liveTaskFromStateFile(stateFile: TaskStateFile): AgentState {
 }
 
 /**
+ * Build a running AgentState from a JSONL history entry whose tmux session
+ * survived after deer closed. Used when there is no live state.json but the
+ * tmux session is confirmed alive, so the task can be resumed.
+ */
+export function liveAgentFromHistory(task: PersistedTask): AgentState {
+  return createAgentState({
+    taskId: task.taskId,
+    prompt: task.prompt,
+    baseBranch: task.baseBranch || "main",
+    status: "running",
+    elapsed: task.elapsed,
+    lastActivity: task.lastActivity,
+    result: task.finalBranch
+      ? { finalBranch: task.finalBranch, prUrl: task.prUrl ?? "" }
+      : null,
+    createdAt: task.createdAt,
+    worktreePath: task.worktreePath || "",
+    branch: task.finalBranch ?? `deer/${task.taskId}`,
+    cost: task.cost ?? null,
+    historical: true,
+  });
+}
+
+/**
  * Build an AgentState from a state file whose owning process has died.
  * Shows the task as interrupted with its last known state.
  * If the task was idle (Claude had finished), the idle flag is preserved so
