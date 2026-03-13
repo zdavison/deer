@@ -16,6 +16,10 @@
 # [sandbox]
 # env_passthrough_extra = ["NODE_ENV", "CI"]
 
+# Disable specific ecosystem plugins (uv, pnpm, npm, go).
+# [sandbox]
+# ecosystems_disabled = ["npm"]
+
 # Inject extra credentials via the host-side auth proxy.
 # The sandbox never sees the real token — the proxy intercepts requests to the domain
 # and injects the real auth header before forwarding to the upstream over HTTPS.

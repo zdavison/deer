@@ -67,6 +67,17 @@ export interface DeerConfig {
      * The sandbox receives a localhost base URL instead of the raw credential.
      */
     proxyCredentials: ProxyCredential[];
+    /**
+     * Ecosystem plugin configuration.
+     */
+    ecosystems?: {
+      /**
+       * Ecosystem plugin names to disable.
+       * @default []
+       * @example ["npm", "go"]
+       */
+      disabled?: string[];
+    };
   };
 }
 
@@ -190,6 +201,15 @@ function applyRepoLocal(config: DeerConfig, repoLocal: Record<string, unknown>):
       ...(sandbox.proxy_credentials_extra as ProxyCredential[]),
     ];
   }
+  if (sandbox?.ecosystems_disabled && Array.isArray(sandbox.ecosystems_disabled)) {
+    result.sandbox.ecosystems = {
+      ...result.sandbox.ecosystems,
+      disabled: [
+        ...(result.sandbox.ecosystems?.disabled ?? []),
+        ...(sandbox.ecosystems_disabled as string[]),
+      ],
+    };
+  }
 
   return result;
 }
@@ -265,6 +285,9 @@ function tomlToConfig(toml: Record<string, unknown>): Partial<DeerConfig> {
       ...(sandbox.runtime !== undefined && { runtime: sandbox.runtime }),
       ...(sandbox.env_passthrough !== undefined && { envPassthrough: sandbox.env_passthrough }),
       ...(sandbox.proxy_credentials !== undefined && { proxyCredentials: sandbox.proxy_credentials }),
+      ...(sandbox.ecosystems_disabled !== undefined && {
+        ecosystems: { disabled: sandbox.ecosystems_disabled as string[] },
+      }),
     };
   }
 

@@ -13,6 +13,8 @@ import type { SandboxSession, SandboxRuntime } from "./sandbox/index";
 import { generateTaskId, dataDir } from "./task";
 import type { DeerConfig, ProxyCredential } from "./config";
 import { detectLang } from "./i18n";
+import { applyEcosystems } from "./ecosystems";
+import type { EcosystemResult } from "./ecosystems";
 import {
   DEFAULT_MODEL,
   BYPASS_DIALOG_MAX_POLLS,
@@ -201,6 +203,7 @@ export async function startAgent(options: AgentRunOptions): Promise<AgentHandle>
 
   let worktreePath: string;
   let branch: string;
+  let ecosystemResult: EcosystemResult = { extraReadPaths: [], env: {} };
 
   if (continueSession) {
     worktreePath = continueSession.worktreePath;
@@ -217,6 +220,12 @@ export async function startAgent(options: AgentRunOptions): Promise<AgentHandle>
     // Configure git in the worktree
     await Bun.$`git -C ${worktreePath} config user.name "deer-agent"`.quiet();
     await Bun.$`git -C ${worktreePath} config user.email "deer@noreply"`.quiet();
+
+    ecosystemResult = await applyEcosystems(
+      repoPath,
+      worktreePath,
+      config.sandbox.ecosystems?.disabled,
+    );
   }
 
   // Write a minimal gitconfig to the task dir so git never reads ~/.gitconfig
@@ -269,7 +278,8 @@ export async function startAgent(options: AgentRunOptions): Promise<AgentHandle>
       worktreePath,
       repoGitDir: resolve(repoPath, ".git"),
       allowlist: config.network.allowlist,
-      env: sandboxEnvFinal,
+      env: { ...ecosystemResult.env, ...sandboxEnvFinal },
+      extraReadPaths: ecosystemResult.extraReadPaths,
       mitmProxy,
       command: claudeCmd,
       runtime,

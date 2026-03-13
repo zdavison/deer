@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dependency Caching Strategies</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0d1117;
+      color: #c9d1d9;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      padding: 48px 24px;
+    }
+
+    h1 {
+      font-size: 22px;
+      font-weight: 600;
+      color: #e6edf3;
+      margin-bottom: 8px;
+      letter-spacing: -0.01em;
+    }
+
+    .subtitle {
+      color: #8b949e;
+      font-size: 13px;
+      margin-bottom: 36px;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+      border-radius: 10px;
+      border: 1px solid #21262d;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 720px;
+    }
+
+    thead tr {
+      background: #161b22;
+    }
+
+    thead th {
+      padding: 14px 18px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: #8b949e;
+      border-bottom: 1px solid #21262d;
+      white-space: nowrap;
+    }
+
+    thead th:first-child {
+      color: #8b949e;
+      width: 200px;
+    }
+
+    thead th.col-uv   { color: #58a6ff; }
+    thead th.col-pnpm { color: #f78166; }
+    thead th.col-go   { color: #3fb950; }
+
+    tbody tr {
+      border-bottom: 1px solid #21262d;
+      transition: background 0.1s;
+    }
+
+    tbody tr:last-child {
+      border-bottom: none;
+    }
+
+    tbody tr:hover {
+      background: #161b22;
+    }
+
+    tbody tr.section-header {
+      background: #0d1117;
+    }
+
+    tbody tr.section-header td {
+      padding: 20px 18px 6px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #484f58;
+      border-bottom: none;
+    }
+
+    td {
+      padding: 12px 18px;
+      vertical-align: top;
+      color: #c9d1d9;
+    }
+
+    td:first-child {
+      color: #8b949e;
+      font-size: 12px;
+      font-weight: 500;
+      white-space: nowrap;
+      padding-right: 24px;
+    }
+
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 12px;
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 4px;
+      padding: 1px 6px;
+      color: #e6edf3;
+      white-space: nowrap;
+    }
+
+    .code-block {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 12px;
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 6px;
+      padding: 10px 12px;
+      color: #e6edf3;
+      white-space: pre;
+      line-height: 1.7;
+      margin-top: 4px;
+    }
+
+    /* Badge variants */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 9px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .badge-green {
+      background: rgba(63, 185, 80, 0.12);
+      color: #3fb950;
+      border: 1px solid rgba(63, 185, 80, 0.25);
+    }
+
+    .badge-yellow {
+      background: rgba(210, 153, 34, 0.12);
+      color: #d29922;
+      border: 1px solid rgba(210, 153, 34, 0.25);
+    }
+
+    .badge-red {
+      background: rgba(248, 81, 73, 0.12);
+      color: #f85149;
+      border: 1px solid rgba(248, 81, 73, 0.25);
+    }
+
+    .badge-blue {
+      background: rgba(88, 166, 255, 0.1);
+      color: #79c0ff;
+      border: 1px solid rgba(88, 166, 255, 0.2);
+    }
+
+    .badge-gray {
+      background: rgba(139, 148, 158, 0.1);
+      color: #8b949e;
+      border: 1px solid rgba(139, 148, 158, 0.2);
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    .dot-green  { background: #3fb950; }
+    .dot-yellow { background: #d29922; }
+    .dot-red    { background: #f85149; }
+
+    .note {
+      font-size: 12px;
+      color: #8b949e;
+      margin-top: 5px;
+      line-height: 1.5;
+    }
+
+    .recommended-cell {
+      padding: 14px 18px;
+      vertical-align: top;
+    }
+
+    .strategy-title {
+      font-weight: 600;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+
+    .strategy-title.green { color: #3fb950; }
+    .strategy-title.yellow { color: #d29922; }
+    .strategy-title.blue  { color: #79c0ff; }
+
+    tbody tr.recommended {
+      background: #0d1225;
+    }
+
+    tbody tr.recommended td:first-child {
+      color: #e6edf3;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    tbody tr.recommended .recommended-cell {
+      border-top: 1px solid #21262d;
+    }
+
+    .vars-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .ecosystem-header-row th {
+      padding-top: 18px;
+      padding-bottom: 18px;
+      font-size: 15px;
+      font-weight: 600;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    .legend {
+      display: flex;
+      gap: 20px;
+      margin-top: 24px;
+      flex-wrap: wrap;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      color: #8b949e;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Dependency Caching Strategies</h1>
+  <p class="subtitle">Comparison across uv (Python), pnpm (TypeScript/Node), and Go modules</p>
+
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th></th>
+          <th class="col-uv">uv &nbsp;·&nbsp; Python</th>
+          <th class="col-pnpm">pnpm &nbsp;·&nbsp; TypeScript / Node</th>
+          <th class="col-go">Go modules</th>
+        </tr>
+      </thead>
+      <tbody>
+
+        <!-- GLOBAL CACHE -->
+        <tr class="section-header">
+          <td colspan="4">Global Cache</td>
+        </tr>
+
+        <tr>
+          <td>Cache path</td>
+          <td><code>~/.cache/uv</code></td>
+          <td><code>~/.pnpm-store</code></td>
+          <td><code>~/go/pkg/mod</code><br/><span class="note">+ <code>~/go/pkg/cache</code> for zips</span></td>
+        </tr>
+
+        <tr>
+          <td>Content-addressed?</td>
+          <td><span class="badge badge-green"><span class="dot dot-green"></span>Yes — wheels by hash</span></td>
+          <td><span class="badge badge-green"><span class="dot dot-green"></span>Yes — hard-link based</span></td>
+          <td><span class="badge badge-green"><span class="dot dot-green"></span>Yes — module files read-only by design</span></td>
+        </tr>
+
+        <tr>
+          <td>Cache is immutable?</td>
+          <td><span class="badge badge-green"><span class="dot dot-green"></span>Yes</span></td>
+          <td><span class="badge badge-green"><span class="dot dot-green"></span>Yes</span></td>
+          <td><span class="badge badge-green"><span class="dot dot-green"></span>Yes — Go enforces it</span></td>
+        </tr>
+
+        <!-- READ-ONLY HOST CACHE -->
+        <tr class="section-header">
+          <td colspan="4">Read-only Host Cache</td>
+        </tr>
+
+        <tr>
+          <td>Read-only cache viable?</td>
+          <td>
+            <span class="badge badge-green"><span class="dot dot-green"></span>Yes</span>
+            <p class="note">uv handles read-only cache gracefully — no writes needed on a cache hit.</p>
+          </td>
+          <td>
+            <span class="badge badge-yellow"><span class="dot dot-yellow"></span>Partial</span>
+            <p class="note">Hard-links from a read-only store work when the store and project share the same filesystem (bwrap bind mounts keep the underlying fs). Cache misses fail — new packages can't be written.</p>
+          </td>
+          <td>
+            <span class="badge badge-green"><span class="dot dot-green"></span>Yes — best of the three</span>
+            <p class="note">Go's module cache is designed to be read-only. The toolchain never mutates cached entries.</p>
+          </td>
+        </tr>
+
+        <!-- LOCAL ARTIFACT -->
+        <tr class="section-header">
+          <td colspan="4">Project-level Local Artifact</td>
+        </tr>
+
+        <tr>
+          <td>Local artifact</td>
+          <td><code>.venv/</code></td>
+          <td><code>node_modules/</code></td>
+          <td>
+            <span class="badge badge-gray">None</span>
+            <p class="note"><code>vendor/</code> is committed to git when used — it is not a cache artifact.</p>
+          </td>
+        </tr>
+
+        <!-- PRE-POPULATE -->
+        <tr class="section-header">
+          <td colspan="4">Pre-population</td>
+        </tr>
+
+        <tr>
+          <td>Pre-populate viable?</td>
+          <td><span class="badge badge-green"><span class="dot dot-green"></span>Yes — reflink / copy</span></td>
+          <td><span class="badge badge-green"><span class="dot dot-green"></span>Yes — reflink preferred</span></td>
+          <td>
+            <span class="badge badge-gray">N/A</span>
+            <p class="note">No meaningful project-local artifact to pre-populate.</p>
+          </td>
+        </tr>
+
+        <tr>
+          <td>Pre-populate condition</td>
+          <td><code>uv.lock</code> matches</td>
+          <td><code>pnpm-lock.yaml</code> matches</td>
+          <td>—</td>
+        </tr>
+
+        <!-- REDIRECT -->
+        <tr class="section-header">
+          <td colspan="4">Cache Redirect</td>
+        </tr>
+
+        <tr>
+          <td>Redirect env var(s)</td>
+          <td>
+            <div class="vars-list">
+              <code>UV_CACHE_DIR</code>
+              <code>VIRTUAL_ENV</code>
+            </div>
+          </td>
+          <td>
+            <div class="vars-list">
+              <span class="note"><code>store-dir</code> in <code>.npmrc</code></span>
+              <code>PNPM_HOME</code>
+            </div>
+          </td>
+          <td>
+            <code>GOMODCACHE=&lt;worktree&gt;/.gomodcache</code>
+            <p class="note">Redirect misses to a per-worktree writable path.</p>
+          </td>
+        </tr>
+
+        <!-- RECOMMENDED STRATEGY -->
+        <tr class="section-header">
+          <td colspan="4">Recommended Strategy</td>
+        </tr>
+
+        <tr class="recommended">
+          <td>Strategy name</td>
+          <td>
+            <span class="strategy-title green">Read-only host cache + optional pre-populate</span>
+          </td>
+          <td>
+            <span class="strategy-title yellow">Pre-populate node_modules + redirect store for misses</span>
+          </td>
+          <td>
+            <span class="strategy-title blue">Read-only host cache + redirect misses to worktree (hybrid)</span>
+          </td>
+        </tr>
+
+        <tr class="recommended">
+          <td>Description</td>
+          <td class="recommended-cell">
+            <p>Bind-mount <code>~/.cache/uv</code> read-only into the sandbox. On a full lock-file match, optionally reflink/copy a pre-built <code>.venv/</code> into the worktree for faster startup.</p>
+            <div class="code-block">UV_CACHE_DIR=/cache/uv  # read-only bind
+# optional:
+cp -r /snapshots/.venv .venv</div>
+          </td>
+          <td class="recommended-cell">
+            <p>Pre-populate <code>node_modules/</code> via reflink when <code>pnpm-lock.yaml</code> matches. Redirect the pnpm store to a writable path so cache misses can still resolve.</p>
+            <div class="code-block"># .npmrc
+store-dir=/writable/pnpm-store
+
+# pre-populate on lock match:
+cp -r --reflink=auto /snapshots/node_modules .</div>
+          </td>
+          <td class="recommended-cell">
+            <p>Bind-mount <code>~/go/pkg/mod</code> read-only. Set <code>GOMODCACHE</code> to a writable per-worktree path so any cache misses are written locally without touching the host cache.</p>
+            <div class="code-block">GOMODCACHE="$WORKTREE/.gomodcache"
+# host ~/go/pkg/mod still consulted
+# read-only — Go checks it first</div>
+          </td>
+        </tr>
+
+      </tbody>
+    </table>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><span class="dot dot-green"></span> Works well / Yes</div>
+    <div class="legend-item"><span class="dot dot-yellow"></span> Partial / Conditional</div>
+    <div class="legend-item"><span class="dot dot-red"></span> No / Problematic</div>
+  </div>
+
+</body>
+</html>
