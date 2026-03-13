@@ -85,6 +85,7 @@ async function saveToHistory(agent: AgentState, repoPath: string): Promise<void>
     error: agent.error || null,
     lastActivity: agent.lastActivity,
     cost: agent.cost ?? null,
+    idle: agent.idle || undefined,
   };
   await upsertHistory(repoPath, task);
 }
@@ -282,9 +283,11 @@ export function useAgentActions({
       paneStateRef.current.delete(taskId);
       if (!agent.deleted) {
         await saveToHistory(agent, cwd);
+        // Remove the live state file — the JSONL history entry is now authoritative.
+        // Skipped when deleted=true (retryAgent reuses the taskId and will manage
+        // state.json itself, so removing it here would race the new spawn).
+        await removeTaskState(taskId).catch(() => {});
       }
-      // Remove the live state file — the JSONL history entry is now authoritative
-      await removeTaskState(taskId).catch(() => {});
       setAgents((prev) => [...prev]);
     }
   }, [cwd, preflight]);
@@ -506,7 +509,11 @@ export function useAgentActions({
     const effectiveBranch = result?.finalBranch || branch;
 
     if (worktreePath) {
-      // Kill the tmux session but preserve the worktree for --continue
+      // Kill the tmux session but preserve the worktree for --continue.
+      // Mark deleted so the old spawnAgent's finally block skips saveToHistory
+      // and removeTaskState — the new spawn reuses the same taskId and manages
+      // state.json itself.
+      agent.deleted = true;
       Bun.spawn(["tmux", "kill-session", "-t", `deer-${taskId}`], {
         stdout: "pipe", stderr: "pipe",
       }).exited.catch(() => {});
@@ -581,8 +588,8 @@ export function useAgentActions({
       paneStateRef.current.delete(agent.taskId);
       if (!agent.deleted) {
         await saveToHistory(agent, cwd);
+        await removeTaskState(agent.taskId).catch(() => {});
       }
-      await removeTaskState(agent.taskId).catch(() => {});
       setAgents((prev) => [...prev]);
     }
   }, [cwd]);

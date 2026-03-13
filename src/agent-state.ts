@@ -85,14 +85,20 @@ export function createAgentState(overrides: Partial<AgentState>): AgentState {
 
 /** Convert a persisted task to a read-only AgentState for display. */
 export function historicalAgent(task: PersistedTask): AgentState {
-  const wasInterrupted = task.status === "running";
+  // status="running" with idle=true means Claude finished and deer was closed
+  // before a PR was created — restore as interrupted but preserve idle so
+  // "create PR" remains available.
+  // status="running" with idle=false means deer was closed mid-run.
+  const wasRunning = task.status === "running";
+  const wasIdle = wasRunning && !!task.idle;
   return createAgentState({
     taskId: task.taskId,
     prompt: task.prompt,
     baseBranch: task.baseBranch || "main",
-    status: wasInterrupted ? "interrupted" : (task.status as AgentStatus),
+    status: wasRunning ? "interrupted" : (task.status as AgentStatus),
+    idle: wasIdle,
     elapsed: task.elapsed,
-    lastActivity: wasInterrupted ? "Interrupted — deer was closed" : task.lastActivity,
+    lastActivity: (wasRunning && !wasIdle) ? "Interrupted — deer was closed" : task.lastActivity,
     result: task.finalBranch
       ? { finalBranch: task.finalBranch, prUrl: task.prUrl ?? "" }
       : null,
@@ -155,18 +161,27 @@ export function liveAgentFromHistory(task: PersistedTask): AgentState {
   });
 }
 
+// Statuses written to state.json that represent a graceful terminal outcome.
+// These are preserved as-is instead of being overridden with "interrupted".
+const TERMINAL_STATUSES = new Set<string>(["cancelled", "failed", "pr_failed"]);
+
 /**
  * Build an AgentState from a state file whose owning process has died.
  * Shows the task as interrupted with its last known state.
  * If the task was idle (Claude had finished), the idle flag is preserved so
  * actions like "create PR" remain available on restart.
+ * If the state file records a terminal status (cancelled/failed/pr_failed),
+ * that status is preserved rather than overriding it with "interrupted".
  */
 export function historicalAgentFromStateFile(stateFile: TaskStateFile): AgentState {
+  const status: AgentStatus = TERMINAL_STATUSES.has(stateFile.status)
+    ? (stateFile.status as AgentStatus)
+    : "interrupted";
   return createAgentState({
     taskId: stateFile.taskId,
     prompt: stateFile.prompt,
     baseBranch: stateFile.baseBranch || "main",
-    status: "interrupted",
+    status,
     elapsed: stateFile.elapsed,
     // If the agent was idle (Claude finished) before deer was closed, preserve
     // the last activity so the user can see what it was doing. Otherwise, show

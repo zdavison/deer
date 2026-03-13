@@ -102,6 +102,18 @@ export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig
           continue;
         }
 
+        if (ownerAlive && stateFile.ownerPid === process.pid) {
+          // This instance owns the task. Keep the existing locally-managed agent
+          // as-is; if it hasn't been claimed yet (e.g. resumeLiveSession just
+          // wrote ownerPid but React hasn't re-rendered), show from state file.
+          if (existing && !existing.historical) {
+            newAgents.push(existing);
+          } else {
+            newAgents.push(liveTaskFromStateFile(stateFile));
+          }
+          continue;
+        }
+
         // Owner process died — clean up any restored proxy
         const proxyCleanup = restoredProxiesRef.current.get(taskId);
         if (proxyCleanup) {
@@ -113,8 +125,12 @@ export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig
         // still running and we should resume polling instead of showing as
         // interrupted. Add to liveSessionIdsRef for the dashboard to pick up.
         const sessionDead = await isTmuxSessionDead(`deer-${taskId}`);
-        if (!sessionDead && !liveSessionIdsRef.current.has(taskId)) {
-          liveSessionIdsRef.current.add(taskId);
+        if (!sessionDead) {
+          // Always show as running while a resume is pending or in-flight.
+          // Only add to the set if not already there (i.e. first discovery).
+          if (!liveSessionIdsRef.current.has(taskId)) {
+            liveSessionIdsRef.current.add(taskId);
+          }
           // Show as running with last known state while we hand off to the poll loop
           newAgents.push(liveTaskFromStateFile(stateFile));
           continue;
@@ -129,10 +145,13 @@ export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig
       if (fileTask) {
         // If the task was saved as "running" (deer closed while it was active),
         // check whether the tmux session survived before showing as interrupted.
-        if (fileTask.status === "running" && !liveSessionIdsRef.current.has(taskId)) {
+        if (fileTask.status === "running") {
           const sessionDead = await isTmuxSessionDead(`deer-${taskId}`);
           if (!sessionDead) {
-            liveSessionIdsRef.current.add(taskId);
+            // Always show as running while a resume is pending or in-flight.
+            if (!liveSessionIdsRef.current.has(taskId)) {
+              liveSessionIdsRef.current.add(taskId);
+            }
             // Show as running while we hand off to the poll loop
             newAgents.push(liveAgentFromHistory(fileTask));
             continue;

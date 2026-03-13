@@ -58,6 +58,12 @@ export interface PersistedTask extends TaskMetadata {
   baseBranch: string;
   /** Path to the git worktree on disk */
   worktreePath: string;
+  /**
+   * True when Claude had finished its work and the session was idle at the
+   * time the task was persisted. Used to distinguish "deer was closed while
+   * Claude was done" from "deer was closed while Claude was still running".
+   */
+  idle?: boolean;
 }
 
 /**
