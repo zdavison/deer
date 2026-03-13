@@ -1,5 +1,10 @@
 // ── Centralized constants ───────────────────────────────────────────
 
+import pkg from "../package.json";
+
+/** Package version, inlined at build time */
+export const VERSION = pkg.version;
+
 /** Polling interval for agent completion checks in agent.ts */
 export const AGENT_POLL_INTERVAL_MS = 3_000;
 

@@ -35,10 +35,16 @@ import Dashboard from "./dashboard.tsx";
 import DemoDashboard from "./demo-dashboard.tsx";
 import { checkAndUpdate } from "./updater.ts";
 import { setLang, detectLang } from "./i18n.ts";
+import { VERSION } from "./constants.ts";
 
 setLang(detectLang());
 
 async function main() {
+  if (process.argv.includes("--version") || process.argv.includes("-v")) {
+    console.log(`deer ${VERSION}`);
+    return;
+  }
+
   const isDemo = process.argv.includes("--demo");
 
   if (isDemo) {
