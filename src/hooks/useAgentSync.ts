@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { watch } from "node:fs";
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { MutableRefObject } from "react";
-import { loadHistory, dataDir } from "../task";
+import { loadHistory, loadAllHistory, dataDir } from "../task";
 import type { SandboxCleanup } from "../sandbox/index";
 import { isTmuxSessionDead } from "../sandbox/index";
 import { resolveRuntime } from "../sandbox/resolve";
@@ -14,6 +14,7 @@ import { TASK_SYNC_DEBOUNCE_MS, TASK_SYNC_SAFETY_POLL_MS } from "../constants";
 
 export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig | null>, mockAgents?: AgentState[]) {
   const [agents, setAgents] = useState<AgentState[]>(mockAgents ?? []);
+  const [showAll, setShowAll] = useState(false);
   const agentsRef = useRef(agents);
   agentsRef.current = agents;
   const deletedTaskIdsRef = useRef(new Set<string>());
@@ -46,16 +47,22 @@ export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig
         .filter(id => !deletedTaskIdsRef.current.has(id))
         .map(async id => ({ id, state: await readTaskState(id) })),
     );
-    const liveStateFiles = new Map(
+    const allLiveStateFiles = new Map(
       liveStateResults
         .filter((r): r is { id: string; state: NonNullable<typeof r.state> } => r.state !== null)
         .map(r => [r.id, r.state]),
     );
 
+    // In repo-scoped mode, hide live tasks that belong to a different repo.
+    // Tasks without a repoPath (written by older deer versions) are always shown.
+    const liveStateFiles = showAll
+      ? allLiveStateFiles
+      : new Map([...allLiveStateFiles].filter(([, s]) => !s.repoPath || s.repoPath === cwd));
+
     // Completed tasks: JSONL history (only non-running entries now that live tasks
     // use state.json; running entries are kept as a fallback for tasks started by
     // older deer versions that did not write state.json)
-    const allFileTasks = await loadHistory(cwd);
+    const allFileTasks = showAll ? await loadAllHistory() : await loadHistory(cwd);
     const fileTasks = allFileTasks.filter(t => !deletedTaskIdsRef.current.has(t.taskId));
 
     const currentAgents = agentsRef.current;
@@ -148,7 +155,7 @@ export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig
       });
 
     if (changed) setAgents(newAgents);
-  }, [cwd]);
+  }, [cwd, showAll]);
 
   // ── Load on mount ──────────────────────────────────────────────────
 
@@ -187,5 +194,5 @@ export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig
     };
   }, [syncWithHistory]);
 
-  return { agents, setAgents, agentsRef, deletedTaskIdsRef, baseBranchRef, restoredProxiesRef, liveSessionIdsRef, syncWithHistory };
+  return { agents, setAgents, agentsRef, deletedTaskIdsRef, baseBranchRef, restoredProxiesRef, liveSessionIdsRef, syncWithHistory, showAll, setShowAll };
 }

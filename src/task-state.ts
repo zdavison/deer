@@ -25,6 +25,8 @@ export interface TaskStateFile extends TaskMetadata {
   worktreePath: string;
   /** Git branch to base the worktree on (e.g. "main") */
   baseBranch: string;
+  /** Absolute path of the git repository this task belongs to */
+  repoPath?: string;
 }
 
 // ── Paths ─────────────────────────────────────────────────────────────

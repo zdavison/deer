@@ -38,7 +38,7 @@ interface AgentRuntime {
   timer: ReturnType<typeof setInterval>;
 }
 
-function toTaskStateFile(agent: AgentState): TaskStateFile {
+function toTaskStateFile(agent: AgentState, repoPath: string): TaskStateFile {
   return {
     taskId: agent.taskId,
     prompt: agent.prompt,
@@ -55,17 +55,18 @@ function toTaskStateFile(agent: AgentState): TaskStateFile {
     ownerPid: process.pid,
     worktreePath: agent.worktreePath,
     cost: agent.cost ?? null,
+    repoPath,
   };
 }
 
 /** Persist agent state to the live task state file (fire-and-forget). */
-function persistState(agent: AgentState): void {
-  writeTaskState(toTaskStateFile(agent)).catch(() => {});
+function persistState(agent: AgentState, repoPath: string): void {
+  writeTaskState(toTaskStateFile(agent, repoPath)).catch(() => {});
 }
 
 /** Persist agent state to the live task state file (awaited). */
-async function persistStateAsync(agent: AgentState): Promise<void> {
-  await writeTaskState(toTaskStateFile(agent));
+async function persistStateAsync(agent: AgentState, repoPath: string): Promise<void> {
+  await writeTaskState(toTaskStateFile(agent, repoPath));
 }
 
 async function saveToHistory(agent: AgentState, repoPath: string): Promise<void> {
@@ -155,7 +156,7 @@ export function useAgentActions({
           if (activity !== agent.lastActivity) {
             agent.lastActivity = activity;
             appendLog(agent, `[tmux] ${lastOutput}`);
-            await persistStateAsync(agent);
+            await persistStateAsync(agent, cwd);
             setAgents((prev) => [...prev]);
           }
         }
@@ -166,11 +167,11 @@ export function useAgentActions({
         agent.idle = true;
         agent.lastActivity = t("activity_idle_attach");
         appendLog(agent, t("log_deer_idle"));
-        await persistStateAsync(agent);
+        await persistStateAsync(agent, cwd);
         setAgents((prev) => [...prev]);
       } else if (next.unchangedCount === 0 && agent.idle) {
         agent.idle = false;
-        await persistStateAsync(agent);
+        await persistStateAsync(agent, cwd);
         setAgents((prev) => [...prev]);
       }
     }
@@ -242,12 +243,12 @@ export function useAgentActions({
       const timer = setInterval(() => {
         if (!agent.idle) agent.elapsed++;
         ticks++;
-        if (ticks % 10 === 0) persistState(agent);
+        if (ticks % 10 === 0) persistState(agent, cwd);
         setAgents((prev) => [...prev]);
       }, 1000);
 
       runtimeRef.current.set(taskId, { abortController, timer });
-      await persistStateAsync(agent);
+      await persistStateAsync(agent, cwd);
 
       agent.status = transition(agent.status, "SETUP_COMPLETE") ?? agent.status;
       appendLog(agent, t("log_running_started", { session: handle.sessionName }));
@@ -308,7 +309,7 @@ export function useAgentActions({
     }).exited.catch(() => {});
 
     saveToHistory(agent, cwd);
-    persistState(agent);
+    persistState(agent, cwd);
     setAgents((prev) => [...prev]);
   }, [cwd]);
 
@@ -529,12 +530,12 @@ export function useAgentActions({
     const timer = setInterval(() => {
       if (!agent.idle) agent.elapsed++;
       ticks++;
-      if (ticks % 10 === 0) persistState(agent);
+      if (ticks % 10 === 0) persistState(agent, cwd);
       setAgents((prev) => [...prev]);
     }, 1000);
 
     runtimeRef.current.set(agent.taskId, { abortController, timer });
-    await persistStateAsync(agent); // Claim ownership: update ownerPid
+    await persistStateAsync(agent, cwd); // Claim ownership: update ownerPid
     appendLog(agent, t("log_deer_resuming"));
     setAgents((prev) => [...prev]);
 

@@ -73,6 +73,35 @@ export function historyPath(repoPath: string): string {
 }
 
 /**
+ * Load all persisted tasks across all repos.
+ * Scans every JSONL file in the history directory and returns a combined list.
+ * Returns an empty array if the history directory does not exist.
+ */
+export async function loadAllHistory(): Promise<PersistedTask[]> {
+  const historyDir = `${dataDir()}/history`;
+  const tasks: PersistedTask[] = [];
+  try {
+    const glob = new Bun.Glob("*.jsonl");
+    for await (const match of glob.scan({ cwd: historyDir })) {
+      const file = Bun.file(`${historyDir}/${match}`);
+      if (!(await file.exists())) continue;
+      const text = await file.text();
+      for (const line of text.split("\n")) {
+        if (!line.trim()) continue;
+        try {
+          tasks.push(JSON.parse(line));
+        } catch {
+          // Skip malformed lines
+        }
+      }
+    }
+  } catch {
+    // History dir may not exist yet
+  }
+  return tasks;
+}
+
+/**
  * Load all persisted tasks for a repo.
  * Returns an empty array if no history file exists.
  */
