@@ -240,7 +240,28 @@ export async function startAgent(options: AgentRunOptions): Promise<AgentHandle>
   // Write a minimal gitconfig to the task dir so git never reads ~/.gitconfig
   // (which is blocked by the sandbox). GIT_CONFIG_GLOBAL points here instead.
   const gitconfigPath = join(dirname(worktreePath), "gitconfig");
-  await Bun.write(gitconfigPath, "[user]\n\tname = deer-agent\n\temail = deer@noreply\n");
+  await Bun.write(
+    gitconfigPath,
+    [
+      "[user]",
+      "\tname = deer-agent",
+      "\temail = deer@noreply",
+      "[init]",
+      "\tdefaultBranch = main",
+      "[pull]",
+      "\trebase = false",
+      "[merge]",
+      "\tconflictstyle = merge",
+      "[safe]",
+      "\tdirectory = *",
+      "[advice]",
+      "\tdetachedHead = false",
+      "\tskippedCherryPicks = false",
+      "\twaitingForEditor = false",
+      "[credential]",
+      "\thelper =",
+    ].join("\n") + "\n"
+  );
 
   onStatus?.({ phase: "setup", message: "Starting sandbox..." });
 
