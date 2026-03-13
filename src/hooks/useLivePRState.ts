@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import type { MutableRefObject, Dispatch, SetStateAction } from "react";
 import type { AgentState } from "../agent-state";
 import { checkPrState } from "../github";
+import { updateTask } from "../db";
 import { PR_MERGE_CHECK_INTERVAL_MS } from "../constants";
 
 export function usePrPoller(
@@ -23,6 +24,7 @@ export function usePrPoller(
         const state = results[i];
         if (state !== toCheck[i].prState) {
           toCheck[i].prState = state;
+          updateTask(toCheck[i].taskId, { prState: state });
           changed = true;
         }
       }

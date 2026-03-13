@@ -1,10 +1,9 @@
-import type { PersistedTask } from "./task";
-import type { TaskStateFile } from "./task-state";
 import type { AgentStatus } from "./state-machine";
+import type { TaskRow } from "./db";
 
 // ── Types ────────────────────────────────────────────────────────────
 
-interface TeardownResult {
+export interface TeardownResult {
   finalBranch: string;
   prUrl: string;
 }
@@ -33,15 +32,13 @@ export interface AgentState {
   error: string;
   /** PR state on GitHub */
   prState: "open" | "merged" | "closed" | null;
-  /** True if this agent was loaded from history (not spawned this session) */
-  historical: boolean;
   /** True when Claude is idle (waiting for user input) */
   idle: boolean;
   /** True while a PR is being created */
   creatingPr: boolean;
   /** True while an existing PR is being updated (new commits pushed) */
   updatingPr: boolean;
-  /** True if this task has been explicitly deleted (suppresses history write on cleanup) */
+  /** True if this task has been explicitly deleted (suppresses cleanup) */
   deleted: boolean;
   /** ISO 8601 timestamp when the task was created */
   createdAt: string;
@@ -68,7 +65,6 @@ export function createAgentState(overrides: Partial<AgentState>): AgentState {
     result: null,
     error: "",
     prState: null,
-    historical: false,
     idle: false,
     creatingPr: false,
     updatingPr: false,
@@ -81,122 +77,55 @@ export function createAgentState(overrides: Partial<AgentState>): AgentState {
   };
 }
 
-// ── Historical agent helpers ─────────────────────────────────────────
+// ── DB row → AgentState ──────────────────────────────────────────────
 
-/** Convert a persisted task to a read-only AgentState for display. */
-export function historicalAgent(task: PersistedTask): AgentState {
-  // status="running" with idle=true means Claude finished and deer was closed
-  // before a PR was created — restore as interrupted but preserve idle so
-  // "create PR" remains available.
-  // status="running" with idle=false means deer was closed mid-run.
-  const wasRunning = task.status === "running";
-  const wasIdle = wasRunning && !!task.idle;
-  return createAgentState({
-    taskId: task.taskId,
-    prompt: task.prompt,
-    baseBranch: task.baseBranch || "main",
-    status: wasRunning ? "interrupted" : (task.status as AgentStatus),
-    idle: wasIdle,
-    elapsed: task.elapsed,
-    lastActivity: (wasRunning && !wasIdle) ? "Interrupted — deer was closed" : task.lastActivity,
-    result: task.finalBranch
-      ? { finalBranch: task.finalBranch, prUrl: task.prUrl ?? "" }
-      : null,
-    error: task.error || "",
-    historical: true,
-    createdAt: task.createdAt,
-    worktreePath: task.worktreePath || "",
-    branch: task.finalBranch ?? `deer/${task.taskId}`,
-    cost: task.cost ?? null,
-  });
-}
-
-/**
- * Build an AgentState from a live task-state file for a task managed by
- * another deer instance. Includes full logs, idle status, and elapsed
- * as written by the owning instance.
- */
-export function liveTaskFromStateFile(stateFile: TaskStateFile): AgentState {
-  return createAgentState({
-    taskId: stateFile.taskId,
-    prompt: stateFile.prompt,
-    baseBranch: stateFile.baseBranch || "main",
-    status: (stateFile.status as AgentStatus) || "running",
-    elapsed: stateFile.elapsed,
-    lastActivity: stateFile.lastActivity,
-    logs: [...stateFile.logs],
-    idle: stateFile.idle,
-    historical: true,
-    result: stateFile.finalBranch
-      ? { finalBranch: stateFile.finalBranch, prUrl: stateFile.prUrl ?? "" }
-      : null,
-    createdAt: stateFile.createdAt,
-    worktreePath: stateFile.worktreePath,
-    branch: stateFile.finalBranch ?? `deer/${stateFile.taskId}`,
-    cost: stateFile.cost ?? null,
-  });
-}
-
-/**
- * Build a running AgentState from a JSONL history entry whose tmux session
- * survived after deer closed. Used when there is no live state.json but the
- * tmux session is confirmed alive, so the task can be resumed.
- */
-export function liveAgentFromHistory(task: PersistedTask): AgentState {
-  return createAgentState({
-    taskId: task.taskId,
-    prompt: task.prompt,
-    baseBranch: task.baseBranch || "main",
-    status: "running",
-    elapsed: task.elapsed,
-    lastActivity: task.lastActivity,
-    result: task.finalBranch
-      ? { finalBranch: task.finalBranch, prUrl: task.prUrl ?? "" }
-      : null,
-    createdAt: task.createdAt,
-    worktreePath: task.worktreePath || "",
-    branch: task.finalBranch ?? `deer/${task.taskId}`,
-    cost: task.cost ?? null,
-    historical: true,
-  });
-}
-
-// Statuses written to state.json that represent a graceful terminal outcome.
-// These are preserved as-is instead of being overridden with "interrupted".
+// Statuses that represent a graceful terminal outcome.
+// Preserved as-is instead of being overridden with "interrupted".
 const TERMINAL_STATUSES = new Set<string>(["cancelled", "failed", "pr_failed"]);
 
 /**
- * Build an AgentState from a state file whose owning process has died.
- * Shows the task as interrupted with its last known state.
- * If the task was idle (Claude had finished), the idle flag is preserved so
- * actions like "create PR" remain available on restart.
- * If the state file records a terminal status (cancelled/failed/pr_failed),
- * that status is preserved rather than overriding it with "interrupted".
+ * Build an AgentState from a database row plus live tmux status.
+ *
+ * - If DB says "running"/"setup" but tmux is dead → "interrupted"
+ * - Derives lastActivity: if interrupted and not idle → "Interrupted — deer was closed"
+ * - Logs are always empty (captured from tmux on render, never stored)
  */
-export function historicalAgentFromStateFile(stateFile: TaskStateFile): AgentState {
-  const status: AgentStatus = TERMINAL_STATUSES.has(stateFile.status)
-    ? (stateFile.status as AgentStatus)
-    : "interrupted";
+export function agentFromDbRow(row: TaskRow, tmuxAlive: boolean): AgentState {
+  const dbStatus = row.status as AgentStatus;
+  const isIdle = !!row.idle;
+
+  let status: AgentStatus;
+  if ((dbStatus === "running" || dbStatus === "setup") && !tmuxAlive) {
+    status = TERMINAL_STATUSES.has(dbStatus) ? dbStatus : "interrupted";
+  } else {
+    status = dbStatus;
+  }
+
+  const lastActivity =
+    status === "interrupted" && !isIdle
+      ? "Interrupted — deer was closed"
+      : row.last_activity;
+
+  const branch = row.final_branch ?? row.branch;
+  const result = row.final_branch
+    ? { finalBranch: row.final_branch, prUrl: row.pr_url ?? "" }
+    : null;
+
   return createAgentState({
-    taskId: stateFile.taskId,
-    prompt: stateFile.prompt,
-    baseBranch: stateFile.baseBranch || "main",
+    taskId: row.task_id,
+    prompt: row.prompt,
+    baseBranch: row.base_branch || "main",
     status,
-    elapsed: stateFile.elapsed,
-    // If the agent was idle (Claude finished) before deer was closed, preserve
-    // the last activity so the user can see what it was doing. Otherwise, show
-    // the generic "deer was closed" message.
-    lastActivity: stateFile.idle ? stateFile.lastActivity : "Interrupted — deer was closed",
-    idle: stateFile.idle,
-    logs: [...stateFile.logs],
-    result: stateFile.finalBranch
-      ? { finalBranch: stateFile.finalBranch, prUrl: stateFile.prUrl ?? "" }
-      : null,
-    error: stateFile.error || "",
-    historical: true,
-    createdAt: stateFile.createdAt,
-    worktreePath: stateFile.worktreePath,
-    branch: stateFile.finalBranch ?? `deer/${stateFile.taskId}`,
-    cost: stateFile.cost ?? null,
+    elapsed: row.elapsed,
+    lastActivity,
+    logs: [],
+    idle: isIdle,
+    result,
+    error: row.error || "",
+    prState: row.pr_state as AgentState["prState"],
+    createdAt: new Date(row.created_at).toISOString(),
+    worktreePath: row.worktree_path || "",
+    branch,
+    cost: row.cost ?? null,
   });
 }

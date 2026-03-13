@@ -17,7 +17,7 @@ import {
   waitForNewTaskDir,
 } from "./helpers";
 import { isTmuxSessionDead } from "../../src/sandbox/index";
-import { loadHistory } from "../../src/task";
+import { getTask, getTasksByRepo } from "../../src/db";
 
 setDefaultTimeout(120_000);
 
@@ -54,14 +54,13 @@ e2e("keyboard actions", () => {
           // Confirm the kill
           deer.sendKeys("y");
 
-          // Agent tmux session should die and history should record cancellation
+          // Agent tmux session should die and DB should record cancellation
           await waitFor(
             async () => {
-              const history = await loadHistory(repoPath);
-              const entry = history.find((t) => t.taskId === taskId);
-              return entry?.status === "cancelled";
+              const row = getTask(taskId);
+              return row?.status === "cancelled";
             },
-            { timeout: 15_000, label: "history shows cancelled" },
+            { timeout: 15_000, label: "DB shows cancelled" },
           );
 
           expect(await isTmuxSessionDead(`deer-${taskId}`)).toBe(true);
@@ -93,13 +92,13 @@ e2e("keyboard actions", () => {
             { timeout: 30_000, label: "agent session dies" },
           );
 
-          // Wait for task to appear in history (deer has processed completion)
+          // Wait for task to appear in DB (deer has processed completion)
           await waitFor(
             async () => {
-              const history = await loadHistory(repoPath);
-              return history.some((t) => t.taskId === taskId);
+              const row = getTask(taskId);
+              return row !== null && row.status !== "running" && row.status !== "setup";
             },
-            { timeout: 15_000, label: "task in history" },
+            { timeout: 15_000, label: "task finalized in DB" },
           );
 
           // Tab to unfocus the prompt input, then press Backspace to delete
@@ -111,13 +110,13 @@ e2e("keyboard actions", () => {
           await Bun.sleep(500);
           deer.sendKeys("y");
 
-          // History should no longer contain this task
+          // DB should no longer contain this task
           await waitFor(
             async () => {
-              const history = await loadHistory(repoPath);
-              return !history.some((t) => t.taskId === taskId);
+              const row = getTask(taskId);
+              return row === null;
             },
-            { timeout: 15_000, label: "task removed from history" },
+            { timeout: 15_000, label: "task removed from DB" },
           );
 
           // TUI should no longer show the taskId
@@ -154,10 +153,10 @@ e2e("keyboard actions", () => {
           // Wait for deer to register completion
           await waitFor(
             async () => {
-              const history = await loadHistory(repoPath);
-              return history.some((t) => t.taskId === taskId);
+              const row = getTask(taskId);
+              return row !== null && row.status !== "running" && row.status !== "setup";
             },
-            { timeout: 15_000, label: "task in history" },
+            { timeout: 15_000, label: "task finalized in DB" },
           );
 
           // Tab to unfocus the prompt input, then retry

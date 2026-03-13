@@ -2,16 +2,14 @@
  * Agent lifecycle E2E tests.
  *
  * Verify the full path from prompt submission through agent completion.
- * This is the most important E2E test — it catches the most regressions.
  */
 
-import { describe, test, expect, setDefaultTimeout } from "bun:test";
+import { describe, test, expect, setDefaultTimeout, afterEach } from "bun:test";
 import { join } from "node:path";
 
 import { startDeerSession, createTestRepo, withFakeClaude, waitFor, waitForNewTaskDir } from "./helpers";
 import { isTmuxSessionDead } from "../../src/sandbox/index";
-import { readTaskState } from "../../src/task-state";
-import { loadHistory } from "../../src/task";
+import { getTask, getTasksByRepo, closeDb } from "../../src/db";
 
 setDefaultTimeout(120_000);
 
@@ -31,13 +29,13 @@ e2e("agent lifecycle", () => {
 
           const taskId = await waitForNewTaskDir(before);
 
-          // Verify the agent is running
+          // Verify the agent is running in DB
           await waitFor(
             async () => {
-              const state = await readTaskState(taskId);
-              return state?.status === "running";
+              const row = getTask(taskId);
+              return row?.status === "running";
             },
-            { timeout: 15_000, label: "state.json has status running" },
+            { timeout: 15_000, label: "DB has status running" },
           );
 
           // Verify agent tmux session exists
@@ -53,56 +51,19 @@ e2e("agent lifecycle", () => {
             { timeout: 30_000, label: "agent tmux session dies (fake claude finished)" },
           );
 
-          // Wait for deer to persist the task to history
+          // Wait for deer to persist the final state to DB
           await waitFor(
             async () => {
-              const history = await loadHistory(repoPath);
-              return history.some((t) => t.taskId === taskId);
+              const row = getTask(taskId);
+              return row !== null && row.status !== "running" && row.status !== "setup";
             },
-            { timeout: 15_000, label: "task appears in history" },
+            { timeout: 15_000, label: "task finalized in DB" },
           );
 
           // The task should be idle (agent process exited, awaiting user PR action)
-          const history = await loadHistory(repoPath);
-          const entry = history.find((t) => t.taskId === taskId);
-          expect(entry).not.toBeUndefined();
-          expect(entry!.idle).toBe(true);
-        } finally {
-          await deer.stop();
-        }
-      });
-    } finally {
-      await cleanup();
-    }
-  });
-
-  test("state.json is removed after agent completes", async () => {
-    const { repoPath, cleanup } = await createTestRepo();
-    try {
-      await withFakeClaude(async (env) => {
-        const deer = await startDeerSession(repoPath, env);
-        try {
-          await deer.waitForReady();
-
-          const before = Date.now();
-          deer.sendKeys("write a test\r");
-
-          const taskId = await waitForNewTaskDir(before);
-
-          // Wait for fake claude to finish and deer to process it
-          await waitFor(
-            async () => isTmuxSessionDead(`deer-${taskId}`),
-            { timeout: 30_000, label: "agent session dies" },
-          );
-
-          // state.json should be removed once the task is fully processed
-          await waitFor(
-            async () => {
-              const state = await readTaskState(taskId);
-              return state === null;
-            },
-            { timeout: 15_000, label: "state.json removed" },
-          );
+          const row = getTask(taskId);
+          expect(row).not.toBeNull();
+          expect(row!.idle).toBe(1);
         } finally {
           await deer.stop();
         }
@@ -128,9 +89,9 @@ e2e("agent lifecycle", () => {
           // Check the worktree exists while the agent is running
           await waitFor(
             async () => {
-              const state = await readTaskState(taskId);
-              if (!state?.worktreePath) return false;
-              const gitDir = join(state.worktreePath, ".git");
+              const row = getTask(taskId);
+              if (!row?.worktree_path) return false;
+              const gitDir = join(row.worktree_path, ".git");
               return Bun.file(gitDir).exists();
             },
             { timeout: 15_000, label: "worktree/.git exists" },

@@ -2,10 +2,8 @@ import { useCallback, useRef } from "react";
 import type { MutableRefObject, Dispatch, SetStateAction } from "react";
 import type { AgentState } from "../agent-state";
 import { createAgentState } from "../agent-state";
-import { upsertHistory, removeFromHistory, dataDir, generateTaskId } from "../task";
-import type { PersistedTask } from "../task";
-import { writeTaskState, removeTaskState } from "../task-state";
-import type { TaskStateFile } from "../task-state";
+import { generateTaskId, dataDir } from "../task";
+import { insertTask, updateTask, deleteTaskRow, claimPoller, releasePoller } from "../db";
 import type { DeerConfig } from "../config";
 import type { PreflightResult } from "../preflight";
 import { startAgent, deleteTask } from "../agent";
@@ -38,76 +36,24 @@ interface AgentRuntime {
   timer: ReturnType<typeof setInterval>;
 }
 
-function toTaskStateFile(agent: AgentState, repoPath: string): TaskStateFile {
-  return {
-    taskId: agent.taskId,
-    prompt: agent.prompt,
-    baseBranch: agent.baseBranch,
-    status: agent.status as TaskStateFile["status"],
-    elapsed: agent.elapsed,
-    lastActivity: agent.lastActivity,
-    finalBranch: agent.result?.finalBranch ?? null,
-    prUrl: agent.result?.prUrl ?? null,
-    error: agent.error || null,
-    logs: [...agent.logs],
-    idle: agent.idle,
-    createdAt: agent.createdAt,
-    ownerPid: process.pid,
-    worktreePath: agent.worktreePath,
-    cost: agent.cost ?? null,
-    repoPath,
-  };
-}
-
-/** Persist agent state to the live task state file (fire-and-forget). */
-function persistState(agent: AgentState, repoPath: string): void {
-  writeTaskState(toTaskStateFile(agent, repoPath)).catch(() => {});
-}
-
-/** Persist agent state to the live task state file (awaited). */
-async function persistStateAsync(agent: AgentState, repoPath: string): Promise<void> {
-  await writeTaskState(toTaskStateFile(agent, repoPath));
-}
-
-async function saveToHistory(agent: AgentState, repoPath: string): Promise<void> {
-  if (agent.historical) return;
-  const task: PersistedTask = {
-    taskId: agent.taskId,
-    prompt: agent.prompt,
-    baseBranch: agent.baseBranch,
-    worktreePath: agent.worktreePath,
-    status: agent.status as PersistedTask["status"],
-    createdAt: agent.createdAt,
-    completedAt: new Date().toISOString(),
-    elapsed: agent.elapsed,
-    prUrl: agent.result?.prUrl ?? null,
-    finalBranch: agent.result?.finalBranch ?? null,
-    error: agent.error || null,
-    lastActivity: agent.lastActivity,
-    cost: agent.cost ?? null,
-    idle: agent.idle || undefined,
-  };
-  await upsertHistory(repoPath, task);
-}
-
 interface AgentActionDeps {
   cwd: string;
   setAgents: Dispatch<SetStateAction<AgentState[]>>;
-  deletedTaskIdsRef: MutableRefObject<Set<string>>;
   baseBranchRef: MutableRefObject<string>;
   configRef: MutableRefObject<DeerConfig | null>;
   preflight: PreflightResult | null;
   setSuspended: (v: boolean) => void;
+  runtimeTaskIdsRef: MutableRefObject<Set<string>>;
 }
 
 export function useAgentActions({
   cwd,
   setAgents,
-  deletedTaskIdsRef,
   baseBranchRef,
   configRef,
   preflight,
   setSuspended,
+  runtimeTaskIdsRef,
 }: AgentActionDeps) {
   /** Per-task runtime handles: abort controller and elapsed timer */
   const runtimeRef = useRef(new Map<string, AgentRuntime>());
@@ -139,14 +85,14 @@ export function useAgentActions({
       const next = advancePaneState(prev, snapshot);
       paneStateRef.current.set(agent.taskId, next);
 
-      // Parse cost from pane output (only meaningful for API key users)
+      // Parse cost from pane output
       const parsedCost = parseCostFromPane(lines);
       if (parsedCost !== null && parsedCost !== agent.cost) {
         agent.cost = parsedCost;
+        updateTask(agent.taskId, { cost: parsedCost });
       }
 
       if (next.unchangedCount === 0) {
-        // Update lastActivity with the latest bullet line (Claude's text output)
         const lastOutput = lines
           .map(stripAnsi)
           .map((l) => l.trim())
@@ -157,22 +103,22 @@ export function useAgentActions({
           if (activity !== agent.lastActivity) {
             agent.lastActivity = activity;
             appendLog(agent, `[tmux] ${lastOutput}`);
-            await persistStateAsync(agent, cwd);
+            updateTask(agent.taskId, { lastActivity: activity });
             setAgents((prev) => [...prev]);
           }
         }
       }
 
-      // Claude is idle when the pane hasn't changed for several consecutive polls
+      // Idle detection
       if (isIdleState(next, IDLE_THRESHOLD) && !agent.idle) {
         agent.idle = true;
         agent.lastActivity = t("activity_idle_attach");
         appendLog(agent, t("log_deer_idle"));
-        await persistStateAsync(agent, cwd);
+        updateTask(agent.taskId, { idle: true, lastActivity: agent.lastActivity });
         setAgents((prev) => [...prev]);
       } else if (next.unchangedCount === 0 && agent.idle) {
         agent.idle = false;
-        await persistStateAsync(agent, cwd);
+        updateTask(agent.taskId, { idle: false });
         setAgents((prev) => [...prev]);
       }
     }
@@ -188,10 +134,8 @@ export function useAgentActions({
     if (!config) return;
 
     const effectiveBranch = baseBranch ?? baseBranchRef.current;
-
-    // Pre-generate the taskId so the agent has a stable React key
-    // during setup before startAgent resolves.
     const taskId = continueSession?.taskId ?? generateTaskId();
+    const createdAtMs = createdAt ? new Date(createdAt).getTime() : Date.now();
 
     const agent = createAgentState({
       taskId,
@@ -206,6 +150,19 @@ export function useAgentActions({
     });
 
     const abortController = new AbortController();
+
+    // Insert into DB (skip if continuing — row already exists)
+    if (!continueSession) {
+      insertTask({
+        taskId,
+        repoPath: cwd,
+        prompt: prompt.trim(),
+        baseBranch: effectiveBranch,
+        createdAt: createdAtMs,
+      });
+    } else {
+      updateTask(taskId, { status: "setup" });
+    }
 
     setAgents((prev) => [...prev, agent]);
 
@@ -235,21 +192,25 @@ export function useAgentActions({
         },
       });
 
-      // Sync worktree/branch from handle (for fresh starts)
       agent.worktreePath = handle.worktreePath;
       agent.branch = handle.branch;
 
-      // Start elapsed timer — pauses while agent is idle, persists elapsed every 10s
-      let ticks = 0;
+      // Update DB with worktree info and mark as running
+      updateTask(taskId, {
+        worktreePath: handle.worktreePath,
+        branch: handle.branch,
+        status: "running",
+        pollerPid: process.pid,
+      });
+
+      // Start elapsed timer
       const timer = setInterval(() => {
         if (!agent.idle) agent.elapsed++;
-        ticks++;
-        if (ticks % 10 === 0) persistState(agent, cwd);
         setAgents((prev) => [...prev]);
       }, 1000);
 
       runtimeRef.current.set(taskId, { abortController, timer });
-      await persistStateAsync(agent, cwd);
+      runtimeTaskIdsRef.current.add(taskId);
 
       agent.status = transition(agent.status, "SETUP_COMPLETE") ?? agent.status;
       appendLog(agent, t("log_running_started", { session: handle.sessionName }));
@@ -280,13 +241,22 @@ export function useAgentActions({
         clearInterval(runtime.timer);
         runtimeRef.current.delete(taskId);
       }
+      runtimeTaskIdsRef.current.delete(taskId);
       paneStateRef.current.delete(taskId);
+
       if (!agent.deleted) {
-        await saveToHistory(agent, cwd);
-        // Remove the live state file — the JSONL history entry is now authoritative.
-        // Skipped when deleted=true (retryAgent reuses the taskId and will manage
-        // state.json itself, so removing it here would race the new spawn).
-        await removeTaskState(taskId).catch(() => {});
+        updateTask(taskId, {
+          status: agent.status,
+          finishedAt: Date.now(),
+          error: agent.error || null,
+          idle: agent.idle,
+          lastActivity: agent.lastActivity,
+          elapsed: agent.elapsed,
+          cost: agent.cost,
+          finalBranch: agent.result?.finalBranch ?? null,
+          prUrl: agent.result?.prUrl ?? null,
+        });
+        releasePoller(taskId, process.pid);
       }
       setAgents((prev) => [...prev]);
     }
@@ -305,14 +275,20 @@ export function useAgentActions({
       clearInterval(runtime.timer);
       runtimeRef.current.delete(agent.taskId);
     }
+    runtimeTaskIdsRef.current.delete(agent.taskId);
 
-    // Kill the tmux session by its conventional name
+    // Kill the tmux session
     Bun.spawn(["tmux", "kill-session", "-t", `deer-${agent.taskId}`], {
       stdout: "pipe", stderr: "pipe",
     }).exited.catch(() => {});
 
-    saveToHistory(agent, cwd);
-    persistState(agent, cwd);
+    updateTask(agent.taskId, {
+      status: "cancelled",
+      finishedAt: Date.now(),
+      lastActivity: agent.lastActivity,
+      elapsed: agent.elapsed,
+    });
+    releasePoller(agent.taskId, process.pid);
     setAgents((prev) => [...prev]);
   }, [cwd]);
 
@@ -324,6 +300,7 @@ export function useAgentActions({
       clearInterval(runtime.timer);
     }
     runtimeRef.current.clear();
+    runtimeTaskIdsRef.current.clear();
   }, []);
 
   // ── Attach to running agent (just tmux attach) ────────────────────
@@ -333,11 +310,7 @@ export function useAgentActions({
     const sessionName = `deer-${agent.taskId}`;
 
     if (process.env.TMUX) {
-      // Already inside tmux — switch-client is non-blocking; deer keeps running.
       const { spawnSync } = await import("node:child_process");
-      // Bind prefix-d so it switches back when in a deer session, or
-      // detaches normally otherwise. Uses if-shell -F to evaluate the
-      // session name at keypress time — no rebind/restore dance needed.
       spawnSync("tmux", [
         "bind-key", "d",
         "if-shell", "-F", "#{m:deer-*,#{session_name}}",
@@ -347,17 +320,12 @@ export function useAgentActions({
       spawnSync("tmux", ["switch-client", "-t", sessionName], { stdio: "inherit" });
     } else {
       await withSuspendedTerminal(setSuspended, async () => {
-        // Small delay to let any pending keypress (e.g. the Enter that triggered
-        // attach) flush through before tmux takes over stdin.
         await Bun.sleep(50);
         const { spawnSync } = await import("node:child_process");
         spawnSync("tmux", ["attach", "-t", sessionName], { stdio: "inherit" });
       });
     }
 
-    // Default to idle on detach and seed the pane state with the current
-    // snapshot. If Claude is actually doing something, the poll loop will
-    // detect the pane changing and flip idle back to false within one tick.
     if (agent.status === "running") {
       const lines = await captureTmuxPane(sessionName);
       if (lines) {
@@ -378,16 +346,10 @@ export function useAgentActions({
     const sessionName = `deer-shell-${agent.taskId}`;
 
     const { spawnSync } = await import("node:child_process");
-    // Create detached session (no-op if already exists); then apply the
-    // deer status bar, then switch/attach — so ctrl+b d returns to deer.
     spawnSync("tmux", ["new-session", "-d", "-s", sessionName, "-c", worktreePath, shell]);
     await applyTmuxStatusBar(sessionName);
 
     if (process.env.TMUX) {
-      // Already inside tmux — switch-client is non-blocking; deer keeps running.
-      // Bind prefix-d so it switches back when in a deer session, or
-      // detaches normally otherwise. Uses if-shell -F to evaluate the
-      // session name at keypress time — no rebind/restore dance needed.
       spawnSync("tmux", [
         "bind-key", "d",
         "if-shell", "-F", "#{m:deer-*,#{session_name}}",
@@ -440,7 +402,14 @@ export function useAgentActions({
     } finally {
       agent.creatingPr = false;
     }
-    await saveToHistory(agent, cwd);
+    updateTask(agent.taskId, {
+      prUrl: agent.result?.prUrl ?? null,
+      finalBranch: agent.result?.finalBranch ?? null,
+      status: agent.status,
+      error: agent.error || null,
+      lastActivity: agent.lastActivity,
+      branch: agent.result?.finalBranch ?? agent.branch,
+    });
     setAgents((prev) => [...prev]);
   }, [cwd]);
 
@@ -479,7 +448,11 @@ export function useAgentActions({
     } finally {
       agent.updatingPr = false;
     }
-    await saveToHistory(agent, cwd);
+    updateTask(agent.taskId, {
+      lastActivity: agent.lastActivity,
+      status: agent.status,
+      error: agent.error || null,
+    });
     setAgents((prev) => [...prev]);
   }, [cwd]);
 
@@ -494,36 +467,28 @@ export function useAgentActions({
       clearInterval(runtime.timer);
       runtimeRef.current.delete(agent.taskId);
     }
+    runtimeTaskIdsRef.current.delete(agent.taskId);
 
     deleteTask(agent.taskId, cwd).catch(() => {});
+    deleteTaskRow(agent.taskId);
     setAgents((prev) => prev.filter((a) => a !== agent));
-    deletedTaskIdsRef.current.add(agent.taskId);
-    removeFromHistory(cwd, agent.taskId).finally(() => {
-      deletedTaskIdsRef.current.delete(agent.taskId);
-    });
-  }, [cwd, setAgents, deletedTaskIdsRef]);
+  }, [cwd, setAgents]);
 
   // ── Retry agent ───────────────────────────────────────────────────
 
   const retryAgent = useCallback((agent: AgentState) => {
-    // Clean up any existing runtime (abort poll loop, clear timer)
     const runtime = runtimeRef.current.get(agent.taskId);
     if (runtime) {
       runtime.abortController.abort();
       clearInterval(runtime.timer);
       runtimeRef.current.delete(agent.taskId);
     }
+    runtimeTaskIdsRef.current.delete(agent.taskId);
 
     const { prompt, baseBranch, worktreePath, branch, taskId, createdAt, result } = agent;
-    // Use the finalized branch name if the PR was already created (branch gets
-    // renamed from deer/<taskId> → deer/<branchName> during PR creation).
     const effectiveBranch = result?.finalBranch || branch;
 
     if (worktreePath) {
-      // Kill the tmux session but preserve the worktree for --continue.
-      // Mark deleted so the old spawnAgent's finally block skips saveToHistory
-      // and removeTaskState — the new spawn reuses the same taskId and manages
-      // state.json itself.
       agent.deleted = true;
       Bun.spawn(["tmux", "kill-session", "-t", `deer-${taskId}`], {
         stdout: "pipe", stderr: "pipe",
@@ -538,22 +503,18 @@ export function useAgentActions({
 
   // ── Resume live session (tmux still running after deer restart) ──────
 
-  /**
-   * Re-attach a poll loop to a tmux session that survived a deer restart.
-   * Called when syncWithHistory detects a dead-owner task whose tmux session
-   * is still alive. Takes ownership of the session without re-creating the
-   * sandbox or worktree.
-   */
   const resumeLiveSession = useCallback(async (agent: AgentState) => {
-    // Immediately take ownership so subsequent syncs skip this agent
     if (runtimeRef.current.has(agent.taskId)) return;
-    agent.historical = false;
+    if (!claimPoller(agent.taskId, process.pid)) return;
 
     const sessionName = `deer-${agent.taskId}`;
     const dead = await isTmuxSessionDead(sessionName);
     if (dead) {
-      // Session ended between the sync check and now — revert to interrupted
-      agent.historical = true;
+      releasePoller(agent.taskId, process.pid);
+      updateTask(agent.taskId, {
+        status: "interrupted",
+        finishedAt: Date.now(),
+      });
       agent.status = "interrupted";
       agent.idle = false;
       agent.lastActivity = t("activity_interrupted");
@@ -563,16 +524,14 @@ export function useAgentActions({
 
     agent.status = "running";
     const abortController = new AbortController();
-    let ticks = 0;
     const timer = setInterval(() => {
       if (!agent.idle) agent.elapsed++;
-      ticks++;
-      if (ticks % 10 === 0) persistState(agent, cwd);
       setAgents((prev) => [...prev]);
     }, 1000);
 
     runtimeRef.current.set(agent.taskId, { abortController, timer });
-    await persistStateAsync(agent, cwd); // Claim ownership: update ownerPid
+    runtimeTaskIdsRef.current.add(agent.taskId);
+    updateTask(agent.taskId, { status: "running", pollerPid: process.pid });
     appendLog(agent, t("log_deer_resuming"));
     setAgents((prev) => [...prev]);
 
@@ -596,10 +555,22 @@ export function useAgentActions({
         clearInterval(runtime.timer);
         runtimeRef.current.delete(agent.taskId);
       }
+      runtimeTaskIdsRef.current.delete(agent.taskId);
       paneStateRef.current.delete(agent.taskId);
+
       if (!agent.deleted) {
-        await saveToHistory(agent, cwd);
-        await removeTaskState(agent.taskId).catch(() => {});
+        updateTask(agent.taskId, {
+          status: agent.status,
+          finishedAt: Date.now(),
+          error: agent.error || null,
+          idle: agent.idle,
+          lastActivity: agent.lastActivity,
+          elapsed: agent.elapsed,
+          cost: agent.cost,
+          finalBranch: agent.result?.finalBranch ?? null,
+          prUrl: agent.result?.prUrl ?? null,
+        });
+        releasePoller(agent.taskId, process.pid);
       }
       setAgents((prev) => [...prev]);
     }

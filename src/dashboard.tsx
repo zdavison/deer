@@ -13,6 +13,7 @@ import type { ContextChip } from "./context/types";
 import { runPreflight, type PreflightResult } from "./preflight";
 import { PromptInput } from "./components/PromptInput";
 import { useAgentSync } from "./hooks/useAgentSync";
+import { releaseAllPollers } from "./db";
 import { usePrPoller } from "./hooks/useLivePRState";
 import { useAgentActions } from "./hooks/useAgentActions";
 import { usePromptHistory } from "./hooks/usePromptHistory";
@@ -54,7 +55,7 @@ export default function Dashboard({ cwd, mockAgents }: { cwd: string; mockAgents
   const [animTick, setAnimTick] = useState(0);
   const configRef = useRef<DeerConfig | null>(null);
 
-  const { agents, setAgents, agentsRef, deletedTaskIdsRef, baseBranchRef, restoredProxiesRef, liveSessionIdsRef, syncWithHistory, showAll, setShowAll } = useAgentSync(cwd, configRef, mockAgents);
+  const { agents, setAgents, agentsRef, baseBranchRef, restoredProxiesRef, liveSessionIdsRef, runtimeTaskIdsRef, reconcile, showAll, setShowAll } = useAgentSync(cwd, configRef, mockAgents);
 
   const {
     promptHistory,
@@ -72,11 +73,11 @@ export default function Dashboard({ cwd, mockAgents }: { cwd: string; mockAgents
   const { spawnAgent, killAgent, abortAllAgents, attachToAgent, openShell, createPr, updatePr, deleteAgent, retryAgent, resumeLiveSession } = useAgentActions({
     cwd,
     setAgents,
-    deletedTaskIdsRef,
     baseBranchRef,
     configRef,
     preflight,
     setSuspended,
+    runtimeTaskIdsRef,
   });
 
   const {
@@ -119,9 +120,9 @@ export default function Dashboard({ cwd, mockAgents }: { cwd: string; mockAgents
     if (!mockAgents) runPreflight().then(setPreflight);
     loadConfig(cwd).then((cfg) => {
       configRef.current = cfg;
-      // Re-run sync immediately so proxies are restored for any
+      // Re-run reconcile immediately so proxies are restored for any
       // running cross-instance tasks without waiting for the 2s poll.
-      syncWithHistory();
+      reconcile();
     });
   }, [cwd]);
 
@@ -132,6 +133,7 @@ export default function Dashboard({ cwd, mockAgents }: { cwd: string; mockAgents
       // Abort deer's own polling loops so state updates stop, but leave the
       // tmux sessions alive so agents continue running after a restart.
       abortAllAgents();
+      releaseAllPollers(process.pid);
       for (const proxyCleanup of restoredProxiesRef.current.values()) {
         proxyCleanup();
       }

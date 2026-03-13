@@ -34,8 +34,8 @@ Each agent task:
 | `src/dashboard.tsx` | Ink TUI dashboard |
 | `src/demo-dashboard.tsx` | Demo mode dashboard using mock agents |
 | `src/agent.ts` | Agent lifecycle: worktree → sandbox → tmux → finalize |
-| `src/agent-state.ts` | `AgentState` type, constructors for live/historical agents |
-| `src/task-state.ts` | Per-task `state.json` read/write, owner-alive checks, live task scan |
+| `src/agent-state.ts` | `AgentState` type, `agentFromDbRow()` constructor |
+| `src/db.ts` | SQLite database module — single source of truth for task state |
 | `src/state-machine.ts` | Per-task state machine: statuses, events, actions, keybindings |
 | `src/config.ts` | Config loading/merging (global + repo-local + CLI) |
 | `src/constants.ts` | All tunable constants (poll intervals, model, etc.) |
@@ -47,7 +47,7 @@ Each agent task:
 | `src/pane-idle.ts` | Tmux pane idle detection heuristics |
 | `src/updater.ts` | Self-update check logic |
 | `src/mock-agents.ts` | Static mock agent data for demo mode |
-| `src/task.ts` | Task ID generation, JSONL history persistence, prompt history |
+| `src/task.ts` | Task ID generation, prompt history |
 | `src/sandbox/index.ts` | Sandbox launch, tmux session management |
 | `src/sandbox/runtime.ts` | `SandboxRuntime` interface |
 | `src/sandbox/resolve.ts` | `resolveRuntime()` — maps config string to `SandboxRuntime` |
@@ -55,7 +55,7 @@ Each agent task:
 | `src/sandbox/auth-proxy.ts` | Host-side MITM proxy for credential injection |
 | `src/git/worktree.ts` | Git worktree create/remove/detect |
 | `src/git/finalize.ts` | PR creation and worktree cleanup |
-| `src/hooks/useAgentSync.ts` | Cross-instance state sync via fs.watch + poll |
+| `src/hooks/useAgentSync.ts` | Cross-instance state sync via SQLite polling |
 | `src/hooks/useAgentActions.ts` | Action dispatch for TUI agent cards |
 | `src/hooks/useKeyboardInput.ts` | Global keyboard input handling for the dashboard |
 | `src/hooks/usePromptHistory.ts` | Prompt input history load/save/navigation |
@@ -68,12 +68,11 @@ Each agent task:
 
 ```
 ~/.local/share/deer/
+  deer.db                    # SQLite database — single source of truth for all task state
   tasks/<taskId>/
-    worktree/          # git worktree (only writable path in sandbox)
-    state.json         # live task state (ownerPid, logs, idle, elapsed, lastActivity)
-    srt-settings.json  # SRT sandbox config
-    gitconfig          # minimal gitconfig for sandbox
-  history/<repohash>.jsonl   # per-repo task history (completed tasks)
+    worktree/                # git worktree (only writable path in sandbox)
+    srt-settings.json        # SRT sandbox config
+    gitconfig                # minimal gitconfig for sandbox
   prompt-history.json        # TUI prompt input history
   node_modules/              # srt binary location for compiled binary
 ```

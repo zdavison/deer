@@ -2,13 +2,13 @@
  * Multi-instance E2E tests.
  *
  * Verify that tasks from a second deer instance appear correctly in the first
- * instance's dashboard via the state file sync mechanism (fs.watch + poll).
+ * instance's dashboard via the SQLite sync mechanism.
  */
 
-import { describe, test, expect, setDefaultTimeout } from "bun:test";
+import { describe, test, expect, setDefaultTimeout, afterEach } from "bun:test";
 
 import { startDeerSession, createTestRepo, waitFor } from "./helpers";
-import { writeTaskState, removeTaskState } from "../../src/task-state";
+import { insertTask, updateTask, deleteTaskRow, closeDb } from "../../src/db";
 import { generateTaskId } from "../../src/task";
 
 setDefaultTimeout(60_000);
@@ -24,31 +24,23 @@ e2e("multi-instance sync", () => {
       try {
         await deer.waitForPane("deer");
 
-        // Simulate a task owned by another process (use current process PID
-        // so isOwnerAlive returns true, making it appear as a live cross-instance task)
-        await writeTaskState({
+        // Simulate a task from another instance by inserting into SQLite
+        insertTask({
           taskId,
+          repoPath,
           prompt: "cross-instance test task",
-          status: "running",
-          elapsed: 0,
-          lastActivity: "● Running in another instance",
-          prUrl: null,
-          finalBranch: null,
-          error: null,
-          cost: null,
-          logs: [],
-          idle: false,
-          createdAt: new Date().toISOString(),
-          ownerPid: process.pid,
-          worktreePath: "/tmp/fake-worktree",
           baseBranch: "main",
+          createdAt: Date.now(),
+        });
+        updateTask(taskId, {
+          status: "running",
+          lastActivity: "● Running in another instance",
+          pollerPid: process.pid,
         });
 
-        // The sync uses fs.watch + a 10s safety poll (TASK_SYNC_SAFETY_POLL_MS).
-        // Wait up to 15s for the task to appear in the TUI.
+        // The reconcile loop runs every 2s. Wait up to 15s for the task to appear.
         await deer.waitForPane("cross-instance test task", 15_000);
 
-        // Verify it shows as running
         const screen = await deer.getScreen();
         const taskLine = screen.find((l) => l.includes("cross-instance test task"));
         expect(taskLine).not.toBeUndefined();
@@ -56,41 +48,34 @@ e2e("multi-instance sync", () => {
         await deer.stop();
       }
     } finally {
-      await removeTaskState(taskId).catch(() => {});
+      deleteTaskRow(taskId);
       await cleanup();
     }
   });
 
-  test("task becomes interrupted when owning process dies", async () => {
+  test("task becomes interrupted when tmux session is dead", async () => {
     const { repoPath, cleanup } = await createTestRepo();
     const taskId = generateTaskId();
-    const DEAD_PID = 99999999;
     try {
       const deer = await startDeerSession(repoPath);
       try {
         await deer.waitForPane("deer");
 
-        // Write a state file with a dead owner PID
-        await writeTaskState({
+        // Insert a running task with no tmux session — should show as interrupted
+        insertTask({
           taskId,
+          repoPath,
           prompt: "interrupted instance task",
-          status: "running",
-          elapsed: 0,
-          lastActivity: "● Doing work",
-          prUrl: null,
-          finalBranch: null,
-          error: null,
-          cost: null,
-          logs: [],
-          idle: false,
-          createdAt: new Date().toISOString(),
-          ownerPid: DEAD_PID,
-          worktreePath: "/tmp/fake-worktree",
           baseBranch: "main",
+          createdAt: Date.now(),
+        });
+        updateTask(taskId, {
+          status: "running",
+          lastActivity: "● Doing work",
         });
 
         // Wait for the task to appear — it should show as interrupted
-        // since the owner PID is dead
+        // since there is no tmux session for it
         await waitFor(
           async () => {
             const screen = await deer.getScreen();
@@ -105,7 +90,7 @@ e2e("multi-instance sync", () => {
         await deer.stop();
       }
     } finally {
-      await removeTaskState(taskId).catch(() => {});
+      deleteTaskRow(taskId);
       await cleanup();
     }
   });

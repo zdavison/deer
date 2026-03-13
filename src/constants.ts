@@ -21,11 +21,8 @@ export const MAX_DIFF_FOR_PR_METADATA = 20_000;
 /** Model used to generate PR metadata (title, body, branch name) */
 export const PR_METADATA_MODEL = "sonnet";
 
-/** Debounce delay for cross-instance task state sync */
-export const TASK_SYNC_DEBOUNCE_MS = 100;
-
-/** Safety-net poll interval for cross-instance task sync */
-export const TASK_SYNC_SAFETY_POLL_MS = 10_000;
+/** Reconcile interval for SQLite-based cross-instance sync */
+export const DB_RECONCILE_INTERVAL_MS = 2_000;
 
 /** Dashboard poll interval for tmux pane capture */
 export const DASHBOARD_POLL_MS = 1_000;
