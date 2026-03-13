@@ -7,7 +7,8 @@ export const branchSource: ContextSource = {
   icon: "⎇",
 
   async search(query: string, repoPath: string): Promise<ContextSourceItem[]> {
-    const result = await Bun.$`git -C ${repoPath} branch --all --format=%(refname:short)`
+    const fmt = "%(refname:short)";
+    const result = await Bun.$`git -C ${repoPath} branch --all --format=${fmt}`
       .quiet()
       .nothrow();
     if (result.exitCode !== 0) return [];
