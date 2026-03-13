@@ -329,15 +329,19 @@ export function useAgentActions({
     if (!agent.taskId) return;
     const sessionName = `deer-${agent.taskId}`;
 
-    await withSuspendedTerminal(setSuspended, async () => {
-      // Small delay to let any pending keypress (e.g. the Enter that triggered
-      // attach) flush through before tmux takes over stdin.
-      await Bun.sleep(50);
+    if (process.env.TMUX) {
+      // Already inside tmux — switch-client is non-blocking; deer keeps running.
       const { spawnSync } = await import("node:child_process");
-      spawnSync("tmux", ["attach", "-t", sessionName], {
-        stdio: "inherit",
+      spawnSync("tmux", ["switch-client", "-t", sessionName], { stdio: "inherit" });
+    } else {
+      await withSuspendedTerminal(setSuspended, async () => {
+        // Small delay to let any pending keypress (e.g. the Enter that triggered
+        // attach) flush through before tmux takes over stdin.
+        await Bun.sleep(50);
+        const { spawnSync } = await import("node:child_process");
+        spawnSync("tmux", ["attach", "-t", sessionName], { stdio: "inherit" });
       });
-    });
+    }
 
     // Default to idle on detach and seed the pane state with the current
     // snapshot. If Claude is actually doing something, the poll loop will
@@ -361,15 +365,21 @@ export function useAgentActions({
     const shell = process.env.SHELL ?? "/bin/sh";
     const sessionName = `deer-shell-${agent.taskId}`;
 
-    await withSuspendedTerminal(setSuspended, async () => {
-      await Bun.sleep(50);
-      const { spawnSync } = await import("node:child_process");
-      // Create detached session (no-op if already exists); then apply the
-      // deer status bar, then attach — so ctrl+b d returns to deer like attach.
-      spawnSync("tmux", ["new-session", "-d", "-s", sessionName, "-c", worktreePath, shell]);
-      await applyTmuxStatusBar(sessionName);
-      spawnSync("tmux", ["attach", "-t", sessionName], { stdio: "inherit" });
-    });
+    const { spawnSync } = await import("node:child_process");
+    // Create detached session (no-op if already exists); then apply the
+    // deer status bar, then switch/attach — so ctrl+b d returns to deer.
+    spawnSync("tmux", ["new-session", "-d", "-s", sessionName, "-c", worktreePath, shell]);
+    await applyTmuxStatusBar(sessionName);
+
+    if (process.env.TMUX) {
+      // Already inside tmux — switch-client is non-blocking; deer keeps running.
+      spawnSync("tmux", ["switch-client", "-t", sessionName], { stdio: "inherit" });
+    } else {
+      await withSuspendedTerminal(setSuspended, async () => {
+        await Bun.sleep(50);
+        spawnSync("tmux", ["attach", "-t", sessionName], { stdio: "inherit" });
+      });
+    }
   }, [setSuspended]);
 
   // ── Create PR ─────────────────────────────────────────────────────
