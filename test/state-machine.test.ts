@@ -187,8 +187,41 @@ describe("availableActions", () => {
       hasPrUrl: true,
       hasFinalBranch: true,
       hasHandle: true,
+      prState: "open",
     }));
     expect(actions).toContain("open_pr");
+    expect(actions).not.toContain("create_pr");
+  });
+
+  test("create_pr available when original PR was merged and there is a final branch", () => {
+    const actions = availableActions(baseCtx({
+      status: "running",
+      isIdle: true,
+      hasPrUrl: true,
+      hasFinalBranch: true,
+      hasHandle: true,
+      prState: "merged",
+    }));
+    expect(actions).toContain("create_pr");
+  });
+
+  test("create_pr not available when PR is open (even with final branch)", () => {
+    const actions = availableActions(baseCtx({
+      isIdle: true,
+      hasPrUrl: true,
+      hasFinalBranch: true,
+      prState: "open",
+    }));
+    expect(actions).not.toContain("create_pr");
+  });
+
+  test("create_pr not available when PR is closed", () => {
+    const actions = availableActions(baseCtx({
+      isIdle: true,
+      hasPrUrl: true,
+      hasFinalBranch: true,
+      prState: "closed",
+    }));
     expect(actions).not.toContain("create_pr");
   });
 

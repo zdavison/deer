@@ -126,7 +126,7 @@ export function availableActions(ctx: AgentContext): AgentAction[] {
       case "attach":
         return ctx.hasHandle;
       case "create_pr":
-        return ctx.hasFinalBranch && !ctx.hasPrUrl;
+        return ctx.hasFinalBranch && (!ctx.hasPrUrl || ctx.prState === "merged");
       case "open_pr":
         return ctx.hasPrUrl;
       case "open_shell":

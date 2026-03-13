@@ -396,7 +396,8 @@ export function useAgentActions({
   // ── Create PR ─────────────────────────────────────────────────────
 
   const createPr = useCallback(async (agent: AgentState) => {
-    if (!agent.worktreePath || agent.result?.prUrl) return;
+    if (!agent.worktreePath) return;
+    if (agent.result?.prUrl && agent.prState !== "merged") return;
 
     agent.creatingPr = true;
     agent.lastActivity = t("activity_creating_pr");
