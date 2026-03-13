@@ -7,7 +7,7 @@ import type { SandboxCleanup } from "../sandbox/index";
 import { isTmuxSessionDead } from "../sandbox/index";
 import { resolveRuntime } from "../sandbox/resolve";
 import { detectRepo } from "../git/worktree";
-import { type AgentState, historicalAgent, liveTaskFromStateFile, historicalAgentFromStateFile } from "../agent-state";
+import { type AgentState, historicalAgent, liveAgentFromHistory, liveTaskFromStateFile, historicalAgentFromStateFile } from "../agent-state";
 import { readTaskState, scanLiveTaskIds, isOwnerAlive } from "../task-state";
 import type { DeerConfig } from "../config";
 import { TASK_SYNC_DEBOUNCE_MS, TASK_SYNC_SAFETY_POLL_MS } from "../constants";
@@ -127,6 +127,17 @@ export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig
       // No state.json — fall back to JSONL history entry
       const fileTask = fileTasks.find(t => t.taskId === taskId);
       if (fileTask) {
+        // If the task was saved as "running" (deer closed while it was active),
+        // check whether the tmux session survived before showing as interrupted.
+        if (fileTask.status === "running" && !liveSessionIdsRef.current.has(taskId)) {
+          const sessionDead = await isTmuxSessionDead(`deer-${taskId}`);
+          if (!sessionDead) {
+            liveSessionIdsRef.current.add(taskId);
+            // Show as running while we hand off to the poll loop
+            newAgents.push(liveAgentFromHistory(fileTask));
+            continue;
+          }
+        }
         newAgents.push(historicalAgent(fileTask));
       }
     }
