@@ -116,6 +116,22 @@ describe("readTaskState", () => {
     const loaded = await readTaskState(taskId);
     expect(loaded!.error).toBe("Claude exited with code 1");
   });
+
+  test("persists repoPath field", async () => {
+    const taskId = uniqueTaskId();
+    createdIds.push(taskId);
+    await writeTaskState(makeStateFile({ taskId, repoPath: "/home/user/my-project" }));
+    const loaded = await readTaskState(taskId);
+    expect(loaded!.repoPath).toBe("/home/user/my-project");
+  });
+
+  test("repoPath is undefined when not set", async () => {
+    const taskId = uniqueTaskId();
+    createdIds.push(taskId);
+    await writeTaskState(makeStateFile({ taskId }));
+    const loaded = await readTaskState(taskId);
+    expect(loaded!.repoPath).toBeUndefined();
+  });
 });
 
 describe("removeTaskState", () => {

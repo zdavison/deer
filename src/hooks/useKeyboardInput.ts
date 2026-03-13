@@ -26,6 +26,8 @@ interface KeyboardInputDeps {
   deleteAgent: (agent: AgentState) => void;
   retryAgent: (agent: AgentState) => void;
   exit: () => void;
+  showAll: boolean;
+  setShowAll: Dispatch<SetStateAction<boolean>>;
 }
 
 function copyLogsToClipboard(agent: AgentState): void {
@@ -57,6 +59,8 @@ export function useKeyboardInput({
   deleteAgent,
   retryAgent,
   exit,
+  showAll,
+  setShowAll,
 }: KeyboardInputDeps) {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [inputFocused, setInputFocused] = useState(true);
@@ -168,6 +172,11 @@ export function useKeyboardInput({
       setSearchMode(true);
       setSearchQuery("");
       setSearchMatchIdx(0);
+      return;
+    }
+
+    if (input === "a") {
+      setShowAll((prev) => !prev);
       return;
     }
 

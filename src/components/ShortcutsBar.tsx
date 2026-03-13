@@ -13,6 +13,7 @@ interface ShortcutsBarProps {
   verboseMode: boolean;
   logExpanded: boolean;
   preflight: PreflightResult | null;
+  showAll: boolean;
 }
 
 export function ShortcutsBar({
@@ -22,6 +23,7 @@ export function ShortcutsBar({
   verboseMode,
   logExpanded,
   preflight,
+  showAll,
 }: ShortcutsBarProps) {
   let mainActions: AgentAction[] = [];
   let logSubActions: AgentAction[] = [];
@@ -108,6 +110,7 @@ export function ShortcutsBar({
                     <Text dimColor> {t(("action_" + action) as StringKey)}</Text>
                   </Text>
                 ))}
+                <Text><Text bold color="white">a</Text><Text dimColor> {showAll ? "this repo" : "all repos"}</Text></Text>
                 <Text><Text bold color="white">q</Text><Text dimColor> {t("shortcuts_quit")}</Text></Text>
               </>
             )}

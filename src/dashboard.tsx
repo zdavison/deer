@@ -46,7 +46,7 @@ export default function Dashboard({ cwd, mockAgents }: { cwd: string; mockAgents
   const [animTick, setAnimTick] = useState(0);
   const configRef = useRef<DeerConfig | null>(null);
 
-  const { agents, setAgents, agentsRef, deletedTaskIdsRef, baseBranchRef, restoredProxiesRef, liveSessionIdsRef, syncWithHistory } = useAgentSync(cwd, configRef, mockAgents);
+  const { agents, setAgents, agentsRef, deletedTaskIdsRef, baseBranchRef, restoredProxiesRef, liveSessionIdsRef, syncWithHistory, showAll, setShowAll } = useAgentSync(cwd, configRef, mockAgents);
 
   const {
     promptHistory,
@@ -100,6 +100,8 @@ export default function Dashboard({ cwd, mockAgents }: { cwd: string; mockAgents
     deleteAgent,
     retryAgent,
     exit,
+    showAll,
+    setShowAll,
   });
 
   // ── Load config + preflight + start config guard ───────────────────
@@ -184,7 +186,10 @@ export default function Dashboard({ cwd, mockAgents }: { cwd: string; mockAgents
       {/* Header */}
       <Box paddingX={1} justifyContent="space-between">
         <Text bold>{t("header_title")}</Text>
-        <Text dimColor>{activeCount > 0 ? t("header_active", { n: activeCount }) : t("header_idle")}</Text>
+        <Box gap={2}>
+          {showAll && <Text dimColor>all repos</Text>}
+          <Text dimColor>{activeCount > 0 ? t("header_active", { n: activeCount }) : t("header_idle")}</Text>
+        </Box>
       </Box>
       <Text>{"─".repeat(termWidth)}</Text>
 
@@ -345,6 +350,7 @@ export default function Dashboard({ cwd, mockAgents }: { cwd: string; mockAgents
         verboseMode={verboseMode}
         logExpanded={logExpanded}
         preflight={preflight}
+        showAll={showAll}
       />
     </Box>
   );

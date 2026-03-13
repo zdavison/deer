@@ -1,5 +1,5 @@
 import { test, expect, describe, afterEach } from "bun:test";
-import { generateTaskId, dataDir, historyPath, loadHistory, removeFromHistory, upsertHistory } from "../src/task";
+import { generateTaskId, dataDir, historyPath, loadHistory, loadAllHistory, removeFromHistory, upsertHistory } from "../src/task";
 import type { PersistedTask } from "../src/task";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -261,6 +261,27 @@ describe("history persistence", () => {
     expect(loaded[1].prompt).toBe("the task");
     expect(loaded[1].status).toBe("cancelled");
     expect(loaded[2].prompt).toBe("task after");
+  });
+
+  test("loadAllHistory returns tasks from all repos", async () => {
+    const repoA = makeFakeDataDir();
+    const repoB = makeFakeDataDir();
+    const taskA = makeTask({ prompt: "task in repo A" });
+    const taskB = makeTask({ prompt: "task in repo B" });
+
+    await upsertHistory(repoA, taskA);
+    await upsertHistory(repoB, taskB);
+
+    const all = await loadAllHistory();
+    const ids = all.map((t) => t.taskId);
+    expect(ids).toContain(taskA.taskId);
+    expect(ids).toContain(taskB.taskId);
+  });
+
+  test("loadAllHistory returns empty array when history dir has no matching files", async () => {
+    // This just verifies it doesn't throw on a (potentially) empty dir
+    const result = await loadAllHistory();
+    expect(Array.isArray(result)).toBe(true);
   });
 
   test("running tasks can be persisted and loaded", async () => {
