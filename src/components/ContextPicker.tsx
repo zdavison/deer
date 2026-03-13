@@ -31,6 +31,7 @@ export function ContextPicker({
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<PickerItem[]>([]);
   const [selectedIdx, setSelectedIdx] = useState(0);
+  const [scrollOffset, setScrollOffset] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,6 +49,7 @@ export function ContextPicker({
       if (cancelled) return;
       setItems(groups.flat());
       setSelectedIdx(0);
+      setScrollOffset(0);
     });
 
     return () => { cancelled = true; };
@@ -66,12 +68,20 @@ export function ContextPicker({
     }
 
     if (key.upArrow) {
-      setSelectedIdx((prev) => Math.max(prev - 1, 0));
+      setSelectedIdx((prev) => {
+        const next = Math.max(prev - 1, 0);
+        setScrollOffset((off) => Math.min(off, next));
+        return next;
+      });
       return;
     }
 
     if (key.downArrow) {
-      setSelectedIdx((prev) => Math.min(prev + 1, Math.max(items.length - 1, 0)));
+      setSelectedIdx((prev) => {
+        const next = Math.min(prev + 1, Math.max(items.length - 1, 0));
+        setScrollOffset((off) => Math.max(off, next - MAX_ITEMS + 1));
+        return next;
+      });
       return;
     }
 
@@ -89,7 +99,7 @@ export function ContextPicker({
     }
   });
 
-  const visibleItems = items.slice(0, MAX_ITEMS);
+  const visibleItems = items.slice(scrollOffset, scrollOffset + MAX_ITEMS);
 
   return (
     <Box flexDirection="column" paddingX={1}>
@@ -111,8 +121,8 @@ export function ContextPicker({
         visibleItems.map((item, i) => (
           <Box key={`${item.sourceType}-${item.id}`} paddingLeft={2} gap={1}>
             <Text
-              color={i === selectedIdx ? "cyan" : undefined}
-              inverse={i === selectedIdx}
+              color={i + scrollOffset === selectedIdx ? "cyan" : undefined}
+              inverse={i + scrollOffset === selectedIdx}
             >
               {item.icon}  {item.label}
             </Text>
