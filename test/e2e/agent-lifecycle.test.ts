@@ -73,6 +73,55 @@ e2e("agent lifecycle", () => {
     }
   });
 
+  test("long agent startup is not marked interrupted by reconcile", async () => {
+    // Regression: if runtimeTaskIdsRef was not populated before startAgent(),
+    // reconcile() would fire during the 2-8s setup window, find tmux dead,
+    // and incorrectly mark the task as "interrupted".
+    const { repoPath, cleanup } = await createTestRepo();
+    try {
+      // Add a deer.toml with a slow setup_command so that startAgent() blocks
+      // for several reconcile cycles (2s each) before the tmux session exists.
+      await Bun.write(join(repoPath, "deer.toml"), 'setup_command = "sleep 10"\n');
+
+      await withFakeClaude(async (env) => {
+        const deer = await startDeerSession(repoPath, env);
+        try {
+          await deer.waitForReady();
+
+          const before = Date.now();
+          deer.sendKeys("slow startup test\r");
+
+          const taskId = await waitForNewTaskDir(before);
+
+          // Wait for the task to appear in DB (setup phase begins)
+          await waitFor(
+            async () => getTask(taskId) !== null,
+            { timeout: 10_000, label: "task appears in DB" },
+          );
+
+          // Let 2+ reconcile cycles pass (reconcile runs every 2s).
+          // The setup_command sleeps for 10s, so tmux won't exist yet.
+          // Without the fix, reconcile would mark the task interrupted here.
+          await Bun.sleep(5_000);
+
+          const row = getTask(taskId);
+          expect(row).not.toBeNull();
+          expect(row!.status).not.toBe("interrupted");
+
+          // Verify it eventually transitions to running
+          await waitFor(
+            async () => getTask(taskId)?.status === "running",
+            { timeout: 30_000, label: "task reaches running status" },
+          );
+        } finally {
+          await deer.stop();
+        }
+      });
+    } finally {
+      await cleanup();
+    }
+  });
+
   test("worktree directory exists while agent is running", async () => {
     const { repoPath, cleanup } = await createTestRepo();
     try {
