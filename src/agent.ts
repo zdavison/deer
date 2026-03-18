@@ -38,8 +38,8 @@ export interface ContinueSession {
 export interface AgentRunOptions {
   /** Path to the repository root */
   repoPath: string;
-  /** The user's prompt / task description */
-  prompt: string;
+  /** The user's prompt / task description. If omitted, Claude runs interactively. */
+  prompt?: string;
   /** Branch to base the worktree on */
   baseBranch: string;
   /** Loaded deer config (for network allowlist, env, etc.) */

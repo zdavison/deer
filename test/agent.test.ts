@@ -481,6 +481,21 @@ describe("agent lifecycle", () => {
     expect(setupStatuses.length).toBeGreaterThan(0);
   });
 
+  test("startAgent works without a prompt (interactive mode)", async () => {
+    const repo = await createTestRepo();
+    repos.push(repo);
+
+    const handle = await startAgent({
+      repoPath: repo,
+      baseBranch: "main",
+      config: testConfig,
+    });
+    handles.push(handle);
+
+    expect(handle.taskId).toMatch(/^deer_/);
+    expect(handle.sessionName).toStartWith("deer-deer_");
+  });
+
   test("startAgent with continueSession reuses existing worktree and taskId", async () => {
     const repo = await createTestRepo();
     repos.push(repo);

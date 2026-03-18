@@ -47,8 +47,8 @@ async function cmdPrepare(args: string[]) {
   const continueWorktree = getArg(args, "--continue-worktree");
   const continueBranch = getArg(args, "--continue-branch");
 
-  if (!repoPath || !prompt || !baseBranch) {
-    console.error("Usage: deerbox prepare --repo-path <path> --prompt <prompt> --base-branch <branch>");
+  if (!repoPath || !baseBranch) {
+    console.error("Usage: deerbox prepare --repo-path <path> --base-branch <branch> [--prompt <prompt>]");
     process.exit(1);
   }
 
@@ -134,7 +134,7 @@ async function cmdConfig(args: string[]) {
 
 // ── Interactive mode (default) ───────────────────────────────────────
 
-async function cmdRun(prompt: string, args: string[]) {
+async function cmdRun(prompt: string | undefined, args: string[]) {
   const model = getArg(args, "--model");
   const baseBranch = getArg(args, "--base-branch") ?? getArg(args, "-b");
   const keep = hasFlag(args, "--keep") || hasFlag(args, "-k");
@@ -199,7 +199,7 @@ async function cmdRun(prompt: string, args: string[]) {
 const HELP = `deerbox v${VERSION} — run Claude Code in a sandboxed worktree
 
 Usage:
-  deerbox <prompt>              Run sandboxed Claude with the given prompt
+  deerbox [prompt]              Run sandboxed Claude (prompt optional — omit for interactive)
   deerbox prepare [options]     Prepare a session (JSON output, used by deer)
   deerbox destroy [options]     Clean up a task's resources
   deerbox preflight             Run preflight checks (JSON output)
@@ -211,6 +211,7 @@ Interactive options:
   -k, --keep                    Keep worktree after Claude exits
 
 Examples:
+  deerbox
   deerbox "fix the login redirect bug"
   deerbox --model opus "refactor the auth module"`;
 
@@ -218,7 +219,7 @@ async function main() {
   const args = process.argv.slice(2);
   const first = args[0];
 
-  if (!first || first === "--help" || first === "-h") {
+  if (first === "--help" || first === "-h") {
     console.log(HELP);
     return;
   }
@@ -249,12 +250,7 @@ async function main() {
     }
   }
 
-  const prompt = positional.join(" ");
-  if (!prompt) {
-    console.error("Error: prompt is required\n");
-    console.log(HELP);
-    process.exit(1);
-  }
+  const prompt = positional.length > 0 ? positional.join(" ") : undefined;
 
   await cmdRun(prompt, args);
 }

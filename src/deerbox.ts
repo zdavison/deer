@@ -89,7 +89,7 @@ export async function deerboxConfig(repoPath: string): Promise<DeerConfig> {
 
 export interface DeerboxPrepareOptions {
   repoPath: string;
-  prompt: string;
+  prompt?: string;
   baseBranch: string;
   config?: DeerConfig;
   model?: string;
@@ -108,9 +108,9 @@ export async function deerboxPrepare(opts: DeerboxPrepareOptions): Promise<Prepa
   const args = [
     "prepare",
     "--repo-path", opts.repoPath,
-    "--prompt", opts.prompt,
     "--base-branch", opts.baseBranch,
   ];
+  if (opts.prompt) args.push("--prompt", opts.prompt);
   if (opts.config) args.push("--config-json", JSON.stringify(opts.config));
   if (opts.model) args.push("--model", opts.model);
   if (opts.taskId) args.push("--task-id", opts.taskId);

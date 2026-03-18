@@ -23,8 +23,8 @@ import { DEFAULT_MODEL } from "./constants";
 export interface PrepareOptions {
   /** Path to the repository root */
   repoPath: string;
-  /** The user's prompt / task description */
-  prompt: string;
+  /** The user's prompt / task description. If omitted, Claude runs interactively. */
+  prompt?: string;
   /** Branch to base the worktree on */
   baseBranch: string;
   /** Loaded config (if already loaded). If omitted, loaded from repoPath. */
@@ -217,7 +217,9 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
 
   const claudeCmd = continueSession
     ? ["claude", "--dangerously-skip-permissions", "--model", model, "--continue"]
-    : ["claude", "--dangerously-skip-permissions", "--model", model, prompt];
+    : prompt
+      ? ["claude", "--dangerously-skip-permissions", "--model", model, prompt]
+      : ["claude", "--dangerously-skip-permissions", "--model", model];
 
   const command = runtime.buildCommand(runtimeOpts, claudeCmd);
 
