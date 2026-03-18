@@ -12,8 +12,8 @@ import { createServer, request as httpRequest, Agent as HttpAgent } from "node:h
 import { request as httpsRequest, Agent as HttpsAgent } from "node:https";
 import { unlinkSync } from "node:fs";
 
-const httpsAgent = new HttpsAgent({ keepAlive: true });
-const httpAgent = new HttpAgent({ keepAlive: true });
+const httpsAgent = new HttpsAgent({ keepAlive: true, keepAliveMsecs: 60_000 });
+const httpAgent = new HttpAgent({ keepAlive: true, keepAliveMsecs: 60_000 });
 
 const socketPath = process.argv[2];
 const upstreams = JSON.parse(process.argv[3]);
@@ -50,7 +50,8 @@ function forwardToUpstream(upstream, path, req, res) {
     },
     (proxyRes) => {
       const elapsed = Date.now() - startTime;
-      log(`[proxy] ${method} ${upstream.domain}${path} → ${proxyRes.statusCode} (${elapsed}ms)`);
+      const connType = proxyReq.reusedSocket ? "reused" : "new";
+      log(`[proxy] ${method} ${upstream.domain}${path} → ${proxyRes.statusCode} (${elapsed}ms, ${connType})`);
       res.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
       proxyRes.pipe(res);
     },
