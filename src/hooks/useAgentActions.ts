@@ -328,12 +328,22 @@ export function useAgentActions({
     }
 
     if (agent.status === "running") {
+      const prevIdle = agent.idle;
+      const prevLastActivity = agent.lastActivity;
       const lines = await captureTmuxPane(sessionName);
       if (lines) {
-        paneStateRef.current.set(agent.taskId, seedIdleState(captureSnapshot(lines)));
+        const snap = captureSnapshot(lines);
+        // If already idle before attach, seed at threshold so the poll loop
+        // doesn't need to re-accumulate idle counts. Otherwise reset to zero
+        // so a non-idle agent doesn't flip to idle just because we attached.
+        paneStateRef.current.set(
+          agent.taskId,
+          prevIdle ? seedIdleState(snap) : { snapshot: snap, unchangedCount: 0 },
+        );
       }
-      agent.idle = true;
-      agent.lastActivity = t("activity_idle_attach");
+      // Restore pre-attach state so the spinner/wave emoji stays consistent
+      agent.idle = prevIdle;
+      agent.lastActivity = prevLastActivity;
       setAgents((prev) => [...prev]);
     }
   }, [setSuspended]);
