@@ -159,6 +159,25 @@ describe("availableActions", () => {
     expect(actions).toContain("toggle_logs");
     expect(actions).not.toContain("attach");
   });
+
+  test("interrupted state with branch allows create_pr", () => {
+    const actions = availableActions(baseCtx({
+      status: "interrupted",
+      hasFinalBranch: true,
+      hasPrUrl: false,
+    }));
+    expect(actions).toContain("create_pr");
+  });
+
+  test("interrupted state with existing open PR does not allow create_pr", () => {
+    const actions = availableActions(baseCtx({
+      status: "interrupted",
+      hasFinalBranch: true,
+      hasPrUrl: true,
+      prState: "open",
+    }));
+    expect(actions).not.toContain("create_pr");
+  });
   test("idle running state has create_pr and retry available", () => {
     const actions = availableActions(baseCtx({
       status: "running",

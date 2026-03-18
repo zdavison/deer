@@ -80,7 +80,7 @@ const ACTIONS_BY_STATE: Record<AgentStatus, AgentAction[]> = {
   teardown:    ["open_shell", "delete", "toggle_logs"],
   failed:      ["retry", "open_shell", "delete", "toggle_logs"],
   cancelled:   ["retry", "open_shell", "delete", "toggle_logs"],
-  interrupted: ["retry", "open_shell", "delete", "toggle_logs"],
+  interrupted: ["create_pr", "retry", "open_shell", "delete", "toggle_logs"],
   pr_failed:   ["attach", "create_pr", "open_shell", "delete", "toggle_logs", "retry"],
 };
 
