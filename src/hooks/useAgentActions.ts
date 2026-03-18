@@ -166,6 +166,10 @@ export function useAgentActions({
 
     setAgents((prev) => [...prev, agent]);
 
+    // Register as runtime task immediately so reconcile() doesn't mark it as
+    // interrupted while startAgent() is still creating the tmux session.
+    runtimeTaskIdsRef.current.add(taskId);
+
     try {
       // Phase 1: Start the sandboxed agent
       appendLog(agent, continueSession ? t("log_setup_resuming") : t("log_setup_creating"));
@@ -210,7 +214,6 @@ export function useAgentActions({
       }, 1000);
 
       runtimeRef.current.set(taskId, { abortController, timer });
-      runtimeTaskIdsRef.current.add(taskId);
 
       agent.status = transition(agent.status, "SETUP_COMPLETE") ?? agent.status;
       appendLog(agent, t("log_running_started", { session: handle.sessionName }));
