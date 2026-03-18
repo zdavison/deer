@@ -13,6 +13,7 @@ import {
   releasePoller,
   releaseAllPollers,
   repoHash,
+  isProcessAlive,
 } from "../src/db";
 import { dataDir } from "../src/task";
 
@@ -280,5 +281,23 @@ describe("releaseAllPollers", () => {
     expect(getTask("deer_rap1")!.poller_pid).toBeNull();
     expect(getTask("deer_rap2")!.poller_pid).toBeNull();
     expect(getTask("deer_rap3")!.poller_pid).toBe(1); // untouched
+  });
+});
+
+describe("isProcessAlive", () => {
+  test("returns true for the current process", () => {
+    expect(isProcessAlive(process.pid)).toBe(true);
+  });
+
+  test("returns false for a dead PID", () => {
+    expect(isProcessAlive(99999999)).toBe(false);
+  });
+
+  test("returns false for pid 0", () => {
+    expect(isProcessAlive(0)).toBe(false);
+  });
+
+  test("returns false for negative pid", () => {
+    expect(isProcessAlive(-1)).toBe(false);
   });
 });

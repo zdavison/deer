@@ -1,6 +1,7 @@
 node_modules/
 dist/
 *.tsbuildinfo
+.bun-install-cache/
 
 # Jekyll build output
 _site/

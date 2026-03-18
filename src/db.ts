@@ -100,7 +100,7 @@ export function repoHash(repoPath: string): string {
 /**
  * Returns true if the process with the given PID is still running.
  */
-function isProcessAlive(pid: number): boolean {
+export function isProcessAlive(pid: number): boolean {
   if (pid <= 0) return false;
   try {
     process.kill(pid, 0);

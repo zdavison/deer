@@ -523,6 +523,14 @@ export function useAgentActions({
       return;
     }
 
+    // Seed initial logs from tmux scrollback so history is visible after restart
+    const scrollback = await captureTmuxPane(sessionName, true);
+    if (scrollback) {
+      for (const line of scrollback.map(stripAnsi).map((l) => l.trim()).filter((l) => l.startsWith("\u25CF"))) {
+        appendLog(agent, `[tmux] ${line}`);
+      }
+    }
+
     agent.status = "running";
     const abortController = new AbortController();
     const timer = setInterval(() => {

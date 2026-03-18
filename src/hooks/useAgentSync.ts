@@ -6,7 +6,7 @@ import { detectRepo } from "../git/detect";
 import type { DeerConfig } from "../types";
 import { isTmuxSessionDead, captureTmuxPane } from "../sandbox/index";
 import { type AgentState, agentFromDbRow } from "../agent-state";
-import { getTasksByRepo, getAllTasks, updateTask, type TaskRow } from "../db";
+import { getTasksByRepo, getAllTasks, updateTask, isProcessAlive, type TaskRow } from "../db";
 import { DB_RECONCILE_INTERVAL_MS } from "../constants";
 import { stripAnsi, truncate } from "../dashboard-utils";
 
@@ -61,8 +61,8 @@ export function useAgentSync(cwd: string, configRef: MutableRefObject<DeerConfig
         const tmuxAlive = !(await isTmuxSessionDead(sessionName));
 
         if (tmuxAlive) {
-          // If no instance is polling this task, flag it for resume
-          if (row.poller_pid === null || row.poller_pid === 0) {
+          // If no instance is polling this task (or the previous poller has died), flag it for resume
+          if (row.poller_pid === null || row.poller_pid === 0 || !isProcessAlive(row.poller_pid)) {
             if (!liveSessionIdsRef.current.has(row.task_id)) {
               liveSessionIdsRef.current.add(row.task_id);
             }
