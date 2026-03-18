@@ -84,6 +84,9 @@ interface PRMetadata {
   body: string;
 }
 
+/** Placeholder commit message used while PR metadata is being generated. */
+const PENDING_PR_METADATA_MSG = "deer: pending PR metadata";
+
 /** Candidate paths to check for a PR template, in priority order. */
 const PR_TEMPLATE_PATHS = [
   ".github/PULL_REQUEST_TEMPLATE.md",
@@ -271,7 +274,7 @@ export async function createPullRequest(options: CreatePROptions): Promise<Creat
   // PR metadata generation. We commit with a temporary message, then amend with
   // the real title once Claude generates the PR metadata.
   log(`[pr] Staging and committing changes...`);
-  const hadUncommitted = await stageAndCommit(worktreePath, "deer: pending PR metadata");
+  const hadUncommitted = await stageAndCommit(worktreePath, PENDING_PR_METADATA_MSG);
 
   // Generate PR metadata using Claude (diff now includes all committed changes)
   log(`[pr] Finding PR template...`);
@@ -282,8 +285,12 @@ export async function createPullRequest(options: CreatePROptions): Promise<Creat
   const metadata = await generatePRMetadata(worktreePath, baseBranch, prompt, prTemplate, onLog);
   log(`[pr] Metadata: branch=${metadata.branchName} title=${metadata.title}`);
 
-  // Amend the temporary commit with the real PR title (only if we created one)
-  if (hadUncommitted) {
+  // Amend the placeholder commit with the real PR title. Also amend if HEAD
+  // already has the placeholder message from a previously interrupted attempt
+  // (stageAndCommit would have found nothing to commit in that case).
+  const headMsgResult = await Bun.$`git -C ${worktreePath} log -1 --format=%s`.quiet().nothrow();
+  const headMsg = headMsgResult.stdout.toString().trim();
+  if (hadUncommitted || headMsg === PENDING_PR_METADATA_MSG) {
     log(`[pr] Updating commit message...`);
     await Bun.$`git -C ${worktreePath} commit --amend -m ${metadata.title}`.quiet();
   }
@@ -357,7 +364,7 @@ export async function updatePullRequest(options: UpdatePROptions): Promise<void>
 
   // Stage and commit changes so the diff used for metadata generation is complete.
   log(`[pr] Staging and committing changes...`);
-  const hadUncommitted = await stageAndCommit(worktreePath, "deer: pending PR metadata");
+  const hadUncommitted = await stageAndCommit(worktreePath, PENDING_PR_METADATA_MSG);
 
   // Regenerate PR metadata from the updated diff
   log(`[pr] Finding PR template...`);
@@ -368,10 +375,13 @@ export async function updatePullRequest(options: UpdatePROptions): Promise<void>
   const metadata = await generatePRMetadata(worktreePath, baseBranch, prompt, prTemplate, onLog);
   log(`[pr] Metadata: title=${metadata.title}`);
 
-  // Amend the temporary commit with the real PR title (only if we created one)
-  if (hadUncommitted) {
+  // Amend the placeholder commit with the real PR title. Also amend if HEAD
+  // already has the placeholder message from a previously interrupted attempt.
+  const headMsgResult = await Bun.$`git -C ${worktreePath} log -1 --format=%s`.quiet().nothrow();
+  const headMsg = headMsgResult.stdout.toString().trim();
+  if (hadUncommitted || headMsg === PENDING_PR_METADATA_MSG) {
     log(`[pr] Updating commit message...`);
-    await Bun.$`git -C ${worktreePath} commit --amend -m ${metadata.title}`.quiet().nothrow();
+    await Bun.$`git -C ${worktreePath} commit --amend -m ${metadata.title}`.quiet();
   }
 
   log(`[pr] Pushing branch ${finalBranch}...`);
