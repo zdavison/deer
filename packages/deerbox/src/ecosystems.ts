@@ -83,11 +83,31 @@ const goPlugin: EcosystemPlugin = {
   ],
 };
 
+const bunPlugin: EcosystemPlugin = {
+  name: "bun",
+  detect: async (repoPath) => {
+    const [hasLockb, hasLock] = await Promise.all([
+      pathExists(join(repoPath, "bun.lockb")),
+      pathExists(join(repoPath, "bun.lock")),
+    ]);
+    return hasLockb || hasLock;
+  },
+  strategies: [
+    // Redirect bun's package cache to a writable dir inside the worktree.
+    // The default ~/.bun/install/cache is read-only in the sandbox.
+    { type: "env", vars: { BUN_INSTALL_CACHE_DIR: ".bun-install-cache" } },
+    // Prepopulate node_modules from the host repo to avoid network installs.
+    { type: "prepopulate", source: "node_modules", lockfile: "bun.lockb" },
+    { type: "prepopulate", source: "node_modules", lockfile: "bun.lock" },
+  ],
+};
+
 export const BUILTIN_PLUGINS: EcosystemPlugin[] = [
   uvPlugin,
   pnpmPlugin,
   npmPlugin,
   goPlugin,
+  bunPlugin,
 ];
 
 // ── Core ──────────────────────────────────────────────────────────────────────

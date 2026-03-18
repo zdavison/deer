@@ -110,6 +110,27 @@ describe("srt: write isolation", () => {
   });
 });
 
+// ── HOME config files that must be readable ──────────────────────────
+
+describe("srt: required HOME config files not in denyRead", () => {
+  test("~/.mcp.json is not in the sandbox denyRead list", async () => {
+    const home = process.env.HOME!;
+    const dir = await makeTmpDir();
+    const runtime = createSrtRuntime();
+    cleanups.push(await runtime.prepare!({ worktreePath: dir, allowlist: [] }));
+
+    // srt writes its settings to a sibling of the worktree dir
+    const settingsPath = join(dir, "..", "srt-settings.json");
+    const settingsText = await readFile(settingsPath, "utf-8");
+    const settings = JSON.parse(settingsText) as { filesystem: { denyRead: string[] } };
+
+    const deniedPaths: string[] = settings.filesystem.denyRead;
+    const mcpPath = join(home, ".mcp.json");
+
+    expect(deniedPaths).not.toContain(mcpPath);
+  });
+});
+
 // ── Sensitive file read protection ───────────────────────────────────
 
 describe("srt: sensitive file exfiltration prevention", () => {

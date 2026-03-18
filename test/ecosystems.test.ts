@@ -53,6 +53,20 @@ describe("ecosystems", () => {
       await writeFile(join(repoPath, "go.mod"), "");
       expect(await goPlugin.detect(repoPath)).toBe(true);
     });
+
+    test("bunPlugin detects bun.lockb", async () => {
+      const bunPlugin = BUILTIN_PLUGINS.find((p) => p.name === "bun")!;
+      expect(await bunPlugin.detect(repoPath)).toBe(false);
+      await writeFile(join(repoPath, "bun.lockb"), "");
+      expect(await bunPlugin.detect(repoPath)).toBe(true);
+    });
+
+    test("bunPlugin detects bun.lock", async () => {
+      const bunPlugin = BUILTIN_PLUGINS.find((p) => p.name === "bun")!;
+      expect(await bunPlugin.detect(repoPath)).toBe(false);
+      await writeFile(join(repoPath, "bun.lock"), "");
+      expect(await bunPlugin.detect(repoPath)).toBe(true);
+    });
   });
 
   describe("env strategy", () => {
@@ -187,6 +201,38 @@ describe("ecosystems", () => {
 
       expect(await Bun.file(join(worktreePath, ".venv", "existing.txt")).exists()).toBe(true);
       expect(await Bun.file(join(worktreePath, ".venv", "pyvenv.cfg")).exists()).toBe(false);
+    });
+  });
+
+  describe("bun ecosystem", () => {
+    test("sets BUN_INSTALL_CACHE_DIR inside worktree", async () => {
+      await writeFile(join(repoPath, "bun.lockb"), "");
+      const result = await applyEcosystems(repoPath, worktreePath);
+      expect(result.env.BUN_INSTALL_CACHE_DIR).toBe(join(worktreePath, ".bun-install-cache"));
+    });
+
+    test("prepopulates node_modules when bun.lockb matches", async () => {
+      const lockContent = "bun lock content";
+      await writeFile(join(repoPath, "bun.lockb"), lockContent);
+      await writeFile(join(worktreePath, "bun.lockb"), lockContent);
+      await mkdir(join(repoPath, "node_modules", "pkg"), { recursive: true });
+      await writeFile(join(repoPath, "node_modules", "pkg", "index.js"), "module.exports = {}");
+
+      await applyEcosystems(repoPath, worktreePath);
+
+      expect(await Bun.file(join(worktreePath, "node_modules", "pkg", "index.js")).exists()).toBe(true);
+    });
+
+    test("prepopulates node_modules when bun.lock matches", async () => {
+      const lockContent = "bun text lock content";
+      await writeFile(join(repoPath, "bun.lock"), lockContent);
+      await writeFile(join(worktreePath, "bun.lock"), lockContent);
+      await mkdir(join(repoPath, "node_modules", "pkg"), { recursive: true });
+      await writeFile(join(repoPath, "node_modules", "pkg", "index.js"), "module.exports = {}");
+
+      await applyEcosystems(repoPath, worktreePath);
+
+      expect(await Bun.file(join(worktreePath, "node_modules", "pkg", "index.js")).exists()).toBe(true);
     });
   });
 

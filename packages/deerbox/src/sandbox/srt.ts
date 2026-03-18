@@ -63,7 +63,7 @@ function buildHomeDenyList(requiredPaths: string[]): string[] {
   try {
     const entries = readdirSync(HOME);
     return entries
-      .filter((name) => !name.startsWith(".claude") && !requiredRoots.has(name))
+      .filter((name) => !name.startsWith(".claude") && name !== ".mcp.json" && !requiredRoots.has(name))
       .map((name) => join(HOME, name));
   } catch {
     // Fallback to known sensitive paths if HOME is unreadable
