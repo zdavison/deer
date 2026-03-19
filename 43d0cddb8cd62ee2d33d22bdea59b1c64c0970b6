@@ -1,0 +1,33 @@
+src/cli.tsx
+  ae6ec4124ba28b96 38,114
+packages/deerbox/src/cli.ts
+  ae6ec4124ba28b96 25,364-366
+packages/shared/src/updater.ts
+  ae6ec4124ba28b96 1-121
+.github/workflows/release.yml
+  ae6ec4124ba28b96 26-34,45-48,56-58
+src/updater.ts
+  ae6ec4124ba28b96 1,4,6-8
+packages/shared/src/index.ts
+  ae6ec4124ba28b96 16-19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.15",
+  "base_commit_sha": "43d0cddb8cd62ee2d33d22bdea59b1c64c0970b6",
+  "prompts": {
+    "ae6ec4124ba28b96": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "28184ee0-294f-4fff-bfa6-076c95cc4756",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "deer-agent <deer@noreply>",
+      "messages": [],
+      "total_additions": 166,
+      "total_deletions": 121,
+      "accepted_lines": 152,
+      "overriden_lines": 0
+    }
+  }
+}
