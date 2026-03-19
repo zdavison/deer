@@ -55,6 +55,29 @@ describe("sandbox integration", () => {
     return `deer-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
+  /** Poll until the tmux pane is dead (command exited), up to a timeout. */
+  async function waitForPaneDead(name: string, timeoutMs = 5000): Promise<void> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      if (await isTmuxSessionDead(name)) return;
+      await Bun.sleep(100);
+    }
+    throw new Error(`Pane ${name} did not die within ${timeoutMs}ms`);
+  }
+
+  /** Poll until a file exists, up to a timeout. */
+  async function waitForFile(path: string, timeoutMs = 5000): Promise<string> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      try {
+        return await readFile(path, "utf-8");
+      } catch {
+        await Bun.sleep(100);
+      }
+    }
+    return await readFile(path, "utf-8"); // final attempt — throws if still missing
+  }
+
   test("launches a sandboxed command in tmux", async () => {
     const dir = await makeTmpDir();
     const name = sessionName();
@@ -64,9 +87,8 @@ describe("sandbox integration", () => {
     sessions.push(session);
 
     expect(session.sessionName).toBe(name);
-    await Bun.sleep(300);
 
-    const content = await readFile(join(dir, "result.txt"), "utf-8");
+    const content = await waitForFile(join(dir, "result.txt"));
     expect(content.trim()).toBe("sandbox works");
   });
 
@@ -91,7 +113,7 @@ describe("sandbox integration", () => {
     const session = await launchSandbox({ sessionName: name, worktreePath: dir, command });
     sessions.push(session);
 
-    await Bun.sleep(500);
+    await waitForPaneDead(name);
     const dead = await isTmuxSessionDead(name);
     expect(dead).toBe(true);
   });
@@ -109,7 +131,7 @@ describe("sandbox integration", () => {
     const session = await launchSandbox({ sessionName: name, worktreePath: dir, command });
     sessions.push(session);
 
-    await Bun.sleep(300);
+    await waitForPaneDead(name);
     const lines = await captureTmuxPane(name, true);
     expect(lines).not.toBeNull();
     const joined = lines!.join("\n");
@@ -142,8 +164,7 @@ describe("sandbox integration", () => {
     const session = await launchSandbox({ sessionName: name, worktreePath: dir, command });
     sessions.push(session);
 
-    await Bun.sleep(300);
-    const content = await readFile(join(dir, "sandboxed.txt"), "utf-8");
+    const content = await waitForFile(join(dir, "sandboxed.txt"));
     expect(content.trim()).toBe("inside");
   });
 
@@ -159,8 +180,7 @@ describe("sandbox integration", () => {
     const session = await launchSandbox({ sessionName: name, worktreePath: dir, command });
     sessions.push(session);
 
-    await Bun.sleep(300);
-    const content = await readFile(join(dir, "env-result.txt"), "utf-8");
+    const content = await waitForFile(join(dir, "env-result.txt"));
     expect(content.trim()).toBe("it_works");
   });
 
@@ -179,8 +199,7 @@ describe("sandbox integration", () => {
     const session = await launchSandbox({ sessionName: name, worktreePath: dir, command });
     sessions.push(session);
 
-    await Bun.sleep(4000);
-    const content = await readFile(join(dir, "direct.txt"), "utf-8");
+    const content = await waitForFile(join(dir, "direct.txt"), 10000);
     expect(content.trim()).toBe("BLOCKED");
   }, 15000);
 });

@@ -19,7 +19,7 @@ import type { DeerConfig, PreflightResult, PrepareResult } from "./types";
 function deerboxBin(): string[] {
   const { accessSync, constants } = require("node:fs") as typeof import("node:fs");
 
-  // 1. Sibling binary (production)
+  // 1. Sibling binary (production: deer and deerbox compiled to same dir)
   const selfDir = dirname(process.argv[0]);
   const sibling = join(selfDir, "deerbox");
   try {
@@ -27,18 +27,19 @@ function deerboxBin(): string[] {
     return [sibling];
   } catch { /* not found */ }
 
-  // 2. Workspace source (dev)
-  const workspaceScript = join(selfDir, "..", "packages", "deerbox", "src", "cli.ts");
+  // 2. Workspace source relative to this module (dev)
+  const moduleDir = typeof import.meta.dir === "string" ? import.meta.dir : selfDir;
+  const workspaceScript = join(moduleDir, "..", "packages", "deerbox", "src", "cli.ts");
   try {
     accessSync(workspaceScript);
-    return ["bun", workspaceScript];
+    return [process.execPath, workspaceScript];
   } catch { /* not found */ }
 
   // 3. Try relative to cwd (tests)
   const cwdScript = join(process.cwd(), "packages", "deerbox", "src", "cli.ts");
   try {
     accessSync(cwdScript);
-    return ["bun", cwdScript];
+    return [process.execPath, cwdScript];
   } catch { /* not found */ }
 
   // 4. Fall back to PATH

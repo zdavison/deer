@@ -116,7 +116,9 @@ export default function Dashboard({ cwd, mockAgents }: { cwd: string; mockAgents
   // ── Load config + preflight + start config guard ───────────────────
 
   useEffect(() => {
-    if (!mockAgents) deerboxPreflight().then(setPreflight);
+    if (!mockAgents) deerboxPreflight().then(setPreflight).catch(() => {
+      setPreflight({ ok: false, errors: [t("input_preflight_failed")], credentialType: "none" });
+    });
     deerboxConfig(cwd).then((cfg) => {
       configRef.current = cfg;
       // Re-run reconcile immediately so proxies are restored for any
