@@ -119,12 +119,14 @@ export const BUILTIN_PLUGINS: EcosystemPlugin[] = [
  * @param worktreePath - Path to the agent's git worktree
  * @param disabledEcosystems - Plugin names to skip
  * @param plugins - Override the plugin list (defaults to BUILTIN_PLUGINS)
+ * @param onStatus - Optional callback for status/progress messages
  */
 export async function applyEcosystems(
   repoPath: string,
   worktreePath: string,
   disabledEcosystems?: string[],
   plugins?: EcosystemPlugin[],
+  onStatus?: (message: string) => void,
 ): Promise<EcosystemResult> {
   const HOME = process.env.HOME ?? "";
   const effectivePlugins = (plugins ?? BUILTIN_PLUGINS).filter(
@@ -133,6 +135,10 @@ export async function applyEcosystems(
 
   const detected = await Promise.all(effectivePlugins.map((p) => p.detect(repoPath)));
   const activePlugins = effectivePlugins.filter((_, i) => detected[i]);
+
+  if (activePlugins.length > 0) {
+    onStatus?.(`Preparing ecosystems: ${activePlugins.map((p) => p.name).join(", ")}`);
+  }
 
   const extraReadPathsSet = new Set<string>();
   const env: Record<string, string> = {};
@@ -177,6 +183,8 @@ export async function applyEcosystems(
           ]);
 
           if (repoContent !== worktreeContent) continue;
+
+          onStatus?.(`[${plugin.name}] Prepopulating ${strategy.source}...`);
 
           const cpCmd = process.platform === "darwin"
             ? Bun.$`cp -cR ${repoSource} ${worktreeDest}`.quiet()
