@@ -1,5 +1,5 @@
 import { join, dirname } from "node:path";
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import type { SandboxRuntime, SandboxRuntimeOptions, SandboxCleanup } from "./runtime";
 import { HOME } from "../constants";
@@ -84,6 +84,26 @@ function buildHomeDenyList(requiredPaths: string[]): string[] {
   }
 }
 
+/**
+ * Resolve the git worktree's gitdir from its .git file.
+ *
+ * In git worktrees, the worktree directory contains a .git FILE (not a
+ * directory) with a `gitdir: <path>` line pointing to the real metadata
+ * directory inside the main repo's .git/worktrees/<name>/. The sandbox must
+ * allow writes to this path so git operations (add, commit, etc.) succeed.
+ *
+ * Returns null if the .git file is absent or not a worktree .git file.
+ */
+function resolveWorktreeGitDir(worktreePath: string): string | null {
+  try {
+    const content = readFileSync(join(worktreePath, ".git"), "utf-8").trim();
+    const match = content.match(/^gitdir:\s*(.+)$/m);
+    if (match) return match[1].trim();
+  } catch {
+    // No .git file or unreadable — not a worktree
+  }
+  return null;
+}
 
 /**
  * Build an SRT settings JSON object from deer's sandbox options.
@@ -103,6 +123,21 @@ function buildSrtSettings(options: SandboxRuntimeOptions, srtBinDir: string | nu
     };
     // The Unix socket must be accessible from inside the sandbox
     network.allowUnixSockets = [dirname(options.mitmProxy.socketPath)];
+  }
+
+  // Resolve writable git paths: the worktree's own metadata dir, plus the
+  // shared object store and refs that git add/commit need to write to.
+  // Scoped tightly to avoid exposing .git/config, .git/hooks, or other
+  // worktrees' metadata.
+  const worktreeGitDir = resolveWorktreeGitDir(options.worktreePath);
+  const gitWritePaths: string[] = [];
+  if (worktreeGitDir) gitWritePaths.push(worktreeGitDir);
+  if (options.repoGitDir) {
+    gitWritePaths.push(
+      join(options.repoGitDir, "objects"),
+      join(options.repoGitDir, "refs"),
+      join(options.repoGitDir, "logs"),
+    );
   }
 
   // Collect paths that must stay readable: worktree, repo .git dir,
@@ -125,10 +160,9 @@ function buildSrtSettings(options: SandboxRuntimeOptions, srtBinDir: string | nu
       denyRead,
       allowWrite: [
         options.worktreePath,
-        // Git worktrees share objects, refs, and packed-refs with the
-        // main repo — the entire .git/ directory must be writable for
-        // git add (objects), commit (refs), and worktree metadata.
-        ...(options.repoGitDir ? [options.repoGitDir] : []),
+        // Per-worktree gitdir (.git/worktrees/<name>/) and shared git
+        // subdirectories needed for git add (objects) and commit (refs).
+        ...gitWritePaths,
         claudeDir,
         join(HOME, ".claude.json"),
         "/tmp",
