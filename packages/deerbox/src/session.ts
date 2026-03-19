@@ -132,6 +132,8 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
       repoPath,
       worktreePath,
       config.sandbox.ecosystems?.disabled,
+      undefined,
+      onStatus,
     );
   } else {
     onStatus?.("Creating worktree...");
@@ -148,6 +150,8 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
       repoPath,
       worktreePath,
       config.sandbox.ecosystems?.disabled,
+      undefined,
+      onStatus,
     );
   }
 
