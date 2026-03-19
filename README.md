@@ -67,12 +67,42 @@ deer
 ```
 
 If you just want the sandboxing part of `deer`, without the TUI, you can use `deerbox`:
+
 ```sh
 cd your-project
-deerbox
+deerbox "fix the login bug"
 ```
 
-Note that when you exit a `deerbox` instance, by default its worktree will be cleaned up, so you should ask `claude` itself to open a PR from within the `deerbox` instance.
+After Claude exits, `deerbox` prompts you to create a PR, update an existing one, open a shell in the worktree, or discard. By default the worktree is cleaned up when you're done.
+
+### deerbox options
+
+| Flag                        | Short | Description                                          |
+|-----------------------------|-------|------------------------------------------------------|
+| `--model <model>`           | `-m`  | Claude model to use                                  |
+| `--base-branch <branch>`    | `-b`  | Branch to base the worktree on                       |
+| `--from <branch-or-PR>`     | `-f`  | Continue work on an existing branch or PR            |
+| `--keep`                    | `-k`  | Keep the worktree after Claude exits                 |
+
+### `--from`: continuing work on an existing branch or PR
+
+`--from` lets you run `deerbox` against a branch that already exists, rather than starting fresh from the base branch. This is useful for iterating on a PR — for example, addressing review comments.
+
+```sh
+# Continue work on an existing branch
+deerbox --from feature/my-branch "add unit tests"
+
+# Address review comments on a PR (by number or URL)
+deerbox --from 42 "address the review comments"
+deerbox --from https://github.com/owner/repo/pull/42 "address the review comments"
+```
+
+`--from` accepts:
+- A **branch name** — checks out that branch; if an open PR exists for it, `deerbox` will offer to update it when done
+- A **PR number** — fetches the PR's head branch and base branch automatically
+- A **GitHub PR URL** — same as a PR number
+
+When `--from` is used, only commits made during the session are considered when detecting changes and generating PR metadata.
 
 ---
 
