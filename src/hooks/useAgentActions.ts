@@ -518,9 +518,14 @@ export function useAgentActions({
     if (runtimeRef.current.has(agent.taskId)) return;
     if (!claimPoller(agent.taskId, process.pid)) return;
 
+    // Register immediately so reconcile() doesn't replace this agent with a
+    // fresh DB snapshot (empty logs) while we await the scrollback capture.
+    runtimeTaskIdsRef.current.add(agent.taskId);
+
     const sessionName = `deer-${agent.taskId}`;
     const dead = await isTmuxSessionDead(sessionName);
     if (dead) {
+      runtimeTaskIdsRef.current.delete(agent.taskId);
       releasePoller(agent.taskId, process.pid);
       updateTask(agent.taskId, {
         status: "interrupted",
@@ -549,7 +554,6 @@ export function useAgentActions({
     }, 1000);
 
     runtimeRef.current.set(agent.taskId, { abortController, timer });
-    runtimeTaskIdsRef.current.add(agent.taskId);
     updateTask(agent.taskId, { status: "running", pollerPid: process.pid });
     appendLog(agent, t("log_deer_resuming"));
     setAgents((prev) => [...prev]);
