@@ -1,5 +1,5 @@
 import { test, expect, describe, beforeEach } from "bun:test";
-import { runPostSession, parseChoice } from "deerbox";
+import { runPostSession, parseChoice, renderPromptMenu } from "deerbox";
 import type { PostSessionDeps, PostSessionContext, PostSessionChoice } from "deerbox";
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -20,6 +20,7 @@ interface MockTracker {
   destroyCalled: boolean;
   openShellPath: string | null;
   createPRCalled: boolean;
+  updatePRCalled: boolean;
   logs: string[];
 }
 
@@ -28,12 +29,14 @@ function makeDeps(overrides: {
   choice?: PostSessionChoice;
   prUrl?: string;
   prError?: string;
+  updatePRError?: string;
 }): PostSessionDeps & { _tracker: MockTracker } {
   const tracker: MockTracker = {
     cleanupCalled: false,
     destroyCalled: false,
     openShellPath: null,
     createPRCalled: false,
+    updatePRCalled: false,
     logs: [],
   };
 
@@ -48,6 +51,10 @@ function makeDeps(overrides: {
         prUrl: overrides.prUrl ?? "https://github.com/org/repo/pull/42",
         finalBranch: "deer/fix-the-bug",
       };
+    },
+    updatePR: async () => {
+      tracker.updatePRCalled = true;
+      if (overrides.updatePRError) throw new Error(overrides.updatePRError);
     },
     openShell: async (path) => {
       tracker.openShellPath = path;
@@ -161,6 +168,33 @@ describe("runPostSession", () => {
     expect(deps._tracker.logs.some((l) => l.includes("discarded"))).toBe(true);
   });
 
+  test("updatePR receives correct context when fromPrUrl is set", async () => {
+    const fromPrUrl = "https://github.com/org/repo/pull/42";
+    let receivedOpts: Record<string, unknown> = {};
+    const deps = makeDeps({ hasChanges: true, choice: "p" });
+    deps.updatePR = async (opts) => {
+      receivedOpts = opts as unknown as Record<string, unknown>;
+    };
+
+    const ctx = makeCtx({
+      repoPath: "/my/repo",
+      worktreePath: "/my/worktree",
+      branch: "feature/auth-fix",
+      baseBranch: "main",
+      prompt: "add tests",
+      fromPrUrl,
+    });
+
+    await runPostSession(ctx, deps);
+
+    expect(receivedOpts.repoPath).toBe("/my/repo");
+    expect(receivedOpts.worktreePath).toBe("/my/worktree");
+    expect(receivedOpts.finalBranch).toBe("feature/auth-fix");
+    expect(receivedOpts.baseBranch).toBe("main");
+    expect(receivedOpts.prompt).toBe("add tests");
+    expect(receivedOpts.prUrl).toBe(fromPrUrl);
+  });
+
   test("PR creation receives correct context", async () => {
     let receivedOpts: Record<string, unknown> = {};
     const deps = makeDeps({ hasChanges: true, choice: "p" });
@@ -184,5 +218,66 @@ describe("runPostSession", () => {
     expect(receivedOpts.branch).toBe("deer/task-42");
     expect(receivedOpts.baseBranch).toBe("develop");
     expect(receivedOpts.prompt).toBe("add search");
+  });
+});
+
+// ── fromPrUrl (--from) ───────────────────────────────────────────────
+
+describe("runPostSession with fromPrUrl", () => {
+  test("choice p → calls updatePR instead of createPR", async () => {
+    const fromPrUrl = "https://github.com/org/repo/pull/42";
+    const deps = makeDeps({ hasChanges: true, choice: "p" });
+
+    const ctx = makeCtx({ fromPrUrl, branch: "feature/auth-fix" });
+    const outcome = await runPostSession(ctx, deps);
+
+    expect(outcome.action).toBe("pr_updated");
+    expect(deps._tracker.updatePRCalled).toBe(true);
+    expect(deps._tracker.createPRCalled).toBe(false);
+  });
+
+  test("choice p → destroys worktree on success", async () => {
+    const fromPrUrl = "https://github.com/org/repo/pull/42";
+    const deps = makeDeps({ hasChanges: true, choice: "p" });
+
+    const ctx = makeCtx({ fromPrUrl, branch: "feature/auth-fix" });
+    const outcome = await runPostSession(ctx, deps);
+
+    expect(outcome.action).toBe("pr_updated");
+    expect(deps._tracker.destroyCalled).toBe(true);
+    expect(deps._tracker.cleanupCalled).toBe(false);
+  });
+
+  test("choice p → update failure keeps worktree", async () => {
+    const fromPrUrl = "https://github.com/org/repo/pull/42";
+    const deps = makeDeps({ hasChanges: true, choice: "p", updatePRError: "push rejected" });
+
+    const ctx = makeCtx({ fromPrUrl, branch: "feature/auth-fix" });
+    const outcome = await runPostSession(ctx, deps);
+
+    expect(outcome.action).toBe("pr_failed");
+    expect(deps._tracker.cleanupCalled).toBe(true);
+    expect(deps._tracker.destroyCalled).toBe(false);
+    expect(deps._tracker.logs.some((l) => l.includes("push rejected"))).toBe(true);
+  });
+});
+
+// ── renderPromptMenu ─────────────────────────────────────────────────
+
+describe("renderPromptMenu", () => {
+  test("shows 'Create a pull request' without fromPrUrl", () => {
+    const menu = renderPromptMenu();
+    expect(menu).toContain("Create a pull request");
+  });
+
+  test("shows 'Update existing PR' with fromPrUrl", () => {
+    const menu = renderPromptMenu("https://github.com/org/repo/pull/42");
+    expect(menu).toContain("Update existing PR");
+    expect(menu).toContain("https://github.com/org/repo/pull/42");
+  });
+
+  test("does not show 'Create a pull request' when fromPrUrl is set", () => {
+    const menu = renderPromptMenu("https://github.com/org/repo/pull/42");
+    expect(menu).not.toContain("Create a pull request");
   });
 });

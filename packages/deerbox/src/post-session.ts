@@ -4,7 +4,7 @@
  * Extracted from cli.ts so it can be tested with injectable dependencies.
  */
 
-import type { CreatePRResult } from "./git/finalize";
+import type { CreatePRResult, UpdatePROptions } from "./git/finalize";
 
 // ── ANSI helpers ─────────────────────────────────────────────────────
 
@@ -22,6 +22,7 @@ export type PostSessionChoice = "p" | "k" | "s" | "d";
 export type PostSessionOutcome =
   | { action: "no_changes" }
   | { action: "pr_created"; prUrl: string }
+  | { action: "pr_updated"; prUrl: string }
   | { action: "pr_failed"; error: string }
   | { action: "keep"; worktreePath: string }
   | { action: "shell"; worktreePath: string }
@@ -41,6 +42,8 @@ export interface PostSessionDeps {
     prompt: string;
     onLog?: (msg: string) => void;
   }) => Promise<CreatePRResult>;
+  /** Update an existing pull request (called when ctx.fromPrUrl is set). */
+  updatePR?: (opts: UpdatePROptions) => Promise<void>;
   /** Open a shell in the worktree. Resolves when the shell exits. */
   openShell: (worktreePath: string) => Promise<void>;
   /** Stop the auth proxy (no worktree removal). */
@@ -57,16 +60,25 @@ export interface PostSessionContext {
   branch: string;
   baseBranch: string;
   prompt: string;
+  /**
+   * When set, the user started from an existing PR/branch. The 'p' menu
+   * option becomes "Update existing PR" and calls updatePR instead of createPR.
+   * @example "https://github.com/org/repo/pull/42"
+   */
+  fromPrUrl?: string;
 }
 
 // ── Prompt rendering ─────────────────────────────────────────────────
 
-export function renderPromptMenu(): string {
+export function renderPromptMenu(fromPrUrl?: string): string {
+  const prLine = fromPrUrl
+    ? `  ${green(bold("p"))}  ${green(`Update existing PR: ${fromPrUrl}`)}`
+    : `  ${green(bold("p"))}  ${green("Create a pull request")}`;
   return [
     "",
     bold("What would you like to do with this session's changes?"),
     "",
-    `  ${green(bold("p"))}  ${green("Create a pull request")}`,
+    prLine,
     `  ${cyan(bold("k"))}  ${cyan("Keep worktree")}  ${dim("(default)")}`,
     `  ${yellow(bold("s"))}  ${yellow("Open a shell in the worktree")}`,
     `  ${red(bold("d"))}  ${red("Discard")}`,
@@ -107,6 +119,30 @@ export async function runPostSession(
   const choice = await deps.promptChoice();
 
   if (choice === "p") {
+    if (ctx.fromPrUrl) {
+      deps.log("\nUpdating pull request...");
+      try {
+        await deps.updatePR?.({
+          repoPath: ctx.repoPath,
+          worktreePath: ctx.worktreePath,
+          finalBranch: ctx.branch,
+          baseBranch: ctx.baseBranch,
+          prompt: ctx.prompt,
+          prUrl: ctx.fromPrUrl,
+          onLog: (msg) => deps.log(`  ${msg}`),
+        });
+        deps.log(`\n${green("PR updated:")} ${ctx.fromPrUrl}`);
+        await deps.destroy();
+        return { action: "pr_updated", prUrl: ctx.fromPrUrl };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        deps.log(`\nPR update failed: ${message}`);
+        deps.log(`Worktree kept at: ${ctx.worktreePath}`);
+        await deps.cleanup();
+        return { action: "pr_failed", error: message };
+      }
+    }
+
     deps.log("\nCreating pull request...");
     try {
       const result = await deps.createPR({
@@ -153,8 +189,8 @@ export async function runPostSession(
 /**
  * Interactive prompt via readline. Reads one line from stdin.
  */
-export async function interactivePromptChoice(): Promise<PostSessionChoice> {
-  process.stderr.write(renderPromptMenu());
+export async function interactivePromptChoice(fromPrUrl?: string): Promise<PostSessionChoice> {
+  process.stderr.write(renderPromptMenu(fromPrUrl));
 
   const readline = await import("readline");
   return new Promise((resolve) => {

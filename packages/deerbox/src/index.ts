@@ -3,7 +3,7 @@ export { prepare, taskWorktreePath } from "./session";
 export type { PrepareOptions, PreparedSession } from "./session";
 
 // Startup
-export { detectRepo, createWorktree, removeWorktree, cleanupWorktree } from "./git/worktree";
+export { detectRepo, createWorktree, checkoutWorktree, removeWorktree, cleanupWorktree } from "./git/worktree";
 export type { RepoInfo, WorktreeInfo } from "./git/worktree";
 export { loadConfig, DEFAULT_CONFIG } from "./config";
 export type { DeerConfig, ProxyCredential } from "./config";

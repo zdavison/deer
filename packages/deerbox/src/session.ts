@@ -8,7 +8,7 @@
  */
 
 import { join, dirname, resolve } from "node:path";
-import { createWorktree, removeWorktree, cleanupWorktree } from "./git/worktree";
+import { createWorktree, checkoutWorktree, removeWorktree, cleanupWorktree } from "./git/worktree";
 import { generateTaskId, dataDir } from "./task";
 import { loadConfig, type DeerConfig } from "./config";
 import { resolveRuntime } from "./sandbox/resolve";
@@ -38,6 +38,13 @@ export interface PrepareOptions {
    * Pass this when you need to know the taskId before `prepare` resolves.
    */
   taskId?: string;
+  /**
+   * If provided, check out this existing branch into the worktree instead
+   * of creating a new `deer/<taskId>` branch. Used with `--from` to
+   * continue work on an existing branch or PR.
+   * @example "feature/auth-fix"
+   */
+  fromBranch?: string;
   /**
    * If provided, resume an existing session instead of creating a new
    * worktree. The worktree and branch are reused; `--continue` is passed
@@ -93,6 +100,7 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
     prompt,
     baseBranch,
     model = DEFAULT_MODEL,
+    fromBranch,
     continueSession,
     daemonize = false,
     onStatus,
@@ -111,6 +119,20 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
     worktreePath = continueSession.worktreePath;
     branch = continueSession.branch;
     onStatus?.("Resuming previous session...");
+  } else if (fromBranch) {
+    onStatus?.("Checking out branch...");
+    const worktree = await checkoutWorktree(repoPath, taskId, fromBranch);
+    worktreePath = worktree.worktreePath;
+    branch = worktree.branch;
+
+    await Bun.$`git -C ${worktreePath} config user.name "deer-agent"`.quiet();
+    await Bun.$`git -C ${worktreePath} config user.email "deer@noreply"`.quiet();
+
+    ecosystemResult = await applyEcosystems(
+      repoPath,
+      worktreePath,
+      config.sandbox.ecosystems?.disabled,
+    );
   } else {
     onStatus?.("Creating worktree...");
 
@@ -256,7 +278,9 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
     },
     async destroy() {
       await authProxy?.close();
-      await cleanupWorktree(repoPath, worktreePath, branch);
+      // Only delete deer-managed branches; preserve user branches from --from
+      const branchToDelete = branch.startsWith("deer/") ? branch : undefined;
+      await cleanupWorktree(repoPath, worktreePath, branchToDelete);
     },
   };
 }

@@ -80,6 +80,37 @@ export async function createWorktree(
 }
 
 /**
+ * Create a git worktree for a task by checking out an existing branch.
+ *
+ * Unlike `createWorktree`, this does NOT create a new branch — it checks
+ * out the given branch as-is. Used with `--from` to continue work on an
+ * existing branch.
+ *
+ * Path: `~/.local/share/deer/tasks/<taskId>/worktree`
+ */
+export async function checkoutWorktree(
+  repoPath: string,
+  taskId: string,
+  branch: string,
+): Promise<WorktreeInfo> {
+  const worktreePath = join(dataDir(), "tasks", taskId, "worktree");
+
+  await mkdir(join(dataDir(), "tasks", taskId), { recursive: true });
+
+  // Fetch the branch from origin in case it only exists remotely
+  await Bun.$`git -C ${repoPath} fetch origin ${branch}:${branch}`.quiet().nothrow();
+
+  const result = await Bun.$`git -C ${repoPath} worktree add ${worktreePath} ${branch}`.quiet().nothrow();
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `Failed to checkout worktree for branch '${branch}': ${result.stderr.toString()}`,
+    );
+  }
+
+  return { repoPath, worktreePath, branch };
+}
+
+/**
  * Remove a worktree and its branch reference.
  */
 export async function removeWorktree(
