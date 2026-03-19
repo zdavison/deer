@@ -79,10 +79,6 @@ export function createAgentState(overrides: Partial<AgentState>): AgentState {
 
 // ── DB row → AgentState ──────────────────────────────────────────────
 
-// Statuses that represent a graceful terminal outcome.
-// Preserved as-is instead of being overridden with "interrupted".
-const TERMINAL_STATUSES = new Set<string>(["cancelled", "failed", "pr_failed"]);
-
 /**
  * Build an AgentState from a database row plus live tmux status.
  *
@@ -96,7 +92,7 @@ export function agentFromDbRow(row: TaskRow, tmuxAlive: boolean): AgentState {
 
   let status: AgentStatus;
   if ((dbStatus === "running" || dbStatus === "setup") && !tmuxAlive) {
-    status = TERMINAL_STATUSES.has(dbStatus) ? dbStatus : "interrupted";
+    status = "interrupted";
   } else {
     status = dbStatus;
   }

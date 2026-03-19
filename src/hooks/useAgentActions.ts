@@ -60,6 +60,63 @@ export function useAgentActions({
   /** Per-task pane snapshot state shared between the poll loop and attachToAgent */
   const paneStateRef = useRef(new Map<string, PaneState>());
 
+  // ── Helpers ──────────────────────────────────────────────────────
+
+  /** Clear runtime state for a task (timer, abort controller, pane state). */
+  function clearRuntime(taskId: string): void {
+    const runtime = runtimeRef.current.get(taskId);
+    if (runtime) {
+      clearInterval(runtime.timer);
+      runtimeRef.current.delete(taskId);
+    }
+    runtimeTaskIdsRef.current.delete(taskId);
+    paneStateRef.current.delete(taskId);
+  }
+
+  /** Flush terminal agent state to the DB and trigger a re-render. */
+  function finalizeAgentRun(agent: AgentState): void {
+    clearRuntime(agent.taskId);
+    if (!agent.deleted) {
+      updateTask(agent.taskId, {
+        status: agent.status,
+        finishedAt: Date.now(),
+        error: agent.error || null,
+        idle: agent.idle,
+        lastActivity: agent.lastActivity,
+        elapsed: agent.elapsed,
+        cost: agent.cost,
+        finalBranch: agent.result?.finalBranch ?? null,
+        prUrl: agent.result?.prUrl ?? null,
+      });
+      releasePoller(agent.taskId, process.pid);
+    }
+    setAgents((prev) => [...prev]);
+  }
+
+  /**
+   * Switch the user's terminal to a tmux session.
+   * - Inside tmux: use switch-client (no suspend needed)
+   * - Outside tmux: suspend the TUI, attach, then resume
+   */
+  async function switchToTmuxSession(sessionName: string): Promise<void> {
+    if (process.env.TMUX) {
+      const { spawnSync } = await import("node:child_process");
+      spawnSync("tmux", [
+        "bind-key", "d",
+        "if-shell", "-F", "#{m:deer-*,#{session_name}}",
+        "switch-client -l",
+        "detach-client",
+      ], { stdio: "inherit" });
+      spawnSync("tmux", ["switch-client", "-t", sessionName], { stdio: "inherit" });
+    } else {
+      await withSuspendedTerminal(setSuspended, async () => {
+        await Bun.sleep(50);
+        const { spawnSync } = await import("node:child_process");
+        spawnSync("tmux", ["attach", "-t", sessionName], { stdio: "inherit" });
+      });
+    }
+  }
+
   // ── Poll loop ────────────────────────────────────────────────────
 
   /** Poll tmux pane until the agent exits or is aborted. */
@@ -189,9 +246,6 @@ export function useAgentActions({
           agent.lastActivity = detail;
           setAgents((prev) => [...prev]);
         },
-        onProxyLog: (message) => {
-          appendLog(agent, message, true);
-        },
       });
 
       agent.worktreePath = handle.worktreePath;
@@ -237,29 +291,7 @@ export function useAgentActions({
         agent.lastActivity = truncate(agent.error, 120);
       }
     } finally {
-      const runtime = runtimeRef.current.get(taskId);
-      if (runtime) {
-        clearInterval(runtime.timer);
-        runtimeRef.current.delete(taskId);
-      }
-      runtimeTaskIdsRef.current.delete(taskId);
-      paneStateRef.current.delete(taskId);
-
-      if (!agent.deleted) {
-        updateTask(taskId, {
-          status: agent.status,
-          finishedAt: Date.now(),
-          error: agent.error || null,
-          idle: agent.idle,
-          lastActivity: agent.lastActivity,
-          elapsed: agent.elapsed,
-          cost: agent.cost,
-          finalBranch: agent.result?.finalBranch ?? null,
-          prUrl: agent.result?.prUrl ?? null,
-        });
-        releasePoller(taskId, process.pid);
-      }
-      setAgents((prev) => [...prev]);
+      finalizeAgentRun(agent);
     }
   }, [cwd, preflight]);
 
@@ -310,22 +342,7 @@ export function useAgentActions({
     if (!agent.taskId) return;
     const sessionName = `deer-${agent.taskId}`;
 
-    if (process.env.TMUX) {
-      const { spawnSync } = await import("node:child_process");
-      spawnSync("tmux", [
-        "bind-key", "d",
-        "if-shell", "-F", "#{m:deer-*,#{session_name}}",
-        "switch-client -l",
-        "detach-client",
-      ], { stdio: "inherit" });
-      spawnSync("tmux", ["switch-client", "-t", sessionName], { stdio: "inherit" });
-    } else {
-      await withSuspendedTerminal(setSuspended, async () => {
-        await Bun.sleep(50);
-        const { spawnSync } = await import("node:child_process");
-        spawnSync("tmux", ["attach", "-t", sessionName], { stdio: "inherit" });
-      });
-    }
+    await switchToTmuxSession(sessionName);
 
     if (agent.status === "running") {
       const prevIdle = agent.idle;
@@ -360,21 +377,7 @@ export function useAgentActions({
     spawnSync("tmux", ["new-session", "-d", "-s", sessionName, "-c", worktreePath, shell]);
     await applyTmuxStatusBar(sessionName);
 
-    if (process.env.TMUX) {
-      spawnSync("tmux", [
-        "bind-key", "d",
-        "if-shell", "-F", "#{m:deer-*,#{session_name}}",
-        "switch-client -l",
-        "detach-client",
-      ], { stdio: "inherit" });
-      spawnSync("tmux", ["switch-client", "-t", sessionName], { stdio: "inherit" });
-    } else {
-      await withSuspendedTerminal(setSuspended, async () => {
-        await Bun.sleep(50);
-        const { spawnSync } = await import("node:child_process");
-        spawnSync("tmux", ["attach", "-t", sessionName], { stdio: "inherit" });
-      });
-    }
+    await switchToTmuxSession(sessionName);
   }, [setSuspended]);
 
   // ── Create PR ─────────────────────────────────────────────────────
@@ -569,29 +572,7 @@ export function useAgentActions({
         agent.lastActivity = truncate(agent.error, 120);
       }
     } finally {
-      const runtime = runtimeRef.current.get(agent.taskId);
-      if (runtime) {
-        clearInterval(runtime.timer);
-        runtimeRef.current.delete(agent.taskId);
-      }
-      runtimeTaskIdsRef.current.delete(agent.taskId);
-      paneStateRef.current.delete(agent.taskId);
-
-      if (!agent.deleted) {
-        updateTask(agent.taskId, {
-          status: agent.status,
-          finishedAt: Date.now(),
-          error: agent.error || null,
-          idle: agent.idle,
-          lastActivity: agent.lastActivity,
-          elapsed: agent.elapsed,
-          cost: agent.cost,
-          finalBranch: agent.result?.finalBranch ?? null,
-          prUrl: agent.result?.prUrl ?? null,
-        });
-        releasePoller(agent.taskId, process.pid);
-      }
-      setAgents((prev) => [...prev]);
+      finalizeAgentRun(agent);
     }
   }, [cwd]);
 

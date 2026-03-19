@@ -34,7 +34,6 @@ export async function applyTmuxStatusBar(
   { remainOnExit = false }: { remainOnExit?: boolean } = {},
 ): Promise<void> {
   const settings: [string, string][] = [
-    ["remain-on-exit", "on"],
     ["mouse", "on"],
     ["status", "on"],
     ["status-position", "bottom"],

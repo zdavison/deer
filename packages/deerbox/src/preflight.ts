@@ -9,6 +9,16 @@ export interface PreflightResult {
   credentialType: "subscription" | "api-token" | "none";
 }
 
+/** Run a command and return an error string if it fails, or null on success. */
+async function checkCmd(cmd: string[], errorMsg: string): Promise<string | null> {
+  try {
+    const p = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
+    return (await p.exited) === 0 ? null : errorMsg;
+  } catch {
+    return errorMsg;
+  }
+}
+
 export async function runPreflight(): Promise<PreflightResult> {
   const errors: string[] = [];
 
@@ -31,44 +41,27 @@ export async function runPreflight(): Promise<PreflightResult> {
   }
 
   // Check platform-specific sandbox dependencies
-  const isMac = process.platform === "darwin";
-  if (isMac) {
-    try {
-      const p = Bun.spawn(["sandbox-exec", "-n", "no-network", "true"], { stdout: "pipe", stderr: "pipe" });
-      const code = await p.exited;
-      if (code !== 0) errors.push("sandbox-exec not working — ensure /usr/bin is in PATH");
-    } catch {
-      errors.push("sandbox-exec not available — required on macOS for srt sandboxing");
-    }
+  if (process.platform === "darwin") {
+    const err = await checkCmd(
+      ["sandbox-exec", "-n", "no-network", "true"],
+      "sandbox-exec not available — required on macOS for srt sandboxing",
+    );
+    if (err) errors.push(err);
   } else {
-    try {
-      const p = Bun.spawn(["bwrap", "--version"], { stdout: "pipe", stderr: "pipe" });
-      const code = await p.exited;
-      if (code !== 0) {
-        errors.push("bwrap not available — install bubblewrap (required by srt on Linux)");
-      }
-    } catch {
-      errors.push("bwrap not available — install bubblewrap (required by srt on Linux)");
-    }
+    const err = await checkCmd(
+      ["bwrap", "--version"],
+      "bwrap not available — install bubblewrap (required by srt on Linux)",
+    );
+    if (err) errors.push(err);
   }
 
   // Check claude
-  try {
-    const p = Bun.spawn(["claude", "--version"], { stdout: "pipe", stderr: "pipe" });
-    const code = await p.exited;
-    if (code !== 0) errors.push("claude CLI not available");
-  } catch {
-    errors.push("claude CLI not available");
-  }
+  const claudeErr = await checkCmd(["claude", "--version"], "claude CLI not available");
+  if (claudeErr) errors.push(claudeErr);
 
   // Check gh auth
-  try {
-    const p = Bun.spawn(["gh", "auth", "token"], { stdout: "pipe", stderr: "pipe" });
-    const code = await p.exited;
-    if (code !== 0) errors.push("gh auth not configured — run 'gh auth login'");
-  } catch {
-    errors.push("gh CLI not available");
-  }
+  const ghErr = await checkCmd(["gh", "auth", "token"], "gh auth not configured — run 'gh auth login'");
+  if (ghErr) errors.push(ghErr);
 
   // Check credentials — OAuth token preferred, API key accepted as fallback.
   const credentialType = await resolveCredentials();

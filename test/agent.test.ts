@@ -5,7 +5,7 @@ setDefaultTimeout(30_000);
 import { resolveProxyUpstreams, DEFAULT_CONFIG, createSrtRuntime } from "../packages/deerbox/src/index";
 import type { ProxyCredential } from "../packages/deerbox/src/index";
 import { dataDir } from "../src/task";
-import { startAgent, getAgentOutput, destroyAgent, deleteTask } from "../src/agent";
+import { startAgent, getAgentOutput, deleteTask } from "../src/agent";
 import type { AgentHandle, AgentStatus } from "../src/agent";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -217,7 +217,7 @@ describe("agent lifecycle", () => {
 
   afterEach(async () => {
     for (const h of handles) {
-      await destroyAgent(h).catch(() => {});
+      await h.destroy().catch(() => {});
     }
     handles.length = 0;
     for (const r of repos) {
@@ -322,7 +322,7 @@ describe("agent lifecycle", () => {
       config: testConfig,
     });
 
-    await destroyAgent(handle);
+    await handle.destroy();
     // Don't add to handles — already destroyed
 
     // tmux session should be gone

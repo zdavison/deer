@@ -177,6 +177,11 @@ function buildSrtSettings(options: SandboxRuntimeOptions, srtBinDir: string | nu
   };
 }
 
+/** Shell-quote a string for use inside single quotes. */
+function shellq(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}
+
 /**
  * Create a sandbox runtime backed by Anthropic's Sandbox Runtime (srt).
  *
@@ -215,23 +220,21 @@ export function createSrtRuntime(): SandboxRuntime {
 
       if (env) {
         for (const [key, value] of Object.entries(env)) {
-          envExports.push(`export ${key}='${value.replace(/'/g, "'\\''")}'`);
+          envExports.push(`export ${key}=${shellq(value)}`);
         }
       }
 
-      envExports.push(`export HOME='${HOME.replace(/'/g, "'\\''")}'`);
+      envExports.push(`export HOME=${shellq(HOME)}`);
       envExports.push("unset CLAUDECODE");
 
       if (process.env.PATH) {
-        envExports.push(`export PATH='${process.env.PATH.replace(/'/g, "'\\''")}'`);
+        envExports.push(`export PATH=${shellq(process.env.PATH)}`);
       }
-      envExports.push(`export TERM='${(process.env.TERM ?? "xterm-256color").replace(/'/g, "'\\''")}'`);
+      envExports.push(`export TERM=${shellq(process.env.TERM ?? "xterm-256color")}`);
 
-      const escapedInner = innerCommand
-        .map((arg) => `'${arg.replace(/'/g, "'\\''")}'`)
-        .join(" ");
+      const escapedInner = innerCommand.map(shellq).join(" ");
 
-      const shellCmd = `${envExports.join("; ")}; cd '${worktreePath.replace(/'/g, "'\\''")}' && exec ${escapedInner}`;
+      const shellCmd = `${envExports.join("; ")}; cd ${shellq(worktreePath)} && exec ${escapedInner}`;
 
       return [
         srtBin, "-s", settingsPath,

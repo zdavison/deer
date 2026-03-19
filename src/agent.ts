@@ -10,7 +10,7 @@ import { deerboxPrepare, deerboxDestroy } from "./deerbox";
 import type { DeerConfig, PrepareResult } from "./types";
 import { launchSandbox, captureTmuxPane } from "./sandbox/index";
 import type { SandboxSession } from "./sandbox/index";
-import { dataDir, taskWorktreePath } from "./task";
+import { dataDir } from "./task";
 import { BYPASS_DIALOG_MAX_POLLS, BYPASS_DIALOG_POLL_MS, BYPASS_DIALOG_KEY_DELAY_MS } from "./constants";
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -62,8 +62,6 @@ export interface AgentRunOptions {
    * to Claude instead of the prompt.
    */
   continueSession?: ContinueSession;
-  /** Callback for auth proxy log messages (shown in the TUI log panel) */
-  onProxyLog?: (message: string) => void;
 }
 
 export type AgentStatus =
@@ -189,13 +187,6 @@ export async function getAgentOutput(
 ): Promise<string[]> {
   const lines = await captureTmuxPane(sessionName, fullScrollback);
   return lines ?? [];
-}
-
-/**
- * Full cleanup: kill sandbox, remove worktree and branch.
- */
-export async function destroyAgent(handle: AgentHandle): Promise<void> {
-  await handle.destroy().catch(() => {});
 }
 
 /**

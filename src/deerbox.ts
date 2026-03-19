@@ -53,7 +53,6 @@ async function runDeerbox<T>(args: string[]): Promise<T> {
   const proc = Bun.spawn([...cmd, ...args], {
     stdout: "pipe",
     stderr: "pipe",
-    env: process.env,
   });
 
   const [exitCode, stdout, stderr] = await Promise.all([
@@ -132,7 +131,7 @@ export async function deerboxDestroy(taskId: string, repoPath: string): Promise<
   const cmd = deerboxBin();
   const proc = Bun.spawn(
     [...cmd, "destroy", "--task-id", taskId, "--repo-path", repoPath],
-    { stdout: "pipe", stderr: "pipe", env: process.env },
+    { stdout: "pipe", stderr: "pipe" },
   );
   await proc.exited;
 }
