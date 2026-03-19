@@ -36,12 +36,80 @@ import { VERSION } from "./constants";
 import Dashboard from "./dashboard.tsx";
 import DemoDashboard from "./demo-dashboard.tsx";
 import { checkAndUpdate } from "./updater.ts";
+import { prune, isTmuxSessionAlive } from "deerbox";
+import { getAllTasks, deleteTaskRow } from "./db.ts";
 
 setLang(detectLang());
+
+// ── Subcommand: prune ─────────────────────────────────────────────────
+
+const TERMINAL_STATUSES = new Set(["failed", "cancelled", "interrupted", "pr_failed"]);
+
+async function cmdPrune(args: string[]) {
+  const force = args.includes("--force");
+  const dryRun = args.includes("--dry-run");
+
+  if (dryRun) {
+    console.log("Running in dry-run mode (no changes will be made)\n");
+  }
+
+  const tasks = getAllTasks();
+
+  let dbRowsRemoved = 0;
+  for (const task of tasks) {
+    const isDangling =
+      force ||
+      TERMINAL_STATUSES.has(task.status) ||
+      !(await isTmuxSessionAlive(`deer-${task.task_id}`));
+
+    if (!isDangling) continue;
+
+    if (dryRun) {
+      console.log(`[dry-run] Would remove DB row for task: ${task.task_id} (${task.status})`);
+    } else {
+      deleteTaskRow(task.task_id);
+      dbRowsRemoved++;
+    }
+  }
+
+  const result = await prune({ force, dryRun, log: console.log });
+
+  if (force) {
+    // Also wipe prompt history when doing a full force prune
+    const promptHistoryPath = `${process.env.HOME}/.local/share/deer/prompt-history.json`;
+    if (dryRun) {
+      console.log(`[dry-run] Would remove prompt history: ${promptHistoryPath}`);
+    } else {
+      await Bun.$`rm -f ${promptHistoryPath}`.quiet().nothrow();
+    }
+  }
+
+  console.log("\nDone:");
+  if (dbRowsRemoved > 0 || dryRun) {
+    console.log(`  DB rows removed:          ${dryRun ? tasks.filter((t) => TERMINAL_STATUSES.has(t.status)).length : dbRowsRemoved}`);
+  }
+  if (force) {
+    console.log(`  sandbox processes killed: ${result.processesKilled}`);
+    console.log(`  tmux sessions killed:     ${result.tmuxKilled}`);
+  }
+  console.log(`  worktrees removed:        ${result.worktreesRemoved}`);
+  console.log(`  task dirs cleaned:        ${result.tasksRemoved}`);
+
+  if (dryRun) {
+    console.log("\nNo changes were made. Run without --dry-run to execute.");
+  }
+}
+
+// ── Main ──────────────────────────────────────────────────────────────
 
 async function main() {
   if (process.argv.includes("--version") || process.argv.includes("-v")) {
     console.log(`deer ${VERSION}`);
+    return;
+  }
+
+  if (process.argv[2] === "prune") {
+    await cmdPrune(process.argv.slice(3));
     return;
   }
 
