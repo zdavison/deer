@@ -69,8 +69,10 @@ deer treats deerbox as a black box — all interaction happens through CLI subco
 | File                                         | Purpose                                                        |
 |----------------------------------------------|----------------------------------------------------------------|
 | `packages/deerbox/src/index.ts`              | Barrel export for all public APIs                              |
-| `packages/deerbox/src/cli.ts`               | CLI entry point — subcommands output JSON to stdout            |
-| `packages/deerbox/src/session.ts`           | Main entrypoint: worktree → ecosystem → gitconfig → auth proxy → SRT command |
+| `packages/deerbox/src/cli.ts`               | CLI entry point — subcommands (incl. `prune`, `--from` flag) output JSON to stdout |
+| `packages/deerbox/src/session.ts`           | Main entrypoint: worktree → ecosystem → gitconfig → auth proxy → SRT command; supports `fromBranch` for `--from` |
+| `packages/deerbox/src/post-session.ts`      | Post-session interactive menu: create PR, update PR, keep worktree, open shell, discard |
+| `packages/deerbox/src/prune.ts`             | `prune()` — removes dangling task dirs/worktrees; force mode kills all deer tmux sessions and processes |
 | `packages/deerbox/src/proxy.ts`             | Credential resolution for the MITM auth proxy                  |
 | `packages/deerbox/src/config.ts`            | Config loading/merging (global + repo-local + CLI)             |
 | `packages/deerbox/src/constants.ts`         | VERSION + re-exports shared constants from @deer/shared        |
@@ -83,7 +85,7 @@ deer treats deerbox as a black box — all interaction happens through CLI subco
 | `packages/deerbox/src/sandbox/resolve.ts`   | `resolveRuntime()` — maps config string to `SandboxRuntime`   |
 | `packages/deerbox/src/sandbox/srt.ts`       | SRT runtime implementation                                     |
 | `packages/deerbox/src/sandbox/auth-proxy.ts` | Host-side MITM proxy for credential injection                 |
-| `packages/deerbox/src/git/worktree.ts`      | Git worktree create/remove/cleanup; re-exports detectRepo from @deer/shared |
+| `packages/deerbox/src/git/worktree.ts`      | Git worktree create/remove/cleanup; `checkoutWorktree()` for `--from`; re-exports detectRepo from @deer/shared |
 
 ### deer (TUI dashboard)
 
