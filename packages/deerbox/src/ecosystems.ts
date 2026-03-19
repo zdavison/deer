@@ -63,11 +63,13 @@ const pnpmPlugin: EcosystemPlugin = {
 const npmPlugin: EcosystemPlugin = {
   name: "npm",
   detect: async (repoPath) => {
-    const [hasPackageLock, hasPnpmLock] = await Promise.all([
+    const [hasPackageLock, hasPnpmLock, hasBunLock, hasBunLockb] = await Promise.all([
       pathExists(join(repoPath, "package-lock.json")),
       pathExists(join(repoPath, "pnpm-lock.yaml")),
+      pathExists(join(repoPath, "bun.lock")),
+      pathExists(join(repoPath, "bun.lockb")),
     ]);
-    return hasPackageLock && !hasPnpmLock;
+    return hasPackageLock && !hasPnpmLock && !hasBunLock && !hasBunLockb;
   },
   strategies: [
     { type: "prepopulate", source: "node_modules", lockfile: "package-lock.json" },

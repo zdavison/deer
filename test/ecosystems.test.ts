@@ -47,6 +47,22 @@ describe("ecosystems", () => {
       expect(await npmPlugin.detect(repoPath)).toBe(false);
     });
 
+    test("npmPlugin excluded when bun.lockb is present", async () => {
+      const npmPlugin = BUILTIN_PLUGINS.find((p) => p.name === "npm")!;
+      await writeFile(join(repoPath, "package-lock.json"), "");
+      expect(await npmPlugin.detect(repoPath)).toBe(true);
+      await writeFile(join(repoPath, "bun.lockb"), "");
+      expect(await npmPlugin.detect(repoPath)).toBe(false);
+    });
+
+    test("npmPlugin excluded when bun.lock is present", async () => {
+      const npmPlugin = BUILTIN_PLUGINS.find((p) => p.name === "npm")!;
+      await writeFile(join(repoPath, "package-lock.json"), "");
+      expect(await npmPlugin.detect(repoPath)).toBe(true);
+      await writeFile(join(repoPath, "bun.lock"), "");
+      expect(await npmPlugin.detect(repoPath)).toBe(false);
+    });
+
     test("goPlugin returns false when go.mod absent, true when present", async () => {
       const goPlugin = BUILTIN_PLUGINS.find((p) => p.name === "go")!;
       expect(await goPlugin.detect(repoPath)).toBe(false);
