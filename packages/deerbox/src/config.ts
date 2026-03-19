@@ -1,6 +1,6 @@
 import TOML from "@iarna/toml";
 import { join } from "node:path";
-import { HOME } from "./constants";
+import { HOME } from "@deer/shared";
 
 /**
  * Maps a host env var to auth headers injected by the host-side MITM proxy.

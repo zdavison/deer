@@ -15,14 +15,15 @@
 
 import { join } from "node:path";
 import { prepare, taskWorktreePath } from "./session";
-import { detectRepo } from "./git/worktree";
+import { detectRepo } from "@deer/shared";
 import { cleanupWorktree } from "./git/worktree";
 import { loadConfig } from "./config";
-import { runPreflight, resolveCredentials } from "./preflight";
+import { runPreflight } from "./preflight";
+import { resolveCredentials } from "@deer/shared";
 import { killAuthProxy } from "./sandbox/auth-proxy";
-import { VERSION, DEFAULT_MODEL } from "./constants";
+import { VERSION } from "./constants";
+import { DEFAULT_MODEL, setLang, detectLang } from "@deer/shared";
 import { dataDir } from "./task";
-import { setLang, detectLang } from "./i18n";
 import { createPullRequest, updatePullRequest, hasChanges } from "./git/finalize";
 import { runPostSession, interactivePromptChoice, defaultOpenShell } from "./post-session";
 import { prune } from "./prune";

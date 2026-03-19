@@ -1,10 +1,8 @@
-import { HOME } from "./constants";
+import { HOME } from "@deer/shared";
 import { resolveCredentials } from "@deer/shared";
 import { createRequire } from "node:module";
 import { accessSync } from "node:fs";
 import { join } from "node:path";
-
-export { resolveCredentials } from "@deer/shared";
 
 export interface PreflightResult {
   ok: boolean;

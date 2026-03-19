@@ -2,7 +2,7 @@ import { join, dirname } from "node:path";
 import { readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import type { SandboxRuntime, SandboxRuntimeOptions, SandboxCleanup } from "./runtime";
-import { HOME } from "../constants";
+import { HOME } from "@deer/shared";
 
 /**
  * Resolve the srt binary path from the installed @anthropic-ai/sandbox-runtime package.

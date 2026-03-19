@@ -2,9 +2,6 @@ import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { dataDir } from "../task";
 
-export { detectRepo } from "@deer/shared";
-export type { RepoInfo } from "@deer/shared";
-
 export interface WorktreeInfo {
   repoPath: string;
   worktreePath: string;

@@ -12,11 +12,11 @@ import { createWorktree, checkoutWorktree, removeWorktree, cleanupWorktree } fro
 import { generateTaskId, dataDir } from "./task";
 import { loadConfig, type DeerConfig } from "./config";
 import { resolveRuntime } from "./sandbox/resolve";
-import { detectLang } from "./i18n";
+import { detectLang } from "@deer/shared";
 import { applyEcosystems } from "./ecosystems";
 import { resolveProxyUpstreams } from "./proxy";
 import { startAuthProxy, type AuthProxy } from "./sandbox/auth-proxy";
-import { DEFAULT_MODEL } from "./constants";
+import { DEFAULT_MODEL } from "@deer/shared";
 
 // ── Types ────────────────────────────────────────────────────────────
 

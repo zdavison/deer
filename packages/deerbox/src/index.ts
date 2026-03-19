@@ -3,11 +3,14 @@ export { prepare, taskWorktreePath } from "./session";
 export type { PrepareOptions, PreparedSession } from "./session";
 
 // Startup
-export { detectRepo, createWorktree, checkoutWorktree, removeWorktree, cleanupWorktree } from "./git/worktree";
-export type { RepoInfo, WorktreeInfo } from "./git/worktree";
+export { detectRepo } from "@deer/shared";
+export type { RepoInfo } from "@deer/shared";
+export { createWorktree, checkoutWorktree, removeWorktree, cleanupWorktree } from "./git/worktree";
+export type { WorktreeInfo } from "./git/worktree";
 export { loadConfig, DEFAULT_CONFIG } from "./config";
 export type { DeerConfig, ProxyCredential } from "./config";
-export { runPreflight, resolveCredentials } from "./preflight";
+export { runPreflight } from "./preflight";
+export { resolveCredentials } from "@deer/shared";
 export type { PreflightResult } from "./preflight";
 
 // Sandbox primitives
@@ -50,6 +53,7 @@ export type { PruneResult, PruneOptions } from "./prune";
 
 // Utilities
 export { generateTaskId, dataDir } from "./task";
-export { detectLang, setLang, getLang, getPRLanguage } from "./i18n";
-export type { Lang } from "./i18n";
-export { VERSION, HOME, DEFAULT_MODEL, MAX_DIFF_FOR_PR_METADATA, PR_METADATA_MODEL } from "./constants";
+export { detectLang, setLang, getLang, getPRLanguage } from "@deer/shared";
+export type { Lang } from "@deer/shared";
+export { VERSION } from "./constants";
+export { HOME, DEFAULT_MODEL, MAX_DIFF_FOR_PR_METADATA, PR_METADATA_MODEL } from "@deer/shared";
