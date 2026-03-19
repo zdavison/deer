@@ -194,6 +194,12 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
       "\twaitingForEditor = false",
       "[credential]",
       "\thelper =",
+      // Rewrite SSH remotes to HTTPS so git always goes through the HTTP auth
+      // proxy. Without this, repos cloned via SSH would bypass the proxy and
+      // hit an interactive host-key fingerprint prompt that can't be answered.
+      '[url "https://github.com/"]',
+      "\tinsteadOf = git@github.com:",
+      '\tinsteadOf = ssh://git@github.com/',
     ].join("\n") + "\n",
   );
 
