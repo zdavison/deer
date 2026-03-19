@@ -44,6 +44,10 @@ export type {
 export { runPostSession, parseChoice, renderPromptMenu } from "./post-session";
 export type { PostSessionChoice, PostSessionOutcome, PostSessionDeps, PostSessionContext } from "./post-session";
 
+// Prune
+export { prune, isTmuxSessionAlive, getRepoPathFromWorktree } from "./prune";
+export type { PruneResult, PruneOptions } from "./prune";
+
 // Utilities
 export { generateTaskId, dataDir } from "./task";
 export { detectLang, setLang, getLang, getPRLanguage } from "./i18n";

@@ -25,6 +25,7 @@ import { dataDir } from "./task";
 import { setLang, detectLang } from "./i18n";
 import { createPullRequest, hasChanges } from "./git/finalize";
 import { runPostSession, interactivePromptChoice, defaultOpenShell } from "./post-session";
+import { prune } from "./prune";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -113,6 +114,25 @@ async function cmdDestroy(args: string[]) {
 
   // Remove task directory
   await Bun.$`rm -rf ${taskDir}`.quiet().nothrow();
+}
+
+// ── Subcommand: prune ────────────────────────────────────────────────
+
+async function cmdPrune(args: string[]) {
+  const force = hasFlag(args, "--force");
+
+  const result = await prune({
+    force,
+    log: console.log,
+  });
+
+  console.log("\nDone:");
+  if (force) {
+    console.log(`  sandbox processes killed: ${result.processesKilled}`);
+    console.log(`  tmux sessions killed:     ${result.tmuxKilled}`);
+  }
+  console.log(`  worktrees removed:        ${result.worktreesRemoved}`);
+  console.log(`  task dirs cleaned:        ${result.tasksRemoved}`);
 }
 
 // ── Subcommand: preflight ────────────────────────────────────────────
@@ -230,6 +250,7 @@ Usage:
   deerbox [prompt]              Run sandboxed Claude (prompt optional — omit for interactive)
   deerbox prepare [options]     Prepare a session (JSON output, used by deer)
   deerbox destroy [options]     Clean up a task's resources
+  deerbox prune [options]       Remove dangling worktrees and task dirs
   deerbox preflight             Run preflight checks (JSON output)
   deerbox config [options]      Dump merged config (JSON output)
 
@@ -238,10 +259,15 @@ Interactive options:
   -b, --base-branch <branch>    Branch to base the worktree on
   -k, --keep                    Keep worktree after Claude exits
 
+Prune options:
+  --force                       Kill all processes/sessions and wipe all task data
+
 Examples:
   deerbox
   deerbox "fix the login redirect bug"
-  deerbox --model opus "refactor the auth module"`;
+  deerbox --model opus "refactor the auth module"
+  deerbox prune
+  deerbox prune --force`;
 
 async function main() {
   const args = process.argv.slice(2);
@@ -259,6 +285,7 @@ async function main() {
   // Subcommands
   if (first === "prepare") return cmdPrepare(args.slice(1));
   if (first === "destroy") return cmdDestroy(args.slice(1));
+  if (first === "prune") return cmdPrune(args.slice(1));
   if (first === "preflight") return cmdPreflight();
   if (first === "config") return cmdConfig(args.slice(1));
 
