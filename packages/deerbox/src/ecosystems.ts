@@ -8,14 +8,15 @@
  */
 
 import { join } from "node:path";
-import { stat } from "node:fs/promises";
+import { stat, mkdir, appendFile } from "node:fs/promises";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type Strategy =
   | { type: "readonly-cache"; hostPath: string }
   | { type: "prepopulate"; source: string; lockfile: string }
-  | { type: "env"; vars: Record<string, string> };
+  | { type: "env"; vars: Record<string, string> }
+  | { type: "git-exclude"; patterns: string[] };
 
 export interface EcosystemPlugin {
   name: string;
@@ -98,6 +99,8 @@ const bunPlugin: EcosystemPlugin = {
     // Redirect bun's package cache to a writable dir inside the worktree.
     // The default ~/.bun/install/cache is read-only in the sandbox.
     { type: "env", vars: { BUN_INSTALL_CACHE_DIR: ".bun-install-cache" } },
+    // Prevent the cache dir from being committed.
+    { type: "git-exclude", patterns: [".bun-install-cache"] },
     // Prepopulate node_modules from the host repo to avoid network installs.
     { type: "prepopulate", source: "node_modules", lockfile: "bun.lockb" },
     { type: "prepopulate", source: "node_modules", lockfile: "bun.lock" },
@@ -161,6 +164,20 @@ export async function applyEcosystems(
               ? value
               : join(worktreePath, value);
           env[key] = resolved;
+        }
+      } else if (strategy.type === "git-exclude") {
+        try {
+          const gitDirResult = await Bun.$`git -C ${worktreePath} rev-parse --git-dir`.quiet().nothrow();
+          if (gitDirResult.exitCode === 0) {
+            const gitDir = gitDirResult.stdout.toString().trim();
+            const resolvedGitDir = gitDir.startsWith("/") ? gitDir : join(worktreePath, gitDir);
+            const infoDir = join(resolvedGitDir, "info");
+            await mkdir(infoDir, { recursive: true });
+            const excludePath = join(infoDir, "exclude");
+            await appendFile(excludePath, strategy.patterns.join("\n") + "\n");
+          }
+        } catch (err) {
+          process.stderr.write(`[deer] ecosystems: git-exclude: ${err}\n`);
         }
       } else if (strategy.type === "prepopulate") {
         try {
