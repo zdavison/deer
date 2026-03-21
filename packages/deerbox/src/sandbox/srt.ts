@@ -114,6 +114,9 @@ function buildSrtSettings(options: SandboxRuntimeOptions, srtBinDir: string | nu
   const network: Record<string, unknown> = {
     allowedDomains: options.allowlist,
     deniedDomains: [],
+    // Allow binding to local ports so Claude Code features like voice mode
+    // (which starts a local WebSocket server) work inside the sandbox.
+    allowLocalBinding: true,
   };
 
   if (options.mitmProxy) {
