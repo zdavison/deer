@@ -4,7 +4,8 @@
  * Extracted from cli.ts so it can be tested with injectable dependencies.
  */
 
-import type { CreatePRResult, UpdatePROptions } from "./git/finalize";
+import type { CreatePRResult, UpdatePROptions, MergeIntoLocalBranchOptions } from "./git/finalize";
+import { mergeIntoLocalBranch } from "./git/finalize";
 
 // ── ANSI helpers ─────────────────────────────────────────────────────
 
@@ -47,7 +48,7 @@ export interface PostSessionDeps {
   /** Update an existing pull request (called when ctx.fromPrUrl is set). */
   updatePR?: (opts: UpdatePROptions) => Promise<void>;
   /** Merge sourceBranch into targetBranch in the repo. */
-  mergeBranch?: (repoPath: string, sourceBranch: string, targetBranch: string) => Promise<void>;
+  mergeBranch?: (opts: MergeIntoLocalBranchOptions) => Promise<void>;
   /** Open a shell in the worktree. Resolves when the shell exits. */
   openShell: (worktreePath: string) => Promise<void>;
   /** Stop the auth proxy (no worktree removal). */
@@ -194,7 +195,15 @@ export async function runPostSession(
   if (choice === "m" && ctx.originalBranch) {
     deps.log(`\nMerging ${ctx.branch} into ${ctx.originalBranch}...`);
     try {
-      await deps.mergeBranch?.(ctx.repoPath, ctx.branch, ctx.originalBranch);
+      await deps.mergeBranch?.({
+        repoPath: ctx.repoPath,
+        worktreePath: ctx.worktreePath,
+        branch: ctx.branch,
+        baseBranch: ctx.baseBranch,
+        targetBranch: ctx.originalBranch,
+        prompt: ctx.prompt,
+        onLog: (msg) => deps.log(`  ${msg}`),
+      });
       deps.log(`\n${green("Merged into")} ${ctx.originalBranch}`);
       await deps.destroy();
       return { action: "merged", targetBranch: ctx.originalBranch };
@@ -235,16 +244,11 @@ export async function interactivePromptChoice(fromPrUrl?: string, originalBranch
 }
 
 /**
- * Merge sourceBranch into targetBranch using a non-fast-forward merge.
- * Checks out targetBranch in the repo first, then merges.
+ * Default merge implementation: stages uncommitted changes, generates an
+ * AI commit message, then merges into the target branch.
  */
-export async function defaultMergeBranch(
-  repoPath: string,
-  sourceBranch: string,
-  targetBranch: string,
-): Promise<void> {
-  await Bun.$`git -C ${repoPath} checkout ${targetBranch}`.quiet();
-  await Bun.$`git -C ${repoPath} merge ${sourceBranch} --no-ff`.quiet();
+export async function defaultMergeBranch(opts: MergeIntoLocalBranchOptions): Promise<void> {
+  return mergeIntoLocalBranch(opts);
 }
 
 /**

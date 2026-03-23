@@ -2,6 +2,7 @@ export {
   createPullRequest,
   updatePullRequest,
   pushBranchUpdates,
+  mergeIntoLocalBranch,
   hasChanges,
   findPRTemplate,
   ensureDeerEmojiPrefix,
@@ -13,4 +14,5 @@ export type {
   CreatePROptions,
   UpdatePROptions,
   PushBranchOptions,
+  MergeIntoLocalBranchOptions,
 } from "@deer/shared";

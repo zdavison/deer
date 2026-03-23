@@ -18,7 +18,18 @@ export type CredentialType = "subscription" | "api-token" | "none";
  *
  * @param homeDir - Home directory to use (defaults to HOME constant; overridable in tests)
  */
-export async function resolveCredentials(homeDir = HOME): Promise<CredentialType> {
+export interface ResolveCredentialsOptions {
+  homeDir?: string;
+  skipKeychain?: boolean;
+}
+
+export async function resolveCredentials(
+  homeDirOrOpts: string | ResolveCredentialsOptions = HOME,
+): Promise<CredentialType> {
+  const { homeDir, skipKeychain } =
+    typeof homeDirOrOpts === "string"
+      ? { homeDir: homeDirOrOpts, skipKeychain: false }
+      : { homeDir: homeDirOrOpts.homeDir ?? HOME, skipKeychain: homeDirOrOpts.skipKeychain ?? false };
   if (!process.env.CLAUDE_CODE_OAUTH_TOKEN) {
     // 1. Try the flat file (explicit override)
     const tokenFile = join(homeDir, ".claude", "agent-oauth-token");
@@ -29,7 +40,7 @@ export async function resolveCredentials(homeDir = HOME): Promise<CredentialType
       }
     } catch { /* ignore */ }
   }
-  if (!process.env.CLAUDE_CODE_OAUTH_TOKEN && process.platform === "darwin") {
+  if (!process.env.CLAUDE_CODE_OAUTH_TOKEN && !skipKeychain && process.platform === "darwin") {
     // 2. Read from macOS Keychain where Claude Code stores subscription OAuth
     try {
       const p = Bun.spawn(

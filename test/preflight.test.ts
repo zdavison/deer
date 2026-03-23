@@ -41,7 +41,7 @@ describe("resolveCredentials", () => {
       process.env.CLAUDE_CODE_OAUTH_TOKEN = "tok_from_env";
       const home = makeTempHome();
       try {
-        const result = await resolveCredentials(home);
+        const result = await resolveCredentials({ homeDir: home, skipKeychain: true });
         expect(result).toBe("subscription");
         expect(process.env.CLAUDE_CODE_OAUTH_TOKEN).toBe("tok_from_env");
       } finally {
@@ -54,7 +54,7 @@ describe("resolveCredentials", () => {
       process.env.ANTHROPIC_API_KEY = "sk-should-be-removed";
       const home = makeTempHome();
       try {
-        await resolveCredentials(home);
+        await resolveCredentials({ homeDir: home, skipKeychain: true });
         expect(process.env.ANTHROPIC_API_KEY).toBeUndefined();
       } finally {
         rmSync(home, { recursive: true });
@@ -67,7 +67,7 @@ describe("resolveCredentials", () => {
       process.env.CLAUDE_CODE_OAUTH_TOKEN = "sk-ant-oat01-xxxx";
       const home = makeTempHome();
       try {
-        const result = await resolveCredentials(home);
+        const result = await resolveCredentials({ homeDir: home, skipKeychain: true });
         expect(result).toBe("subscription");
       } finally {
         rmSync(home, { recursive: true });
@@ -78,7 +78,7 @@ describe("resolveCredentials", () => {
       const home = makeTempHome();
       try {
         writeFileSync(join(home, ".claude", "agent-oauth-token"), "sk-ant-oat01-xxxx\n");
-        const result = await resolveCredentials(home);
+        const result = await resolveCredentials({ homeDir: home, skipKeychain: true });
         expect(result).toBe("subscription");
       } finally {
         rmSync(home, { recursive: true });
@@ -91,7 +91,7 @@ describe("resolveCredentials", () => {
       const home = makeTempHome();
       try {
         writeFileSync(join(home, ".claude", "agent-oauth-token"), "tok_from_file\n");
-        const result = await resolveCredentials(home);
+        const result = await resolveCredentials({ homeDir: home, skipKeychain: true });
         expect(result).toBe("subscription");
         expect(process.env.CLAUDE_CODE_OAUTH_TOKEN).toBe("tok_from_file");
       } finally {
@@ -103,7 +103,7 @@ describe("resolveCredentials", () => {
       const home = makeTempHome();
       try {
         writeFileSync(join(home, ".claude", "agent-oauth-token"), "  tok_trimmed  \n");
-        await resolveCredentials(home);
+        await resolveCredentials({ homeDir: home, skipKeychain: true });
         expect(process.env.CLAUDE_CODE_OAUTH_TOKEN).toBe("tok_trimmed");
       } finally {
         rmSync(home, { recursive: true });
@@ -129,7 +129,7 @@ describe("resolveCredentials", () => {
             },
           }),
         );
-        const result = await resolveCredentials(home);
+        const result = await resolveCredentials({ homeDir: home, skipKeychain: true });
         expect(result).toBe("subscription");
         expect(process.env.CLAUDE_CODE_OAUTH_TOKEN).toBe("tok_from_claude_json");
       } finally {
@@ -145,7 +145,7 @@ describe("resolveCredentials", () => {
           join(home, ".claude.json"),
           JSON.stringify({ claudeAiOauth: { accessToken: "tok_from_claude_json" } }),
         );
-        await resolveCredentials(home);
+        await resolveCredentials({ homeDir: home, skipKeychain: true });
         expect(process.env.CLAUDE_CODE_OAUTH_TOKEN).toBe("tok_from_env");
       } finally {
         rmSync(home, { recursive: true });
@@ -160,7 +160,7 @@ describe("resolveCredentials", () => {
           join(home, ".claude.json"),
           JSON.stringify({ claudeAiOauth: { accessToken: "tok_from_claude_json" } }),
         );
-        await resolveCredentials(home);
+        await resolveCredentials({ homeDir: home, skipKeychain: true });
         expect(process.env.CLAUDE_CODE_OAUTH_TOKEN).toBe("tok_from_file");
       } finally {
         rmSync(home, { recursive: true });
@@ -175,7 +175,7 @@ describe("resolveCredentials", () => {
           JSON.stringify({ oauthAccount: { accountUuid: "uuid-xxx" } }),
         );
         process.env.ANTHROPIC_API_KEY = "sk-fallback";
-        const result = await resolveCredentials(home);
+        const result = await resolveCredentials({ homeDir: home, skipKeychain: true });
         expect(result).toBe("api-token");
         expect(process.env.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
       } finally {
@@ -188,7 +188,7 @@ describe("resolveCredentials", () => {
       try {
         writeFileSync(join(home, ".claude.json"), "{ this is not json }");
         process.env.ANTHROPIC_API_KEY = "sk-fallback";
-        const result = await resolveCredentials(home);
+        const result = await resolveCredentials({ homeDir: home, skipKeychain: true });
         expect(result).toBe("api-token");
       } finally {
         rmSync(home, { recursive: true });
@@ -201,7 +201,7 @@ describe("resolveCredentials", () => {
       process.env.ANTHROPIC_API_KEY = "sk-ant-test";
       const home = makeTempHome();
       try {
-        const result = await resolveCredentials(home);
+        const result = await resolveCredentials({ homeDir: home, skipKeychain: true });
         expect(result).toBe("api-token");
         expect(process.env.ANTHROPIC_API_KEY).toBe("sk-ant-test");
       } finally {
@@ -214,7 +214,7 @@ describe("resolveCredentials", () => {
     test("returns none when no credentials are available", async () => {
       const home = makeTempHome();
       try {
-        const result = await resolveCredentials(home);
+        const result = await resolveCredentials({ homeDir: home, skipKeychain: true });
         expect(result).toBe("none");
       } finally {
         rmSync(home, { recursive: true });

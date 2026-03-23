@@ -533,6 +533,52 @@ export async function updatePullRequest(options: UpdatePROptions): Promise<void>
  *   baseBranch. Used with `--from` to detect only new changes made during the
  *   session, ignoring commits that already existed on the branch.
  */
+export interface MergeIntoLocalBranchOptions {
+  repoPath: string;
+  worktreePath: string;
+  branch: string;
+  baseBranch: string;
+  targetBranch: string;
+  prompt: string | null;
+  onLog?: (message: string) => void;
+}
+
+/**
+ * Merge the session branch into a local branch (e.g. main).
+ *
+ * Mirrors the createPullRequest flow: stages uncommitted changes, generates an
+ * AI commit message via Claude, amends the placeholder commit, then merges
+ * into targetBranch with --no-ff.
+ */
+export async function mergeIntoLocalBranch(options: MergeIntoLocalBranchOptions): Promise<void> {
+  const { repoPath, worktreePath, branch, baseBranch, targetBranch, prompt, onLog } = options;
+  const log = onLog ?? (() => {});
+
+  // Stage and commit all changes with a placeholder message (same as PR flow)
+  log(`[merge] Staging and committing changes...`);
+  const hadUncommitted = await stageAndCommit(worktreePath, PENDING_PR_METADATA_MSG, onLog);
+
+  // Generate metadata via Claude for a proper commit message
+  log(`[merge] Generating commit message via Claude...`);
+  const metadata = await generatePRMetadata(worktreePath, baseBranch, prompt, null, onLog);
+  log(`[merge] Commit message: ${metadata.title}`);
+
+  // Amend the placeholder commit with the real title
+  const headMsgResult = await Bun.$`git -C ${worktreePath} log -1 --format=%s`.quiet().nothrow();
+  const headMsg = headMsgResult.stdout.toString().trim();
+  if (hadUncommitted || headMsg === PENDING_PR_METADATA_MSG) {
+    log(`[merge] Updating commit message...`);
+    await commitWithFallback(worktreePath, ["--amend", "-m", metadata.title], onLog);
+  }
+
+  // Checkout target branch and merge
+  log(`[merge] Checking out ${targetBranch}...`);
+  await Bun.$`git -C ${repoPath} checkout ${targetBranch}`.quiet();
+
+  log(`[merge] Merging ${branch} into ${targetBranch}...`);
+  await Bun.$`git -C ${repoPath} merge ${branch} --no-ff`.quiet();
+}
+
 export async function hasChanges(worktreePath: string, baseBranch: string, sinceCommit?: string): Promise<boolean> {
   // Check for uncommitted changes
   const statusResult = await Bun.$`git -C ${worktreePath} status --porcelain`.quiet().nothrow();

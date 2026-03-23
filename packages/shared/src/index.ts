@@ -7,7 +7,7 @@ export type { Lang } from "./i18n";
 
 // Credentials
 export { resolveCredentials } from "./credentials";
-export type { CredentialType } from "./credentials";
+export type { CredentialType, ResolveCredentialsOptions } from "./credentials";
 
 // Git utilities
 export { detectRepo } from "./git/detect";
@@ -22,6 +22,7 @@ export {
   createPullRequest,
   updatePullRequest,
   pushBranchUpdates,
+  mergeIntoLocalBranch,
   hasChanges,
   findPRTemplate,
   ensureDeerEmojiPrefix,
@@ -33,4 +34,5 @@ export type {
   CreatePROptions,
   UpdatePROptions,
   PushBranchOptions,
+  MergeIntoLocalBranchOptions,
 } from "./git/finalize";
