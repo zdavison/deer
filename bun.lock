@@ -4,24 +4,22 @@
   "workspaces": {
     "": {
       "name": "deer",
-      "dependencies": {
+      "devDependencies": {
         "@deer/shared": "workspace:*",
         "@inkjs/ui": "^2.0.0",
-        "deerbox": "workspace:*",
-        "ink": "^6.0.0",
-        "react": "^19.0.0",
-        "react-devtools-core": "file:stubs/react-devtools-core",
-      },
-      "devDependencies": {
         "@types/react": "^19.0.0",
         "bun-types": "latest",
+        "deerbox": "workspace:*",
+        "ink": "^6.0.0",
         "oxlint": "latest",
+        "react": "^19.0.0",
+        "react-devtools-core": "file:stubs/react-devtools-core",
         "typescript": "^5.9.3",
       },
     },
     "packages/deerbox": {
       "name": "deerbox",
-      "version": "0.6.0",
+      "version": "0.7.3",
       "bin": {
         "deerbox": "src/cli.ts",
       },
