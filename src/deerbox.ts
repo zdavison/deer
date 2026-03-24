@@ -8,39 +8,69 @@
 import { join, dirname } from "node:path";
 import type { DeerConfig, PreflightResult, PrepareResult } from "./types";
 
+export interface DeerboxBinOptions {
+  /**
+   * Override dev mode detection. In dev mode, TypeScript script fallbacks are tried.
+   * In compiled binary mode, `process.execPath` is the compiled deer binary — NOT bun —
+   * so running `.ts` scripts with it would launch the TUI instead of the CLI.
+   * @default detected from process.argv[1] (true when argv[1] ends with .ts/.tsx)
+   */
+  isDevMode?: boolean;
+  /**
+   * Override process.argv[0] for testing.
+   * @default process.argv[0]
+   */
+  argv0?: string;
+}
+
 /**
  * Resolve the deerbox binary/script path.
  *
  * Search order:
  * 1. Sibling binary (compiled: deer and deerbox in same directory)
- * 2. Workspace source (dev: packages/deerbox/src/cli.ts via bun)
- * 3. PATH lookup
+ * 2. Workspace source (dev mode only: packages/deerbox/src/cli.ts via bun)
+ * 3. cwd-relative source (dev mode only: for tests run from repo root)
+ * 4. PATH lookup
+ *
+ * TypeScript script fallbacks (2, 3) are skipped in compiled binary mode because
+ * `process.execPath` is the compiled deer binary there, not bun. Spawning the deer
+ * binary with a `.ts` argument would silently launch the TUI instead of the CLI.
  */
-function deerboxBin(): string[] {
+export function deerboxBin(opts: DeerboxBinOptions = {}): string[] {
   const { accessSync, constants } = require("node:fs") as typeof import("node:fs");
 
+  const argv0 = opts.argv0 ?? process.argv[0];
+  const devMode = opts.isDevMode ?? (
+    (process.argv[1] ?? "").endsWith(".ts") ||
+    (process.argv[1] ?? "").endsWith(".tsx")
+  );
+
   // 1. Sibling binary (production: deer and deerbox compiled to same dir)
-  const selfDir = dirname(process.argv[0]);
+  const selfDir = dirname(argv0);
   const sibling = join(selfDir, "deerbox");
   try {
     accessSync(sibling, constants.X_OK);
     return [sibling];
   } catch { /* not found */ }
 
-  // 2. Workspace source relative to this module (dev)
-  const moduleDir = typeof import.meta.dir === "string" ? import.meta.dir : selfDir;
-  const workspaceScript = join(moduleDir, "..", "packages", "deerbox", "src", "cli.ts");
-  try {
-    accessSync(workspaceScript);
-    return [process.execPath, workspaceScript];
-  } catch { /* not found */ }
+  // 2–3. TypeScript script fallbacks — dev mode only.
+  // In compiled binary mode, process.execPath is the compiled deer binary, not bun.
+  if (devMode) {
+    // 2. Workspace source relative to this module (dev)
+    const moduleDir = typeof import.meta.dir === "string" ? import.meta.dir : selfDir;
+    const workspaceScript = join(moduleDir, "..", "packages", "deerbox", "src", "cli.ts");
+    try {
+      accessSync(workspaceScript);
+      return [process.execPath, workspaceScript];
+    } catch { /* not found */ }
 
-  // 3. Try relative to cwd (tests)
-  const cwdScript = join(process.cwd(), "packages", "deerbox", "src", "cli.ts");
-  try {
-    accessSync(cwdScript);
-    return [process.execPath, cwdScript];
-  } catch { /* not found */ }
+    // 3. Try relative to cwd (tests)
+    const cwdScript = join(process.cwd(), "packages", "deerbox", "src", "cli.ts");
+    try {
+      accessSync(cwdScript);
+      return [process.execPath, cwdScript];
+    } catch { /* not found */ }
+  }
 
   // 4. Fall back to PATH
   return ["deerbox"];

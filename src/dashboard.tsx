@@ -124,7 +124,7 @@ export default function Dashboard({ cwd, mockAgents }: { cwd: string; mockAgents
       // Re-run reconcile immediately so proxies are restored for any
       // running cross-instance tasks without waiting for the 2s poll.
       reconcile();
-    });
+    }).catch(() => { /* config failure is non-fatal; defaults will be used */ });
   }, [cwd]);
 
   // ── Cleanup on unmount ────────────────────────────────────────────
@@ -213,8 +213,8 @@ export default function Dashboard({ cwd, mockAgents }: { cwd: string; mockAgents
       {/* Preflight errors */}
       {preflight && !preflight.ok && (
         <Box flexDirection="column" paddingX={1}>
-          {preflight.errors.map((e) => (
-            <Text key={e} color="red">✗ {e}</Text>
+          {preflight.errors.map((e, i) => (
+            <Text key={i} color="red">✗ {e.split("\n")[0]}</Text>
           ))}
         </Box>
       )}
