@@ -14,7 +14,7 @@ const pkg = require("../package.json");
 const REPO = "zdavison/deer";
 const VERSION = pkg.version;
 const SRT_PACKAGE = "@anthropic-ai/sandbox-runtime";
-const SRT_VERSION = pkg.dependencies?.[SRT_PACKAGE] ?? "latest";
+const SRT_VERSION = (pkg.dependencies && pkg.dependencies[SRT_PACKAGE]) || "latest";
 
 const PLATFORM_MAP = {
   linux: "linux",

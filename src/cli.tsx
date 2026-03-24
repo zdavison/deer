@@ -88,8 +88,6 @@ async function cmdPrune(args: string[]) {
 
 // ── Subcommand: install ───────────────────────────────────────────────
 
-import { install as runInstallScript } from "../scripts/install.js";
-
 function isDevMode(): boolean {
   const script = process.argv[1] ?? "";
   return script.endsWith(".ts") || script.endsWith(".tsx");
@@ -101,7 +99,9 @@ async function cmdInstall() {
     console.log("deer install: skipping download in dev mode");
     return;
   }
-  await runInstallScript();
+  // Dynamic import to avoid top-level require("../package.json") in compiled binary
+  const { install } = await import("../scripts/install.js");
+  await install();
 }
 
 // ── Subcommand: repair ────────────────────────────────────────────────
