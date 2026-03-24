@@ -250,22 +250,30 @@ async function cmdRun(prompt: string | undefined, args: string[]) {
     }
   }
 
-  // If --from resolved to a PR, fetch review comments and prepend as context
-  let effectivePrompt = prompt;
+  // If --from resolved to a PR, fetch review comments and inject as system prompt context
+  let prSystemPrompt: string | undefined;
   if (fromResolution?.prUrl) {
-    const comments = await fetchPRComments(fromResolution.prUrl);
-    if (comments) {
-      effectivePrompt = prompt ? `${comments}\n\n${prompt}` : comments;
+    console.error(`  Fetching PR review comments...`);
+    const { formatted, reviewCount, issueCount } = await fetchPRComments(fromResolution.prUrl);
+    const total = reviewCount + issueCount;
+    if (total > 0) {
+      const rc = `${reviewCount} review comment${reviewCount !== 1 ? "s" : ""}`;
+      const ic = `${issueCount} discussion comment${issueCount !== 1 ? "s" : ""}`;
+      console.error(`  Fetched ${rc}, ${ic}`);
+      prSystemPrompt = formatted ?? undefined;
+    } else {
+      console.error(`  No PR comments found`);
     }
   }
 
   const session = await prepare({
     repoPath,
-    prompt: effectivePrompt,
+    prompt,
     baseBranch: fromResolution?.baseBranch ?? effectiveBranch,
     fromBranch: fromResolution?.branch,
     config,
     model,
+    appendSystemPrompt: prSystemPrompt,
     onStatus: (msg) => console.error(`  ${msg}`),
   });
 
@@ -303,7 +311,7 @@ async function cmdRun(prompt: string | undefined, args: string[]) {
       worktreePath: session.worktreePath,
       branch: session.branch,
       baseBranch: postSessionBaseBranch,
-      prompt: effectivePrompt ?? null,
+      prompt: prompt ?? null,
       fromPrUrl: fromPrUrl ?? undefined,
       originalBranch,
     },

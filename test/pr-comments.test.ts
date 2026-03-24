@@ -1,6 +1,6 @@
 import { test, expect, describe } from "bun:test";
 import { formatPRComments, fetchPRComments } from "deerbox";
-import type { PRReviewComment, PRIssueComment, GhApiRunner } from "deerbox";
+import type { PRReviewComment, PRIssueComment, GhApiRunner, FetchPRCommentsResult } from "deerbox";
 
 // ── formatPRComments ──────────────────────────────────────────────────
 
@@ -79,22 +79,26 @@ describe("fetchPRComments", () => {
     return async (endpoint) => responses[endpoint] ?? { exitCode: 1, stdout: "" };
   }
 
-  test("returns null when both API calls fail", async () => {
+  test("returns null formatted and zero counts when both API calls fail", async () => {
     const runner = makeRunner({});
     const result = await fetchPRComments(prUrl, runner);
-    expect(result).toBeNull();
+    expect(result.formatted).toBeNull();
+    expect(result.reviewCount).toBe(0);
+    expect(result.issueCount).toBe(0);
   });
 
-  test("returns null when both API calls return empty arrays", async () => {
+  test("returns null formatted and zero counts when both API calls return empty arrays", async () => {
     const runner = makeRunner({
       "/repos/acme/myrepo/pulls/7/comments": { exitCode: 0, stdout: "[]" },
       "/repos/acme/myrepo/issues/7/comments": { exitCode: 0, stdout: "[]" },
     });
     const result = await fetchPRComments(prUrl, runner);
-    expect(result).toBeNull();
+    expect(result.formatted).toBeNull();
+    expect(result.reviewCount).toBe(0);
+    expect(result.issueCount).toBe(0);
   });
 
-  test("returns formatted string when review comments exist", async () => {
+  test("returns formatted string and correct counts when review comments exist", async () => {
     const reviewComments: PRReviewComment[] = [
       { user: { login: "alice" }, body: "Null check needed.", path: "src/auth.ts", line: 5 },
     ];
@@ -103,12 +107,14 @@ describe("fetchPRComments", () => {
       "/repos/acme/myrepo/issues/7/comments": { exitCode: 0, stdout: "[]" },
     });
     const result = await fetchPRComments(prUrl, runner);
-    expect(result).not.toBeNull();
-    expect(result).toContain("[Review by @alice on src/auth.ts line 5]");
-    expect(result).toContain("Null check needed.");
+    expect(result.formatted).not.toBeNull();
+    expect(result.formatted).toContain("[Review by @alice on src/auth.ts line 5]");
+    expect(result.formatted).toContain("Null check needed.");
+    expect(result.reviewCount).toBe(1);
+    expect(result.issueCount).toBe(0);
   });
 
-  test("returns formatted string when issue comments exist", async () => {
+  test("returns formatted string and correct counts when issue comments exist", async () => {
     const issueComments: PRIssueComment[] = [
       { user: { login: "bob" }, body: "Please add tests." },
     ];
@@ -117,9 +123,29 @@ describe("fetchPRComments", () => {
       "/repos/acme/myrepo/issues/7/comments": { exitCode: 0, stdout: JSON.stringify(issueComments) },
     });
     const result = await fetchPRComments(prUrl, runner);
-    expect(result).not.toBeNull();
-    expect(result).toContain("[Comment by @bob]");
-    expect(result).toContain("Please add tests.");
+    expect(result.formatted).not.toBeNull();
+    expect(result.formatted).toContain("[Comment by @bob]");
+    expect(result.formatted).toContain("Please add tests.");
+    expect(result.reviewCount).toBe(0);
+    expect(result.issueCount).toBe(1);
+  });
+
+  test("counts only non-empty comments", async () => {
+    const reviewComments: PRReviewComment[] = [
+      { user: { login: "alice" }, body: "Keep this." },
+      { user: { login: "bob" }, body: "" },
+    ];
+    const issueComments: PRIssueComment[] = [
+      { user: { login: "carol" }, body: "LGTM" },
+      { user: { login: "dave" }, body: "   " },
+    ];
+    const runner = makeRunner({
+      "/repos/acme/myrepo/pulls/7/comments": { exitCode: 0, stdout: JSON.stringify(reviewComments) },
+      "/repos/acme/myrepo/issues/7/comments": { exitCode: 0, stdout: JSON.stringify(issueComments) },
+    });
+    const result = await fetchPRComments(prUrl, runner);
+    expect(result.reviewCount).toBe(1);
+    expect(result.issueCount).toBe(1);
   });
 
   test("gracefully handles malformed JSON from API", async () => {
@@ -128,7 +154,9 @@ describe("fetchPRComments", () => {
       "/repos/acme/myrepo/issues/7/comments": { exitCode: 0, stdout: "[]" },
     });
     const result = await fetchPRComments(prUrl, runner);
-    expect(result).toBeNull();
+    expect(result.formatted).toBeNull();
+    expect(result.reviewCount).toBe(0);
+    expect(result.issueCount).toBe(0);
   });
 
   test("parses owner/repo/number correctly from URL", async () => {

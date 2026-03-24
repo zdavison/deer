@@ -61,6 +61,12 @@ export interface PrepareOptions {
    * @default false
    */
   daemonize?: boolean;
+  /**
+   * Additional text to append to Claude's system prompt via `--append-system-prompt`.
+   * Use this to inject context (e.g. PR review comments) without passing it as a task
+   * prompt — Claude receives it as background context and does not act on it immediately.
+   */
+  appendSystemPrompt?: string;
   /** Callback for status updates during setup */
   onStatus?: (message: string) => void;
   /** Callback for auth proxy log messages */
@@ -102,6 +108,7 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
     model = DEFAULT_MODEL,
     fromBranch,
     continueSession,
+    appendSystemPrompt,
     daemonize = false,
     onStatus,
     onProxyLog,
@@ -269,11 +276,12 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
     throw err;
   }
 
+  const appendSysPromptArgs = appendSystemPrompt ? ["--append-system-prompt", appendSystemPrompt] : [];
   const claudeCmd = continueSession
-    ? ["claude", "--dangerously-skip-permissions", "--model", model, "--continue"]
+    ? ["claude", "--dangerously-skip-permissions", "--model", model, "--continue", ...appendSysPromptArgs]
     : prompt
-      ? ["claude", "--dangerously-skip-permissions", "--model", model, prompt]
-      : ["claude", "--dangerously-skip-permissions", "--model", model];
+      ? ["claude", "--dangerously-skip-permissions", "--model", model, ...appendSysPromptArgs, prompt]
+      : ["claude", "--dangerously-skip-permissions", "--model", model, ...appendSysPromptArgs];
 
   const command = runtime.buildCommand(runtimeOpts, claudeCmd);
 

@@ -53,7 +53,7 @@ export type { PruneResult, PruneOptions } from "./prune";
 
 // PR comments context
 export { fetchPRComments, formatPRComments } from "./pr-comments";
-export type { PRReviewComment, PRIssueComment, GhApiRunner } from "./pr-comments";
+export type { PRReviewComment, PRIssueComment, GhApiRunner, FetchPRCommentsResult } from "./pr-comments";
 
 // Utilities
 export { generateTaskId, dataDir } from "./task";

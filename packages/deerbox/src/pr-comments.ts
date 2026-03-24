@@ -24,6 +24,15 @@ export interface PRIssueComment {
  */
 export type GhApiRunner = (endpoint: string) => Promise<{ stdout: string; exitCode: number }>;
 
+export interface FetchPRCommentsResult {
+  /** Formatted context block for Claude's system prompt, or null if there are no comments. */
+  formatted: string | null;
+  /** Number of non-empty inline review comments fetched. */
+  reviewCount: number;
+  /** Number of non-empty issue-level discussion comments fetched. */
+  issueCount: number;
+}
+
 // ── Pure formatting ───────────────────────────────────────────────────
 
 /**
@@ -79,11 +88,11 @@ const defaultRunner: GhApiRunner = async (endpoint) => {
 
 /**
  * Fetch PR review and issue comments from GitHub and return a formatted
- * context block, or null if there are no comments or on failure.
+ * context block plus counts of non-empty comments fetched.
  */
-export async function fetchPRComments(prUrl: string, runner: GhApiRunner = defaultRunner): Promise<string | null> {
+export async function fetchPRComments(prUrl: string, runner: GhApiRunner = defaultRunner): Promise<FetchPRCommentsResult> {
   const parsed = parsePRUrl(prUrl);
-  if (!parsed) return null;
+  if (!parsed) return { formatted: null, reviewCount: 0, issueCount: 0 };
 
   const { owner, repo, number } = parsed;
 
@@ -103,8 +112,11 @@ export async function fetchPRComments(prUrl: string, runner: GhApiRunner = defau
       issueComments = JSON.parse(issueRes.stdout) as PRIssueComment[];
     }
   } catch {
-    return null;
+    return { formatted: null, reviewCount: 0, issueCount: 0 };
   }
 
-  return formatPRComments(reviewComments, issueComments);
+  const reviewCount = reviewComments.filter((c) => c.body.trim()).length;
+  const issueCount = issueComments.filter((c) => c.body.trim()).length;
+
+  return { formatted: formatPRComments(reviewComments, issueComments), reviewCount, issueCount };
 }
