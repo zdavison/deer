@@ -27,6 +27,7 @@ import { dataDir } from "./task";
 import { createPullRequest, updatePullRequest, hasChanges } from "./git/finalize";
 import { runPostSession, interactivePromptChoice, defaultOpenShell, defaultMergeBranch } from "./post-session";
 import { prune } from "./prune";
+import { fetchPRComments } from "./pr-comments";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -249,9 +250,18 @@ async function cmdRun(prompt: string | undefined, args: string[]) {
     }
   }
 
+  // If --from resolved to a PR, fetch review comments and prepend as context
+  let effectivePrompt = prompt;
+  if (fromResolution?.prUrl) {
+    const comments = await fetchPRComments(fromResolution.prUrl);
+    if (comments) {
+      effectivePrompt = prompt ? `${comments}\n\n${prompt}` : comments;
+    }
+  }
+
   const session = await prepare({
     repoPath,
-    prompt,
+    prompt: effectivePrompt,
     baseBranch: fromResolution?.baseBranch ?? effectiveBranch,
     fromBranch: fromResolution?.branch,
     config,
@@ -293,7 +303,7 @@ async function cmdRun(prompt: string | undefined, args: string[]) {
       worktreePath: session.worktreePath,
       branch: session.branch,
       baseBranch: postSessionBaseBranch,
-      prompt: prompt ?? null,
+      prompt: effectivePrompt ?? null,
       fromPrUrl: fromPrUrl ?? undefined,
       originalBranch,
     },
