@@ -86,9 +86,9 @@ async function cmdPrune(args: string[]) {
   console.log(`  task dirs cleaned:        ${result.tasksRemoved}`);
 }
 
-// ── Subcommand: install ───────────────────────────────────────────────
+// ── Subcommand: repair ────────────────────────────────────────────────
 
-async function cmdInstall() {
+async function cmdRepair() {
   const SRT_PACKAGE = "@anthropic-ai/sandbox-runtime";
   const deerDataDir = join(process.env.HOME ?? "/tmp", ".local", "share", "deer");
 
@@ -145,8 +145,8 @@ async function main() {
 
   await checkAndUpdateDeer();
 
-  if (process.argv[2] === "install") {
-    await cmdInstall();
+  if (process.argv[2] === "repair") {
+    await cmdRepair();
     return;
   }
 
