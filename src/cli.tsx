@@ -38,6 +38,9 @@ import DemoDashboard from "./demo-dashboard.tsx";
 import { checkAndUpdateDeer } from "./updater.ts";
 import { prune, isTmuxSessionAlive } from "deerbox";
 import { getAllTasks, deleteTaskRow } from "./db.ts";
+import { execFileSync } from "node:child_process";
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 
 setLang(detectLang());
 
@@ -83,6 +86,35 @@ async function cmdPrune(args: string[]) {
   console.log(`  task dirs cleaned:        ${result.tasksRemoved}`);
 }
 
+// ── Subcommand: install ───────────────────────────────────────────────
+
+async function cmdInstall() {
+  const SRT_PACKAGE = "@anthropic-ai/sandbox-runtime";
+  const deerDataDir = join(process.env.HOME ?? "/tmp", ".local", "share", "deer");
+
+  mkdirSync(deerDataDir, { recursive: true });
+
+  console.log(`Installing ${SRT_PACKAGE}...`);
+  try {
+    execFileSync("npm", ["install", "--prefix", deerDataDir, SRT_PACKAGE], {
+      stdio: "inherit",
+    });
+    console.log(`\nInstalled ${SRT_PACKAGE} to: ${deerDataDir}`);
+  } catch {
+    console.error(
+      `\nWarning: Failed to install ${SRT_PACKAGE}. You can install it manually:\n` +
+      `  npm install --prefix ${deerDataDir} ${SRT_PACKAGE}`
+    );
+  }
+
+  const pathDirs = (process.env.PATH ?? "").split(":");
+  const installDir = join(process.env.HOME ?? "/tmp", ".local", "bin");
+  if (!pathDirs.includes(installDir)) {
+    console.log(`\nNote: ${installDir} is not in your PATH. Add this to your shell profile:`);
+    console.log(`  export PATH="$HOME/.local/bin:$PATH"`);
+  }
+}
+
 // ── Main ──────────────────────────────────────────────────────────────
 
 async function main() {
@@ -112,6 +144,11 @@ async function main() {
   }
 
   await checkAndUpdateDeer();
+
+  if (process.argv[2] === "install") {
+    await cmdInstall();
+    return;
+  }
 
   const startDir = process.cwd();
 
