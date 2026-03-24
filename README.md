@@ -73,7 +73,17 @@ cd your-project
 deerbox
 ```
 
-After Claude exits, `deerbox` prompts you to create a PR, update an existing one, open a shell in the worktree, or discard. By default the worktree is cleaned up when you're done.
+After Claude exits, `deerbox` prompts you with a menu of actions:
+
+| Key | Action |
+|-----|--------|
+| `p` | Create a pull request (or update an existing one if `--from` was used) |
+| `k` | Keep the worktree *(default)* |
+| `s` | Open a shell in the worktree |
+| `m` | Merge directly into your original branch (shown when applicable) |
+| `d` | Discard — remove the worktree and changes |
+
+By default the worktree is cleaned up when you're done. The `m` option merges the session branch into the branch you were on when you invoked `deerbox`, without creating a PR.
 
 ### deerbox options
 
