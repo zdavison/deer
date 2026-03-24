@@ -16,23 +16,6 @@ const e2e = process.env.DEER_E2E ? describe : describe.skip;
 
 const CLI_PATH = join(import.meta.dir, "../../src/cli.tsx");
 
-describe("deer install subcommand", () => {
-  test("exits without starting the TUI when passed 'install'", async () => {
-    const proc = Bun.spawn(["bun", "run", CLI_PATH, "install"], {
-      cwd: "/tmp",
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const exitCode = await proc.exited;
-    const stdout = await new Response(proc.stdout).text();
-
-    // Must not enter the alternate screen buffer (TUI)
-    expect(stdout).not.toContain("\x1b[?1049h");
-    // Must not try to start the dashboard (no git repo error or TUI markup)
-    expect(exitCode).toBe(0);
-  });
-});
-
 e2e("CLI startup", () => {
   test("renders the dashboard header in a git repo", async () => {
     const { repoPath, cleanup } = await createTestRepo();

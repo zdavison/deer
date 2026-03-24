@@ -94,7 +94,7 @@ const strings = {
     log_pr_updated: "[pr] PR updated: {url}",
 
     // Preflight errors
-    preflight_srt_missing: "@anthropic-ai/sandbox-runtime not installed — run: bunx @zdavison/deer install",
+    preflight_srt_missing: "@anthropic-ai/sandbox-runtime not installed — run: curl -fsSL https://raw.githubusercontent.com/zdavison/deer/main/install.sh | bash",
     preflight_sandbox_exec_broken: "sandbox-exec not working — ensure /usr/bin is in PATH",
     preflight_sandbox_exec_missing: "sandbox-exec not available — required on macOS for srt sandboxing",
     preflight_bwrap_missing: "bwrap not available — install bubblewrap (required by srt on Linux)",
@@ -185,7 +185,7 @@ const strings = {
     log_pr_updated: "[pr] PR更新完了: {url}",
 
     // Preflight errors
-    preflight_srt_missing: "@anthropic-ai/sandbox-runtime がインストールされていません — 実行: bunx @zdavison/deer install",
+    preflight_srt_missing: "@anthropic-ai/sandbox-runtime がインストールされていません — 実行: curl -fsSL https://raw.githubusercontent.com/zdavison/deer/main/install.sh | bash",
     preflight_sandbox_exec_broken: "sandbox-exec が動作していません — /usr/bin がPATHに含まれているか確認してください",
     preflight_sandbox_exec_missing: "sandbox-exec が利用できません — macOSのsrtサンドボックスに必要です",
     preflight_bwrap_missing: "bwrap が利用できません — bubblewrapをインストールしてください (Linuxのsrtに必要)",
@@ -276,7 +276,7 @@ const strings = {
     log_pr_updated: "[pr] PR已更新: {url}",
 
     // Preflight errors
-    preflight_srt_missing: "@anthropic-ai/sandbox-runtime 未安装 — 运行: bunx @zdavison/deer install",
+    preflight_srt_missing: "@anthropic-ai/sandbox-runtime 未安装 — 运行: curl -fsSL https://raw.githubusercontent.com/zdavison/deer/main/install.sh | bash",
     preflight_sandbox_exec_broken: "sandbox-exec 无法正常工作 — 请确认 /usr/bin 在 PATH 中",
     preflight_sandbox_exec_missing: "sandbox-exec 不可用 — macOS srt 沙箱需要此程序",
     preflight_bwrap_missing: "bwrap 不可用 — 请安装 bubblewrap (Linux srt 需要)",
@@ -367,7 +367,7 @@ const strings = {
     log_pr_updated: "[pr] PR 업데이트됨: {url}",
 
     // Preflight errors
-    preflight_srt_missing: "@anthropic-ai/sandbox-runtime이 설치되지 않았습니다 — 실행: bunx @zdavison/deer install",
+    preflight_srt_missing: "@anthropic-ai/sandbox-runtime이 설치되지 않았습니다 — 실행: curl -fsSL https://raw.githubusercontent.com/zdavison/deer/main/install.sh | bash",
     preflight_sandbox_exec_broken: "sandbox-exec가 작동하지 않습니다 — /usr/bin이 PATH에 있는지 확인하세요",
     preflight_sandbox_exec_missing: "sandbox-exec를 사용할 수 없습니다 — macOS srt 샌드박스에 필요합니다",
     preflight_bwrap_missing: "bwrap를 사용할 수 없습니다 — bubblewrap를 설치하세요 (Linux srt에 필요)",
@@ -458,7 +458,7 @@ const strings = {
     log_pr_updated: "[pr] PR обновлён: {url}",
 
     // Preflight errors
-    preflight_srt_missing: "@anthropic-ai/sandbox-runtime не установлен — выполните: bunx @zdavison/deer install",
+    preflight_srt_missing: "@anthropic-ai/sandbox-runtime не установлен — выполните: curl -fsSL https://raw.githubusercontent.com/zdavison/deer/main/install.sh | bash",
     preflight_sandbox_exec_broken: "sandbox-exec не работает — убедитесь, что /usr/bin есть в PATH",
     preflight_sandbox_exec_missing: "sandbox-exec недоступен — необходим для srt-песочницы на macOS",
     preflight_bwrap_missing: "bwrap недоступен — установите bubblewrap (необходим для srt на Linux)",

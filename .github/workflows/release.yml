@@ -56,5 +56,6 @@ jobs:
           files: |
             dist/deer-*
             dist/deerbox-*
+            install.sh
           generate_release_notes: true
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}

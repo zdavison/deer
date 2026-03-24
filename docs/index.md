@@ -33,7 +33,7 @@ If you want to parallelize `claude` agents, but don't like the complexity of age
 ## Installation
 
 ```sh
-bunx @zdavison/deer install
+curl -fsSL https://raw.githubusercontent.com/zdavison/deer/main/install.sh | bash
 ```
 
 ### Supported platforms

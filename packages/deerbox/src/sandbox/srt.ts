@@ -9,7 +9,7 @@ import { HOME } from "@deer/shared";
  *
  * Search order:
  * 1. Local node_modules (dev / bun run dev)
- * 2. deer data dir (~/.local/share/deer/node_modules) — installed by `bunx @zdavison/deer install`
+ * 2. deer data dir (~/.local/share/deer/node_modules) — installed by install.sh
  * 3. Bare "srt" on PATH (globally installed)
  */
 function resolveSrtBin(): string {

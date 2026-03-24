@@ -38,9 +38,6 @@ import DemoDashboard from "./demo-dashboard.tsx";
 import { checkAndUpdateDeer } from "./updater.ts";
 import { prune, isTmuxSessionAlive } from "deerbox";
 import { getAllTasks, deleteTaskRow } from "./db.ts";
-import { execFileSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
-import { join } from "node:path";
 
 setLang(detectLang());
 
@@ -86,63 +83,11 @@ async function cmdPrune(args: string[]) {
   console.log(`  task dirs cleaned:        ${result.tasksRemoved}`);
 }
 
-// ── Subcommand: install ───────────────────────────────────────────────
-
-function isDevMode(): boolean {
-  const script = process.argv[1] ?? "";
-  return script.endsWith(".ts") || script.endsWith(".tsx");
-}
-
-async function cmdInstall() {
-  // Skip actual download when running from source (dev/test mode)
-  if (isDevMode()) {
-    console.log("deer install: skipping download in dev mode");
-    return;
-  }
-  // Dynamic import to avoid top-level require("../package.json") in compiled binary
-  const { install } = await import("../scripts/install.js");
-  await install();
-}
-
-// ── Subcommand: repair ────────────────────────────────────────────────
-
-async function cmdRepair() {
-  const SRT_PACKAGE = "@anthropic-ai/sandbox-runtime";
-  const deerDataDir = join(process.env.HOME ?? "/tmp", ".local", "share", "deer");
-
-  mkdirSync(deerDataDir, { recursive: true });
-
-  console.log(`Installing ${SRT_PACKAGE}...`);
-  try {
-    execFileSync("npm", ["install", "--prefix", deerDataDir, SRT_PACKAGE], {
-      stdio: "inherit",
-    });
-    console.log(`\nInstalled ${SRT_PACKAGE} to: ${deerDataDir}`);
-  } catch {
-    console.error(
-      `\nWarning: Failed to install ${SRT_PACKAGE}. You can install it manually:\n` +
-      `  npm install --prefix ${deerDataDir} ${SRT_PACKAGE}`
-    );
-  }
-
-  const pathDirs = (process.env.PATH ?? "").split(":");
-  const installDir = join(process.env.HOME ?? "/tmp", ".local", "bin");
-  if (!pathDirs.includes(installDir)) {
-    console.log(`\nNote: ${installDir} is not in your PATH. Add this to your shell profile:`);
-    console.log(`  export PATH="$HOME/.local/bin:$PATH"`);
-  }
-}
-
 // ── Main ──────────────────────────────────────────────────────────────
 
 async function main() {
   if (process.argv.includes("--version") || process.argv.includes("-v")) {
     console.log(`deer ${VERSION}`);
-    return;
-  }
-
-  if (process.argv[2] === "install") {
-    await cmdInstall();
     return;
   }
 
@@ -166,17 +111,7 @@ async function main() {
     return;
   }
 
-  if (process.argv[2] === "repair") {
-    await cmdRepair();
-    return;
-  }
-
   await checkAndUpdateDeer();
-
-  if (process.argv[2] === "repair") {
-    await cmdRepair();
-    return;
-  }
 
   const startDir = process.cwd();
 

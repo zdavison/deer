@@ -6,15 +6,7 @@
   "workspaces": [
     "packages/*"
   ],
-  "bin": {
-    "deer": "scripts/install.js"
-  },
-  "files": [
-    "scripts/install.js"
-  ],
-  "publishConfig": {
-    "access": "public"
-  },
+  "private": true,
   "scripts": {
     "test": "bun test --cwd . test/",
     "lint": "oxlint src",

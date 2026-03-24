@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
-// kadai:name Simulate bunx @zdavison/deer install
+// kadai:name Simulate install.sh
 // kadai:emoji 📦
-// kadai:description Simulate 'bunx @zdavison/deer install' without publishing to npm
+// kadai:description Simulate 'curl | bash' install against locally-built binaries
 
 import { $ } from "bun";
 import { join } from "node:path";
-import { tmpdir, homedir, platform, arch } from "node:os";
+import { tmpdir, platform, arch } from "node:os";
 import { mkdtemp, rm } from "node:fs/promises";
 
 const repoRoot = import.meta.dir.replace("/.kadai/actions", "");
@@ -13,7 +13,6 @@ const os = platform() === "darwin" ? "darwin" : "linux";
 const cpuArch = arch() === "arm64" ? "arm64" : "x64";
 
 const tempDir = await mkdtemp(join(tmpdir(), "deer-install-test-"));
-const installDir = join(tempDir, "install-target");
 
 async function cleanup() {
   console.log(`\nCleaning up ${tempDir}...`);
@@ -26,32 +25,52 @@ try {
   await $`bun run build`.cwd(repoRoot);
   console.log();
 
-  // Step 2: Pack the npm package
-  console.log("=== Step 2: Packing npm package ===");
-  const packResult = await $`npm pack --pack-destination ${tempDir}`
-    .cwd(repoRoot)
-    .text();
-  const tarball = join(tempDir, packResult.trim().split("\n").pop()!.trim());
-  console.log(`Tarball: ${tarball}\n`);
-
-  // Step 3: Start a local HTTP server to serve built binaries (mimics GitHub releases)
-  console.log("=== Step 3: Starting local release server ===");
+  // Step 2: Start a local HTTP server to serve built binaries (mimics GitHub releases)
+  // and the GitHub API latest release endpoint
+  console.log("=== Step 2: Starting local release server ===");
   const distDir = join(repoRoot, "dist");
+  const pkg = await Bun.file(join(repoRoot, "package.json")).json();
+  const version = pkg.version;
+
   const server = Bun.serve({
     port: 0,
     async fetch(req) {
       const url = new URL(req.url);
-      // GitHub release URL pattern: /zdavison/deer/releases/download/v<ver>/<binary>
-      const match = url.pathname.match(
-        /\/zdavison\/deer\/releases\/download\/v[^/]+\/(.+)/,
-      );
-      if (match) {
-        const file = Bun.file(join(distDir, match[1]));
+
+      // Mock GitHub API: /repos/.../releases/latest
+      if (url.pathname.includes("/repos/") && url.pathname.endsWith("/releases/latest")) {
+        const assets = ["deer", "deerbox"].flatMap((bin) =>
+          ["linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64"].map((suffix) => ({
+            name: `${bin}-${suffix}`,
+            browser_download_url: `http://localhost:${server.port}/download/${bin}-${suffix}`,
+          }))
+        );
+        console.log(`  Serving: releases/latest (v${version})`);
+        return Response.json({ tag_name: `v${version}`, assets });
+      }
+
+      // Serve binary downloads
+      const dlMatch = url.pathname.match(/\/download\/(.+)/);
+      if (dlMatch) {
+        const file = Bun.file(join(distDir, dlMatch[1]));
         if (await file.exists()) {
-          console.log(`  Serving: ${match[1]}`);
+          console.log(`  Serving: ${dlMatch[1]}`);
           return new Response(file);
         }
       }
+
+      // Serve binaries via GitHub-style release URL pattern
+      const releaseMatch = url.pathname.match(
+        /\/zdavison\/deer\/releases\/download\/v[^/]+\/(.+)/,
+      );
+      if (releaseMatch) {
+        const file = Bun.file(join(distDir, releaseMatch[1]));
+        if (await file.exists()) {
+          console.log(`  Serving: ${releaseMatch[1]}`);
+          return new Response(file);
+        }
+      }
+
       console.log(`  404: ${url.pathname}`);
       return new Response("Not found", { status: 404 });
     },
@@ -59,46 +78,35 @@ try {
   const baseUrl = `http://localhost:${server.port}`;
   console.log(`Serving binaries at ${baseUrl}\n`);
 
-  // Step 4: Install from tarball into temp dir and run the bin entry
-  console.log("=== Step 4: Installing package from tarball ===");
-  const pkgDir = join(tempDir, "pkg");
-  await $`mkdir -p ${pkgDir}`.quiet();
-  await $`bun add --cwd ${pkgDir} ${tarball}`.quiet();
+  // Step 3: Run install.sh with patched URLs pointing to our local server
+  console.log("=== Step 3: Running install.sh (against local server) ===");
 
-  // Step 5: Run the install script, redirecting GitHub fetches to local server
-  console.log("\n=== Step 5: Running install script (against local server) ===");
+  // Read install.sh and patch GitHub URLs to point to local server
+  const installScript = await Bun.file(join(repoRoot, "install.sh")).text();
+  const patchedScript = installScript
+    .replace(
+      "https://api.github.com/repos",
+      `${baseUrl}/repos`,
+    )
+    .replace(
+      "https://github.com/${REPO}/releases/download",
+      `${baseUrl}/${`zdavison/deer`}/releases/download`,
+    );
 
-  // Patch the install script to use our local server instead of github.com
-  // We do this by setting HOME to temp so binaries install to temp/.local/bin
-  const patchedInstall = `
-    import { install } from "${join(pkgDir, "node_modules/@zdavison/deer/scripts/install.js")}";
+  const patchedPath = join(tempDir, "install.sh");
+  await Bun.write(patchedPath, patchedScript);
+  await $`chmod +x ${patchedPath}`;
 
-    // Monkey-patch global fetch to redirect GitHub release URLs to local server
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (input, init) => {
-      const url = typeof input === "string" ? input : input.toString();
-      if (url.includes("github.com/${`zdavison/deer`}/releases/")) {
-        const redirected = url.replace("https://github.com", "${baseUrl}");
-        console.log("  Redirecting to local server");
-        return originalFetch(redirected, init);
-      }
-      return originalFetch(input, init);
-    };
-
-    // Override HOME so it installs to temp dir instead of real ~/.local/bin
-    process.env.HOME = "${tempDir}";
-
-    await install();
-  `;
-
-  const patchedPath = join(tempDir, "run-install.mjs");
-  await Bun.write(patchedPath, patchedInstall);
-  await $`node ${patchedPath}`;
+  // Run with HOME pointing to temp so we don't clobber real install
+  await $`bash ${patchedPath}`.env({
+    ...process.env,
+    HOME: tempDir,
+  });
 
   server.stop();
 
-  // Step 6: Verify
-  console.log("\n=== Step 6: Verification ===");
+  // Step 4: Verify
+  console.log("\n=== Step 4: Verification ===");
   const expectedBinDir = join(tempDir, ".local", "bin");
   const deerBin = Bun.file(join(expectedBinDir, "deer"));
   const deerboxBin = Bun.file(join(expectedBinDir, "deerbox"));

@@ -38,7 +38,7 @@ export async function runPreflight(): Promise<PreflightResult> {
     } catch { /* not in deer data dir either */ }
   }
   if (!srtFound) {
-    errors.push("@anthropic-ai/sandbox-runtime not installed — run: bunx @zdavison/deer install");
+    errors.push("@anthropic-ai/sandbox-runtime not installed — run: curl -fsSL https://raw.githubusercontent.com/zdavison/deer/main/install.sh | bash");
   }
 
   // Check platform-specific sandbox dependencies
