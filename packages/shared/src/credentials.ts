@@ -58,9 +58,10 @@ export async function resolveCredentials(
     } catch { /* ignore — keychain unavailable or no entry */ }
   }
   if (!process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-    // 3. Read from ~/.claude.json where Claude Code stores OAuth on Linux
+    // 3. Read from ~/.claude/.credentials.json where Claude Code stores OAuth on Linux and Windows
+    // Reference: https://code.claude.com/docs/en/authentication#credential-management
     try {
-      const f = Bun.file(join(homeDir, ".claude.json"));
+      const f = Bun.file(join(homeDir, ".claude", ".credentials.json"));
       if (await f.exists()) {
         const creds = JSON.parse(await f.text());
         const accessToken = creds?.claudeAiOauth?.accessToken;
