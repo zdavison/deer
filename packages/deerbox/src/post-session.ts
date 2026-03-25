@@ -15,6 +15,7 @@ const green = (s: string) => `\x1b[32m${s}\x1b[39m`;
 const yellow = (s: string) => `\x1b[33m${s}\x1b[39m`;
 const cyan = (s: string) => `\x1b[36m${s}\x1b[39m`;
 const red = (s: string) => `\x1b[31m${s}\x1b[39m`;
+const strikethrough = (s: string) => `\x1b[9m${s}\x1b[29m`;
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -86,10 +87,15 @@ export interface PostSessionContext {
 
 // ── Prompt rendering ─────────────────────────────────────────────────
 
-export function renderPromptMenu(fromPrUrl?: string, originalBranch?: string): string {
-  const prLine = fromPrUrl
-    ? `  ${green(bold("p"))}  ${green(`Update existing PR: ${fromPrUrl}`)}`
-    : `  ${green(bold("p"))}  ${green("Create a pull request")}`;
+export function renderPromptMenu(fromPrUrl?: string, originalBranch?: string, fromPrIsFork?: boolean): string {
+  let prLine: string;
+  if (fromPrIsFork && fromPrUrl) {
+    prLine = `  ${dim(strikethrough("p"))}  ${dim(strikethrough(`Update existing PR: ${fromPrUrl}`))}  ${dim("(can't push to a fork PR)")}`;
+  } else if (fromPrUrl) {
+    prLine = `  ${green(bold("p"))}  ${green(`Update existing PR: ${fromPrUrl}`)}`;
+  } else {
+    prLine = `  ${green(bold("p"))}  ${green("Create a pull request")}`;
+  }
   const lines = [
     "",
     bold("What would you like to do with this session's changes?"),
@@ -135,7 +141,12 @@ export async function runPostSession(
     return { action: "no_changes" };
   }
 
-  const choice = await deps.promptChoice();
+  let choice = await deps.promptChoice();
+
+  // Fork PRs can't be pushed to; treat 'p' as 'k' (keep)
+  if (choice === "p" && ctx.fromPrIsFork) {
+    choice = "k";
+  }
 
   if (choice === "p") {
     if (ctx.fromPrUrl) {
@@ -233,8 +244,8 @@ export async function runPostSession(
 /**
  * Interactive prompt via readline. Reads one line from stdin.
  */
-export async function interactivePromptChoice(fromPrUrl?: string, originalBranch?: string): Promise<PostSessionChoice> {
-  process.stderr.write(renderPromptMenu(fromPrUrl, originalBranch));
+export async function interactivePromptChoice(fromPrUrl?: string, originalBranch?: string, fromPrIsFork?: boolean): Promise<PostSessionChoice> {
+  process.stderr.write(renderPromptMenu(fromPrUrl, originalBranch, fromPrIsFork));
 
   const readline = await import("readline");
   return new Promise((resolve) => {

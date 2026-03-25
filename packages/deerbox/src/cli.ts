@@ -261,7 +261,7 @@ async function cmdRun(prompt: string | undefined, args: string[]) {
     },
     {
       hasChanges: (wt, base) => hasChanges(wt, base, initialHeadSha),
-      promptChoice: () => interactivePromptChoice(fromPrUrl ?? undefined, originalBranch),
+      promptChoice: () => interactivePromptChoice(fromPrUrl ?? undefined, originalBranch, fromResolution?.isFork),
       createPR: createPullRequest,
       updatePR: (opts) => updatePullRequest(opts),
       mergeBranch: defaultMergeBranch,

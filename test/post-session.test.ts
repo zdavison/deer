@@ -236,21 +236,7 @@ describe("runPostSession with --from and no new changes", () => {
 });
 
 describe("runPostSession with fromPrIsFork", () => {
-  test("passes isFork: true to updatePR when fromPrIsFork is set", async () => {
-    const fromPrUrl = "https://github.com/org/repo/pull/42";
-    let receivedIsFork: boolean | undefined;
-    const deps = makeDeps({ hasChanges: true, choice: "p" });
-    deps.updatePR = async (opts) => {
-      receivedIsFork = opts.isFork;
-    };
-
-    const ctx = makeCtx({ fromPrUrl, fromPrIsFork: true, branch: "fix-bug" });
-    await runPostSession(ctx, deps);
-
-    expect(receivedIsFork).toBe(true);
-  });
-
-  test("passes isFork: false when fromPrIsFork is not set", async () => {
+  test("passes isFork: undefined to updatePR when fromPrIsFork is not set", async () => {
     const fromPrUrl = "https://github.com/org/repo/pull/42";
     let receivedIsFork: boolean | undefined;
     const deps = makeDeps({ hasChanges: true, choice: "p" });
@@ -321,5 +307,34 @@ describe("renderPromptMenu", () => {
   test("does not show 'Create a pull request' when fromPrUrl is set", () => {
     const menu = renderPromptMenu("https://github.com/org/repo/pull/42");
     expect(menu).not.toContain("Create a pull request");
+  });
+
+  test("shows fork note when fromPrIsFork is true", () => {
+    const menu = renderPromptMenu("https://github.com/org/repo/pull/42", undefined, true);
+    expect(menu).toContain("can't push to a fork PR");
+  });
+
+  test("fork note is not strikethrough (appears after strikethrough reset)", () => {
+    const menu = renderPromptMenu("https://github.com/org/repo/pull/42", undefined, true);
+    const forkNoteIndex = menu.indexOf("can't push to a fork PR");
+    // The fork note must appear after a strikethrough reset sequence
+    const strikethroughReset = "\x1b[29m";
+    const lastResetBefore = menu.lastIndexOf(strikethroughReset, forkNoteIndex);
+    expect(lastResetBefore).toBeGreaterThan(-1);
+    expect(lastResetBefore).toBeLessThan(forkNoteIndex);
+  });
+});
+
+describe("runPostSession with fromPrIsFork and choice p", () => {
+  test("choice p falls back to keep when fromPrIsFork is true", async () => {
+    const fromPrUrl = "https://github.com/org/repo/pull/42";
+    const deps = makeDeps({ hasChanges: true, choice: "p" });
+    const ctx = makeCtx({ fromPrUrl, fromPrIsFork: true, branch: "fix-bug", worktreePath: "/wt" });
+    const outcome = await runPostSession(ctx, deps);
+
+    expect(outcome.action).toBe("keep");
+    expect(deps._tracker.updatePRCalled).toBe(false);
+    expect(deps._tracker.createPRCalled).toBe(false);
+    expect(deps._tracker.cleanupCalled).toBe(true);
   });
 });
