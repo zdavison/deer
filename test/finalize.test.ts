@@ -2,7 +2,7 @@ import { test, expect, describe, beforeEach, afterEach } from "bun:test";
 import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
-import { ensureDeerEmojiPrefix, findPRTemplate, parsePRMetadataResponse, buildClaudeSubprocessEnv, isPRAuthorFromLogins, updatePullRequest } from "deerbox";
+import { ensureDeerEmojiPrefix, findPRTemplate, parsePRMetadataResponse, buildClaudeSubprocessEnv, isPRAuthorFromLogins } from "deerbox";
 
 describe("ensureDeerEmojiPrefix", () => {
   test("adds deer emoji to plain title", () => {
@@ -242,67 +242,5 @@ describe("isPRAuthorFromLogins", () => {
 
   test("is case-sensitive", () => {
     expect(isPRAuthorFromLogins("Alice", "alice")).toBe(false);
-  });
-});
-
-// ── updatePullRequest: fork PR ────────────────────────────────────────
-
-describe("updatePullRequest with isFork", () => {
-  let tmpDir: string;
-
-  beforeEach(async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "deer-finalize-test-"));
-    await Bun.$`git init -b main ${tmpDir}`.quiet();
-    await Bun.$`git -C ${tmpDir} config user.email "test@test.com"`.quiet();
-    await Bun.$`git -C ${tmpDir} config user.name "test"`.quiet();
-    await writeFile(join(tmpDir, "initial.txt"), "initial");
-    await Bun.$`git -C ${tmpDir} add .`.quiet();
-    await Bun.$`git -C ${tmpDir} commit -m "initial"`.quiet();
-  });
-
-  afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
-  });
-
-  test("commits changes locally and skips push when isFork is true", async () => {
-    await writeFile(join(tmpDir, "change.txt"), "new content");
-
-    const logs: string[] = [];
-    // If this attempted git push, it would throw because there is no remote.
-    // Completing without error proves push was skipped.
-    await updatePullRequest({
-      repoPath: tmpDir,
-      worktreePath: tmpDir,
-      finalBranch: "fix-bug",
-      baseBranch: "main",
-      prompt: "fix the bug",
-      prUrl: "https://github.com/org/repo/pull/42",
-      isFork: true,
-      onLog: (msg) => logs.push(msg),
-    });
-
-    const gitLog = await Bun.$`git -C ${tmpDir} log --oneline`.quiet();
-    const commits = gitLog.stdout.toString().trim().split("\n");
-    expect(commits.length).toBe(2); // initial + the staged commit
-
-    expect(logs.some((l) => l.toLowerCase().includes("fork"))).toBe(true);
-  });
-
-  test("does not attempt to generate PR metadata when isFork is true", async () => {
-    await writeFile(join(tmpDir, "change.txt"), "new content");
-
-    const logs: string[] = [];
-    await updatePullRequest({
-      repoPath: tmpDir,
-      worktreePath: tmpDir,
-      finalBranch: "fix-bug",
-      baseBranch: "main",
-      prompt: "fix the bug",
-      prUrl: "https://github.com/org/repo/pull/42",
-      isFork: true,
-      onLog: (msg) => logs.push(msg),
-    });
-
-    expect(logs.some((l) => l.includes("Generating PR metadata"))).toBe(false);
   });
 });

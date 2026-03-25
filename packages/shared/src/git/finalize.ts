@@ -114,12 +114,6 @@ export interface UpdatePROptions {
    * @default isPRAuthor
    */
   prAuthorCheck?: (prUrl: string, repoPath: string) => Promise<boolean>;
-  /**
-   * True when the PR originates from a fork (isCrossRepository). When set,
-   * changes are committed locally and the function returns early — no push
-   * and no PR title/body update, since we cannot push to the fork remote.
-   */
-  isFork?: boolean;
 }
 
 interface PRMetadata {
@@ -524,15 +518,6 @@ export async function updatePullRequest(options: UpdatePROptions): Promise<void>
 
   // Remove deer internal files before staging
   await Bun.$`rm -rf ${worktreePath}/.deer-claude-config ${worktreePath}/.deer-prompt`.quiet().nothrow();
-
-  // Fork PRs: the branch lives on the contributor's fork, not on origin.
-  // Commit locally and return — no push and no PR title/body update.
-  if (options.isFork) {
-    log(`[pr] Staging and committing changes...`);
-    await stageAndCommit(worktreePath, undefined, onLog);
-    log(`[pr] Fork PR: changes committed locally. Push to the fork remote manually to update the PR.`);
-    return;
-  }
 
   // Stage and commit changes so the diff used for metadata generation is complete.
   log(`[pr] Staging and committing changes...`);

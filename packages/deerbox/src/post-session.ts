@@ -159,7 +159,6 @@ export async function runPostSession(
           baseBranch: ctx.baseBranch,
           prompt: ctx.prompt,
           prUrl: ctx.fromPrUrl,
-          isFork: ctx.fromPrIsFork,
           onLog: (msg) => deps.log(`  ${msg}`),
         });
         deps.log(`\n${green("PR updated:")} ${ctx.fromPrUrl}`);

@@ -235,22 +235,6 @@ describe("runPostSession with --from and no new changes", () => {
   });
 });
 
-describe("runPostSession with fromPrIsFork", () => {
-  test("passes isFork: undefined to updatePR when fromPrIsFork is not set", async () => {
-    const fromPrUrl = "https://github.com/org/repo/pull/42";
-    let receivedIsFork: boolean | undefined;
-    const deps = makeDeps({ hasChanges: true, choice: "p" });
-    deps.updatePR = async (opts) => {
-      receivedIsFork = opts.isFork;
-    };
-
-    const ctx = makeCtx({ fromPrUrl, branch: "feature/auth-fix" });
-    await runPostSession(ctx, deps);
-
-    expect(receivedIsFork).toBeUndefined();
-  });
-});
-
 describe("runPostSession with fromPrUrl", () => {
   test("choice p → calls updatePR instead of createPR", async () => {
     const fromPrUrl = "https://github.com/org/repo/pull/42";
