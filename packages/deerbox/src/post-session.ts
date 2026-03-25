@@ -4,8 +4,8 @@
  * Extracted from cli.ts so it can be tested with injectable dependencies.
  */
 
-import type { CreatePRResult, UpdatePROptions, MergeIntoLocalBranchOptions } from "./git/finalize";
-import { mergeIntoLocalBranch } from "./git/finalize";
+import type { CreatePRResult, UpdatePROptions, MergeIntoLocalBranchOptions, PRMetadata } from "./git/finalize";
+import { mergeIntoLocalBranch, findPRTemplate, generatePRMetadata } from "./git/finalize";
 
 // ── ANSI helpers ─────────────────────────────────────────────────────
 
@@ -45,6 +45,7 @@ export interface PostSessionDeps {
     baseBranch: string;
     prompt: string | null;
     onLog?: (msg: string) => void;
+    speculativeMetadata?: Promise<PRMetadata>;
   }) => Promise<CreatePRResult>;
   /** Update an existing pull request (called when ctx.fromPrUrl is set). */
   updatePR?: (opts: UpdatePROptions) => Promise<void>;
@@ -83,6 +84,13 @@ export interface PostSessionContext {
    * menu option merges the session branch into this branch.
    */
   originalBranch?: string;
+  /**
+   * When true, start generating PR metadata speculatively while the user reads
+   * the menu (requires `experimental.speculative_close = true` in config).
+   * Hides most Claude inference latency on the happy path at the cost of one
+   * extra API call when the user picks a non-PR option.
+   */
+  speculativeClose?: boolean;
 }
 
 // ── Prompt rendering ─────────────────────────────────────────────────
@@ -115,9 +123,9 @@ export function renderPromptMenu(fromPrUrl?: string, originalBranch?: string, fr
  * Parse user input into a PostSessionChoice.
  * Defaults to "k" (keep) for empty or unrecognized input.
  */
-export function parseChoice(input: string): PostSessionChoice {
+export function parseChoice(input: string, opts?: { fromPrIsFork?: boolean }): PostSessionChoice {
   const ch = input.trim().toLowerCase();
-  if (ch === "p") return "p";
+  if (ch === "p" && !opts?.fromPrIsFork) return "p";
   if (ch === "s") return "s";
   if (ch === "d") return "d";
   if (ch === "m") return "m";
@@ -141,12 +149,22 @@ export async function runPostSession(
     return { action: "no_changes" };
   }
 
-  let choice = await deps.promptChoice();
+  // Start a speculative git fetch immediately (cheap, always safe). If
+  // speculativeClose is enabled, also kick off metadata generation while the
+  // user is reading the menu — hides most of the Claude inference latency.
+  const speculativeFetch = Bun.$`git -C ${ctx.worktreePath} fetch origin ${ctx.baseBranch}`.quiet().nothrow();
 
-  // Fork PRs can't be pushed to; treat 'p' as 'k' (keep)
-  if (choice === "p" && ctx.fromPrIsFork) {
-    choice = "k";
+  let speculativeMetadata: Promise<PRMetadata> | undefined;
+  if (ctx.speculativeClose && !ctx.fromPrUrl) {
+    speculativeMetadata = speculativeFetch.then(async () => {
+      const prTemplate = await findPRTemplate(ctx.repoPath);
+      return generatePRMetadata(ctx.worktreePath, ctx.baseBranch, ctx.prompt, prTemplate, undefined, speculativeFetch);
+    });
+    // Prevent unhandled rejection if the user doesn't pick "p"
+    speculativeMetadata.catch(() => {});
   }
+
+  const choice = await deps.promptChoice();
 
   if (choice === "p") {
     if (ctx.fromPrUrl) {
@@ -162,7 +180,7 @@ export async function runPostSession(
           onLog: (msg) => deps.log(`  ${msg}`),
         });
         deps.log(`\n${green("PR updated:")} ${ctx.fromPrUrl}`);
-        await deps.destroy();
+        deps.destroy().catch(() => {});
         return { action: "pr_updated", prUrl: ctx.fromPrUrl };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -182,9 +200,10 @@ export async function runPostSession(
         baseBranch: ctx.baseBranch,
         prompt: ctx.prompt,
         onLog: (msg) => deps.log(`  ${msg}`),
+        speculativeMetadata,
       });
       deps.log(`\n${green("PR created:")} ${result.prUrl}`);
-      await deps.destroy();
+      deps.destroy().catch(() => {});
       return { action: "pr_created", prUrl: result.prUrl };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -219,6 +238,7 @@ export async function runPostSession(
         targetBranch: ctx.originalBranch,
         prompt: ctx.prompt,
         onLog: (msg) => deps.log(`  ${msg}`),
+        speculativeMetadata,
       });
       deps.log(`\n${green("Merged into")} ${ctx.originalBranch}`);
       await deps.destroy();
@@ -254,7 +274,7 @@ export async function interactivePromptChoice(fromPrUrl?: string, originalBranch
     });
     rl.once("line", (line: string) => {
       rl.close();
-      resolve(parseChoice(line));
+      resolve(parseChoice(line, { fromPrIsFork }));
     });
   });
 }

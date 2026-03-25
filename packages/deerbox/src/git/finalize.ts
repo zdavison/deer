@@ -5,6 +5,7 @@ export {
   mergeIntoLocalBranch,
   hasChanges,
   findPRTemplate,
+  generatePRMetadata,
   ensureDeerEmojiPrefix,
   parsePRMetadataResponse,
   buildClaudeSubprocessEnv,
@@ -17,4 +18,5 @@ export type {
   UpdatePROptions,
   PushBranchOptions,
   MergeIntoLocalBranchOptions,
+  PRMetadata,
 } from "@deer/shared";

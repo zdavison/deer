@@ -94,6 +94,16 @@ export interface CreatePROptions {
   prompt: string | null;
   /** Verbose log callback for diagnostics */
   onLog?: (message: string) => void;
+  /**
+   * Pre-computed PR metadata from a speculative generation started before the
+   * user was prompted. If provided, skips `findPRTemplate` + `generatePRMetadata`.
+   *
+   * Ordering note: speculative generation begins while the user reads the menu,
+   * before `stageAndCommit` runs here. `generatePRMetadata` includes
+   * `git diff HEAD` alongside the committed diff, so uncommitted changes from
+   * the agent session are captured even though they haven't been staged yet.
+   */
+  speculativeMetadata?: Promise<PRMetadata>;
 }
 
 export interface UpdatePROptions {
@@ -116,7 +126,7 @@ export interface UpdatePROptions {
   prAuthorCheck?: (prUrl: string, repoPath: string) => Promise<boolean>;
 }
 
-interface PRMetadata {
+export interface PRMetadata {
   branchName: string;
   title: string;
   body: string;
@@ -253,32 +263,55 @@ function extractFirstJsonObject(text: string): string | null {
 /**
  * Ask Claude to generate PR metadata (branch name, title, body) from the diff.
  * Falls back to a simple prompt-based title if Claude fails.
+ *
+ * @param fetchDone - If provided, awaited instead of running a fresh `git fetch`.
+ *   Pass the result of a speculative prefetch started before the user was prompted.
  */
-async function generatePRMetadata(worktreePath: string, baseBranch: string, prompt: string | null, prTemplate: string | null, onLog?: (msg: string) => void): Promise<PRMetadata> {
-  // Fetch latest remote state so we compare against up-to-date origin
-  await Bun.$`git -C ${worktreePath} fetch origin ${baseBranch}`.quiet().nothrow();
+export async function generatePRMetadata(worktreePath: string, baseBranch: string, prompt: string | null, prTemplate: string | null, onLog?: (msg: string) => void, fetchDone?: Promise<unknown>): Promise<PRMetadata> {
+  // Fetch latest remote state so we compare against up-to-date origin.
+  // Re-use a speculative prefetch if one was already started.
+  if (fetchDone) {
+    await fetchDone;
+  } else {
+    await Bun.$`git -C ${worktreePath} fetch origin ${baseBranch}`.quiet().nothrow();
+  }
   const remoteBase = `origin/${baseBranch}`;
 
-  // Use the merge-base (three-dot equivalent) so the diff matches exactly what
-  // GitHub will show in the PR — only the agent's changes since diverging from
-  // origin, regardless of where the local base branch was when the worktree
-  // was created.
-  const mergeBaseResult = await Bun.$`git -C ${worktreePath} merge-base ${remoteBase} HEAD`.quiet().nothrow();
-  const mergeBase = mergeBaseResult.stdout.toString().trim() || remoteBase;
+  // Use three-dot diff syntax (`A...B` = diff from merge-base of A and B to B)
+  // so the diff matches exactly what GitHub will show in the PR. Also capture
+  // `git diff HEAD` (all uncommitted changes, staged + unstaged vs HEAD) — this
+  // is non-empty when called speculatively before stageAndCommit runs, since
+  // deerbox (not the agent) handles all git operations. After stageAndCommit
+  // runs it will be empty, so including it is harmless in both paths.
+  const [diffResult, logResult, filesResult, uncommittedDiffResult, uncommittedFilesResult] = await Promise.all([
+    Bun.$`git -C ${worktreePath} diff ${remoteBase}...HEAD`.quiet().nothrow(),
+    Bun.$`git -C ${worktreePath} log --oneline ${remoteBase}..HEAD`.quiet().nothrow(),
+    Bun.$`git -C ${worktreePath} diff --name-only ${remoteBase}...HEAD`.quiet().nothrow(),
+    Bun.$`git -C ${worktreePath} diff HEAD`.quiet().nothrow(),
+    Bun.$`git -C ${worktreePath} diff --name-only HEAD`.quiet().nothrow(),
+  ]);
 
-  const diffResult = await Bun.$`git -C ${worktreePath} diff ${mergeBase}..HEAD`.quiet().nothrow();
-  const diff = diffResult.stdout.toString().trim();
-
-  const logResult = await Bun.$`git -C ${worktreePath} log --oneline ${mergeBase}..HEAD`.quiet().nothrow();
+  const committedDiff = diffResult.stdout.toString().trim();
   const commitLog = logResult.stdout.toString().trim();
+  const committedFiles = filesResult.stdout.toString().trim();
+  const uncommittedDiff = uncommittedDiffResult.stdout.toString().trim();
+  const uncommittedFiles = uncommittedFilesResult.stdout.toString().trim();
 
-  // Get the list of actually changed files for the prompt
-  const filesResult = await Bun.$`git -C ${worktreePath} diff --name-only ${mergeBase}..HEAD`.quiet().nothrow();
-  const changedFiles = filesResult.stdout.toString().trim();
+  // Merge committed + uncommitted file lists (deduplicated)
+  const allFilesSet = new Set([
+    ...committedFiles.split("\n").filter(Boolean),
+    ...uncommittedFiles.split("\n").filter(Boolean),
+  ]);
+  const changedFiles = [...allFilesSet].join("\n");
 
-  const truncatedDiff = diff.length > MAX_DIFF_FOR_PR_METADATA
-    ? diff.slice(0, MAX_DIFF_FOR_PR_METADATA) + "\n... (diff truncated)"
-    : diff;
+  // Build the full diff: committed changes first, then any uncommitted remainder
+  const fullDiff = uncommittedDiff
+    ? `${committedDiff}\n\n--- Uncommitted changes (will be staged and committed) ---\n${uncommittedDiff}`
+    : committedDiff;
+
+  const truncatedDiff = fullDiff.length > MAX_DIFF_FOR_PR_METADATA
+    ? fullDiff.slice(0, MAX_DIFF_FOR_PR_METADATA) + "\n... (diff truncated)"
+    : fullDiff;
 
   const templateSection = prTemplate
     ? `\nPR Template (use this structure for the body, filling in the relevant sections):\n${prTemplate}\n`
@@ -390,7 +423,7 @@ ${truncatedDiff}`;
  * - Creates a PR via `gh pr create`
  */
 export async function createPullRequest(options: CreatePROptions): Promise<CreatePRResult> {
-  const { repoPath, worktreePath, branch, baseBranch, prompt, onLog } = options;
+  const { repoPath, worktreePath, branch, baseBranch, prompt, onLog, speculativeMetadata } = options;
   const log = onLog ?? (() => {});
 
   // Stage and commit all changes first so they're visible in the diff used for
@@ -399,13 +432,19 @@ export async function createPullRequest(options: CreatePROptions): Promise<Creat
   log(`[pr] Staging and committing changes...`);
   const hadUncommitted = await stageAndCommit(worktreePath, PENDING_PR_METADATA_MSG, onLog);
 
-  // Generate PR metadata using Claude (diff now includes all committed changes)
-  log(`[pr] Finding PR template...`);
-  const prTemplate = await findPRTemplate(repoPath);
-  log(`[pr] PR template: ${prTemplate ? "found" : "none"}`);
-
-  log(`[pr] Generating PR metadata via Claude...`);
-  const metadata = await generatePRMetadata(worktreePath, baseBranch, prompt, prTemplate, onLog);
+  // Generate PR metadata using Claude (diff now includes all committed changes).
+  // Re-use speculative metadata if available (started before the user was prompted).
+  let metadata: PRMetadata;
+  if (speculativeMetadata) {
+    log(`[pr] Awaiting speculative PR metadata...`);
+    metadata = await speculativeMetadata;
+  } else {
+    log(`[pr] Finding PR template...`);
+    const prTemplate = await findPRTemplate(repoPath);
+    log(`[pr] PR template: ${prTemplate ? "found" : "none"}`);
+    log(`[pr] Generating PR metadata via Claude...`);
+    metadata = await generatePRMetadata(worktreePath, baseBranch, prompt, prTemplate, onLog);
+  }
   log(`[pr] Metadata: branch=${metadata.branchName} title=${metadata.title}`);
 
   // Amend the placeholder commit with the real PR title. Also amend if HEAD
@@ -586,6 +625,11 @@ export interface MergeIntoLocalBranchOptions {
   targetBranch: string;
   prompt: string | null;
   onLog?: (message: string) => void;
+  /**
+   * Pre-computed PR metadata from a speculative generation started before the
+   * user was prompted. If provided, skips `generatePRMetadata`.
+   */
+  speculativeMetadata?: Promise<PRMetadata>;
 }
 
 /**
@@ -596,16 +640,23 @@ export interface MergeIntoLocalBranchOptions {
  * into targetBranch with --no-ff.
  */
 export async function mergeIntoLocalBranch(options: MergeIntoLocalBranchOptions): Promise<void> {
-  const { repoPath, worktreePath, branch, baseBranch, targetBranch, prompt, onLog } = options;
+  const { repoPath, worktreePath, branch, baseBranch, targetBranch, prompt, onLog, speculativeMetadata } = options;
   const log = onLog ?? (() => {});
 
   // Stage and commit all changes with a placeholder message (same as PR flow)
   log(`[merge] Staging and committing changes...`);
   const hadUncommitted = await stageAndCommit(worktreePath, PENDING_PR_METADATA_MSG, onLog);
 
-  // Generate metadata via Claude for a proper commit message
-  log(`[merge] Generating commit message via Claude...`);
-  const metadata = await generatePRMetadata(worktreePath, baseBranch, prompt, null, onLog);
+  // Generate metadata via Claude for a proper commit message.
+  // Re-use speculative metadata if available (started before the user was prompted).
+  let metadata: PRMetadata;
+  if (speculativeMetadata) {
+    log(`[merge] Awaiting speculative commit message...`);
+    metadata = await speculativeMetadata;
+  } else {
+    log(`[merge] Generating commit message via Claude...`);
+    metadata = await generatePRMetadata(worktreePath, baseBranch, prompt, null, onLog);
+  }
   log(`[merge] Commit message: ${metadata.title}`);
 
   // Amend the placeholder commit with the real title

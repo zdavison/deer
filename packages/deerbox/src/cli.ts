@@ -258,6 +258,7 @@ async function cmdRun(prompt: string | undefined, args: string[]) {
       fromPrUrl: fromPrUrl ?? undefined,
       fromPrIsFork: fromResolution?.isCrossRepository,
       originalBranch,
+      speculativeClose: config.experimental?.speculativeClose,
     },
     {
       hasChanges: (wt, base) => hasChanges(wt, base, initialHeadSha),

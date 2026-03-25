@@ -47,6 +47,25 @@ export interface DeerConfig {
   network: {
     allowlist: string[];
   };
+  experimental?: {
+    /**
+     * Start generating PR metadata speculatively while the user reads the
+     * post-session menu. Hides most Claude inference latency on the happy paths.
+     *
+     * Per-option behaviour:
+     * - `p` (create/update PR): metadata reused — **no extra call** (happy path)
+     * - `m` (merge into branch): metadata reused for commit message — **no extra call**
+     * - `k` (keep worktree): metadata generated then discarded — **wasted call**
+     * - `s` (open shell): metadata generated then discarded — **wasted call**
+     * - `d` (discard): metadata generated then discarded — **wasted call**
+     *
+     * Note: metadata is generated before `stageAndCommit` runs, but
+     * `generatePRMetadata` includes `git diff HEAD` to capture uncommitted
+     * changes alongside the committed diff, so the result is complete.
+     * @default false
+     */
+    speculativeClose?: boolean;
+  };
   sandbox: {
     /**
      * Sandbox runtime to use for process isolation.
@@ -213,6 +232,11 @@ function applyRepoLocal(config: DeerConfig, repoLocal: Record<string, unknown>):
     };
   }
 
+  const experimental = repoLocal.experimental as Record<string, unknown> | undefined;
+  if (typeof experimental?.speculative_close === "boolean") {
+    result.experimental = { ...result.experimental, speculativeClose: experimental.speculative_close };
+  }
+
   return result;
 }
 
@@ -290,6 +314,13 @@ function tomlToConfig(toml: Record<string, unknown>): Partial<DeerConfig> {
       ...(sandbox.ecosystems_disabled !== undefined && {
         ecosystems: { disabled: sandbox.ecosystems_disabled as string[] },
       }),
+    };
+  }
+
+  const experimental = toml.experimental as Record<string, unknown> | undefined;
+  if (experimental) {
+    result.experimental = {
+      ...(experimental.speculative_close !== undefined && { speculativeClose: experimental.speculative_close }),
     };
   }
 
