@@ -108,6 +108,12 @@ export interface UpdatePROptions {
   prUrl: string;
   /** Verbose log callback for diagnostics */
   onLog?: (message: string) => void;
+  /**
+   * Override for PR authorship check. Defaults to querying the GitHub API.
+   * Inject a mock in tests to control whether the title/body update is skipped.
+   * @default isPRAuthor
+   */
+  prAuthorCheck?: (prUrl: string, repoPath: string) => Promise<boolean>;
 }
 
 interface PRMetadata {
@@ -474,6 +480,35 @@ export async function pushBranchUpdates(options: PushBranchOptions): Promise<voi
 }
 
 /**
+ * Returns true if the two GitHub login strings refer to the same user.
+ * Defaults to true (can update) when either login is unknown/empty, so a
+ * gh API failure doesn't silently block pushes.
+ */
+export function isPRAuthorFromLogins(currentLogin: string, authorLogin: string): boolean {
+  if (!currentLogin || !authorLogin) return true;
+  return currentLogin === authorLogin;
+}
+
+/**
+ * Returns true if the authenticated GitHub user is the author of the given PR.
+ * Defaults to true on any gh API error so that failed lookups don't block pushes.
+ */
+export async function isPRAuthor(prUrl: string, repoPath: string): Promise<boolean> {
+  const prMatch = prUrl.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
+  if (!prMatch) return true;
+  const [, owner, repo, prNumber] = prMatch;
+
+  const [currentUserResult, prAuthorResult] = await Promise.all([
+    Bun.$`gh api user --jq .login`.cwd(repoPath).quiet().nothrow(),
+    Bun.$`gh api repos/${owner}/${repo}/pulls/${prNumber} --jq .user.login`.cwd(repoPath).quiet().nothrow(),
+  ]);
+
+  const currentLogin = currentUserResult.stdout.toString().trim();
+  const authorLogin = prAuthorResult.stdout.toString().trim();
+  return isPRAuthorFromLogins(currentLogin, authorLogin);
+}
+
+/**
  * Update an existing PR: commit any new changes, push, and regenerate the
  * PR title and body from the latest diff.
  */
@@ -509,6 +544,16 @@ export async function updatePullRequest(options: UpdatePROptions): Promise<void>
   log(`[pr] Pushing branch ${finalBranch}...`);
   await pushBranch(worktreePath, finalBranch);
   log(`[pr] Push succeeded`);
+
+  // Only update title/body if we own the PR — GitHub silently ignores PATCH
+  // requests on PRs authored by other users when called by a non-admin.
+  const checkAuthor = options.prAuthorCheck ?? isPRAuthor;
+  const isAuthor = await checkAuthor(prUrl, repoPath);
+
+  if (!isAuthor) {
+    log(`[pr] Skipping PR title/body update: PR was authored by a different user`);
+    return;
+  }
 
   // Update the PR title and body via REST API to avoid deprecated projectCards GraphQL query
   const prMatch = prUrl.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
