@@ -1,0 +1,25 @@
+packages/deerbox/src/config.ts
+  7107e890305d9a14 62-64
+packages/shared/src/git/finalize.ts
+  7107e890305d9a14 102-104
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.19",
+  "base_commit_sha": "351c40f7e7ec3d699afa75000fea85ae47417fa2",
+  "prompts": {
+    "7107e890305d9a14": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a1389ad5-b7ac-461e-810c-fb07ffc08fcc",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "deer-agent <deer@noreply>",
+      "messages": [],
+      "total_additions": 6,
+      "total_deletions": 9,
+      "accepted_lines": 6,
+      "overriden_lines": 0
+    }
+  }
+}
