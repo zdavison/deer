@@ -8,6 +8,8 @@ export {
   ensureDeerEmojiPrefix,
   parsePRMetadataResponse,
   buildClaudeSubprocessEnv,
+  isPRAuthorFromLogins,
+  isPRAuthor,
 } from "@deer/shared";
 export type {
   CreatePRResult,

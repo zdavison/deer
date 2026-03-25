@@ -35,6 +35,8 @@ export {
   ensureDeerEmojiPrefix,
   parsePRMetadataResponse,
   buildClaudeSubprocessEnv,
+  isPRAuthorFromLogins,
+  isPRAuthor,
 } from "./git/finalize";
 export type {
   CreatePRResult,
