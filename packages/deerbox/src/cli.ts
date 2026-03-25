@@ -315,6 +315,7 @@ async function cmdRun(prompt: string | undefined, args: string[]) {
       prompt: prompt ?? null,
       fromPrUrl: fromPrUrl ?? undefined,
       originalBranch,
+      speculativeClose: config.experimental?.speculativeClose,
     },
     {
       hasChanges: (wt, base) => hasChanges(wt, base, initialHeadSha),

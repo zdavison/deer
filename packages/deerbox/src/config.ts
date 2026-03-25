@@ -47,6 +47,16 @@ export interface DeerConfig {
   network: {
     allowlist: string[];
   };
+  experimental?: {
+    /**
+     * Start generating PR metadata speculatively while the user reads the
+     * post-session menu. Hides most of the Claude inference latency on the
+     * happy path (user picks "p"). Incurs an extra Claude API call if the
+     * user picks any other option.
+     * @default false
+     */
+    speculativeClose?: boolean;
+  };
   sandbox: {
     /**
      * Sandbox runtime to use for process isolation.
@@ -213,6 +223,11 @@ function applyRepoLocal(config: DeerConfig, repoLocal: Record<string, unknown>):
     };
   }
 
+  const experimental = repoLocal.experimental as Record<string, unknown> | undefined;
+  if (typeof experimental?.speculative_close === "boolean") {
+    result.experimental = { ...result.experimental, speculativeClose: experimental.speculative_close };
+  }
+
   return result;
 }
 
@@ -290,6 +305,13 @@ function tomlToConfig(toml: Record<string, unknown>): Partial<DeerConfig> {
       ...(sandbox.ecosystems_disabled !== undefined && {
         ecosystems: { disabled: sandbox.ecosystems_disabled as string[] },
       }),
+    };
+  }
+
+  const experimental = toml.experimental as Record<string, unknown> | undefined;
+  if (experimental) {
+    result.experimental = {
+      ...(experimental.speculative_close !== undefined && { speculativeClose: experimental.speculative_close }),
     };
   }
 
