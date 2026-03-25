@@ -66,6 +66,8 @@ export async function resolveCredentials(
     const candidatePaths = [
       join(homeDir, ".claude.json"),
       join(homeDir, ".config", "claude", "config.json"),
+      join(homeDir, ".claude", ".credentials.json"),
+
     ];
     for (const candidatePath of candidatePaths) {
       try {
@@ -80,19 +82,6 @@ export async function resolveCredentials(
         }
       } catch { /* ignore — file absent or malformed */ }
     }
-  }
-  if (!process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-    // 4. Read from ~/.claude/.credentials.json where Claude Code stores OAuth on Linux and Windows
-    try {
-      const f = Bun.file(join(homeDir, ".claude", ".credentials.json"));
-      if (await f.exists()) {
-        const creds = JSON.parse(await f.text());
-        const accessToken = creds?.claudeAiOauth?.accessToken;
-        if (typeof accessToken === "string" && accessToken.length > 0) {
-          process.env.CLAUDE_CODE_OAUTH_TOKEN = accessToken;
-        }
-      }
-    } catch { /* ignore — file absent or malformed */ }
   }
   // Strip API key if OAuth is now available (OAuth always wins)
   if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
