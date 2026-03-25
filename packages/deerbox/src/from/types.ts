@@ -22,7 +22,7 @@ export interface FromResolution {
   appendSystemPrompt?: string;
   /**
    * True when the PR originates from a fork (cross-repository PR in GitHub API terms).
-   * When true, changes are committed locally only — the fork remote cannot be pushed to.
+   * When true, the fork remote cannot be pushed to.
    */
   isCrossRepository?: boolean;
 }

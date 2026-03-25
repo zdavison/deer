@@ -74,8 +74,8 @@ export interface PostSessionContext {
    */
   fromPrUrl?: string;
   /**
-   * True when fromPrUrl is a fork PR (isCrossRepository). When set, changes
-   * are committed locally only — no push and no PR title/body update.
+   * True when fromPrUrl is a fork PR (isCrossRepository). When set,
+   * the PR update option is unavailable — the fork remote cannot be pushed to.
    */
   fromPrIsFork?: boolean;
   /**
