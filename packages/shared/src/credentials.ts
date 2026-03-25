@@ -68,7 +68,7 @@ export async function resolveCredentials(
       join(homeDir, ".config", "claude", "config.json"),
       join(homeDir, ".claude", ".credentials.json"),
     ];
-    for (const candidatePath of candidatePaths) {
+    for (const p of candidatePaths) {
       try {
         const token = JSON.parse(await Bun.file(p).text())?.claudeAiOauth?.accessToken;
         if (typeof token === "string" && token.length > 0) {
