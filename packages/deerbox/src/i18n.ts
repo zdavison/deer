@@ -21,6 +21,9 @@ const strings = {
     cli_discussion_comment: "{n} discussion comment{s}",
     cli_fetched_comments: "Fetched {rc}, {ic}",
     cli_no_pr_comments: "No PR comments found",
+    cli_fetching_action_logs: "Fetching CI job logs...",
+    cli_fetched_action_logs: "Fetched {n} lines of failed job logs",
+    cli_no_action_logs: "No failed job logs found",
   },
 
   ja: {
@@ -29,6 +32,9 @@ const strings = {
     cli_discussion_comment: "{n}件のディスカッションコメント",
     cli_fetched_comments: "{rc}、{ic}を取得",
     cli_no_pr_comments: "PRコメントが見つかりません",
+    cli_fetching_action_logs: "CIジョブログを取得中...",
+    cli_fetched_action_logs: "失敗したジョブログ{n}行を取得",
+    cli_no_action_logs: "失敗したジョブログが見つかりません",
   },
 
   zh: {
@@ -37,6 +43,9 @@ const strings = {
     cli_discussion_comment: "{n} 条讨论评论",
     cli_fetched_comments: "已获取 {rc}、{ic}",
     cli_no_pr_comments: "未找到PR评论",
+    cli_fetching_action_logs: "正在获取CI作业日志...",
+    cli_fetched_action_logs: "已获取 {n} 行失败作业日志",
+    cli_no_action_logs: "未找到失败的作业日志",
   },
 
   ko: {
@@ -45,6 +54,9 @@ const strings = {
     cli_discussion_comment: "{n}개의 토론 코멘트",
     cli_fetched_comments: "{rc}, {ic} 가져옴",
     cli_no_pr_comments: "PR 코멘트를 찾을 수 없음",
+    cli_fetching_action_logs: "CI 작업 로그를 가져오는 중...",
+    cli_fetched_action_logs: "실패한 작업 로그 {n}줄 가져옴",
+    cli_no_action_logs: "실패한 작업 로그를 찾을 수 없음",
   },
 
   ru: {
@@ -53,6 +65,9 @@ const strings = {
     cli_discussion_comment: "{n} комментариев к обсуждению",
     cli_fetched_comments: "Получено: {rc}, {ic}",
     cli_no_pr_comments: "Комментарии к PR не найдены",
+    cli_fetching_action_logs: "Получение логов CI...",
+    cli_fetched_action_logs: "Получено {n} строк логов неудавшихся задач",
+    cli_no_action_logs: "Логи неудавшихся задач не найдены",
   },
 } as const;
 

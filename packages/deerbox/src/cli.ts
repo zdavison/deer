@@ -28,7 +28,8 @@ import { dataDir } from "./task";
 import { createPullRequest, updatePullRequest, hasChanges } from "./git/finalize";
 import { runPostSession, interactivePromptChoice, defaultOpenShell, defaultMergeBranch } from "./post-session";
 import { prune } from "./prune";
-import { fetchPRComments } from "./pr-comments";
+import { resolveFrom } from "./from";
+import type { FromResolution } from "./from";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -158,49 +159,6 @@ async function cmdConfig(args: string[]) {
   console.log(JSON.stringify(config));
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────
-
-interface FromResolution {
-  branch: string;
-  prUrl: string | null;
-  baseBranch: string;
-}
-
-/**
- * Resolve a --from value to a branch name, optional PR URL, and base branch.
- *
- * Accepts:
- * - A GitHub PR URL (https://github.com/owner/repo/pull/123)
- * - A PR number (123)
- * - A branch name (feature/my-branch)
- */
-async function resolveFrom(from: string, repoPath: string, defaultBranch: string): Promise<FromResolution> {
-  const isPrUrl = /github\.com\/[^/]+\/[^/]+\/pull\/\d+/.test(from);
-  const isPrNumber = /^\d+$/.test(from);
-
-  if (isPrUrl || isPrNumber) {
-    const result = await Bun.$`gh pr view ${from} --json headRefName,url,baseRefName`.cwd(repoPath).quiet().nothrow();
-    if (result.exitCode !== 0) {
-      throw new Error(`Could not find PR: ${from}`);
-    }
-    const data = JSON.parse(result.stdout.toString()) as { headRefName: string; url: string; baseRefName: string };
-    return { branch: data.headRefName, prUrl: data.url, baseBranch: data.baseRefName };
-  }
-
-  // Branch name — check for an existing open PR
-  const prResult = await Bun.$`gh pr list --head ${from} --state open --json url,baseRefName --limit 1`.cwd(repoPath).quiet().nothrow();
-  if (prResult.exitCode === 0) {
-    try {
-      const prs = JSON.parse(prResult.stdout.toString()) as Array<{ url: string; baseRefName: string }>;
-      if (prs.length > 0) {
-        return { branch: from, prUrl: prs[0].url, baseBranch: prs[0].baseRefName };
-      }
-    } catch { /* ignore parse errors */ }
-  }
-
-  return { branch: from, prUrl: null, baseBranch: defaultBranch };
-}
-
 // ── Interactive mode (default) ───────────────────────────────────────
 
 async function cmdRun(prompt: string | undefined, args: string[]) {
@@ -240,7 +198,7 @@ async function cmdRun(prompt: string | undefined, args: string[]) {
   // Initialize language for PR metadata generation
   setLang(detectLang());
 
-  // Resolve --from to branch + optional existing PR URL
+  // Resolve --from to branch + optional existing PR URL + optional system prompt context
   let fromResolution: FromResolution | undefined;
   if (from) {
     try {
@@ -251,22 +209,6 @@ async function cmdRun(prompt: string | undefined, args: string[]) {
     }
   }
 
-  // If --from resolved to a PR, fetch review comments and inject as system prompt context
-  let prSystemPrompt: string | undefined;
-  if (fromResolution?.prUrl) {
-    console.error(`  ${t("cli_fetching_pr_comments")}`);
-    const { formatted, reviewCount, issueCount } = await fetchPRComments(fromResolution.prUrl);
-    const total = reviewCount + issueCount;
-    if (total > 0) {
-      const rc = t("cli_review_comment", { n: reviewCount, s: reviewCount !== 1 ? "s" : "" });
-      const ic = t("cli_discussion_comment", { n: issueCount, s: issueCount !== 1 ? "s" : "" });
-      console.error(`  ${t("cli_fetched_comments", { rc, ic })}`);
-      prSystemPrompt = formatted ?? undefined;
-    } else {
-      console.error(`  ${t("cli_no_pr_comments")}`);
-    }
-  }
-
   const session = await prepare({
     repoPath,
     prompt,
@@ -274,7 +216,7 @@ async function cmdRun(prompt: string | undefined, args: string[]) {
     fromBranch: fromResolution?.branch,
     config,
     model,
-    appendSystemPrompt: prSystemPrompt,
+    appendSystemPrompt: fromResolution?.appendSystemPrompt,
     onStatus: (msg) => console.error(`  ${msg}`),
   });
 
@@ -351,7 +293,7 @@ Usage:
 Interactive options:
   -m, --model <model>           Claude model (default: ${DEFAULT_MODEL})
   -b, --base-branch <branch>    Branch to base the worktree on
-  -f, --from <branch-or-PR>     Start from an existing branch or PR (URL or number)
+  -f, --from <source>           Start from a branch, PR (URL/#), or GitHub Actions URL
   -k, --keep                    Keep worktree after Claude exits
 
 Prune options:
@@ -363,6 +305,7 @@ Examples:
   deerbox --model opus "refactor the auth module"
   deerbox --from feature/my-branch "add more tests"
   deerbox --from 42 "address review comments"
+  deerbox --from https://github.com/org/repo/actions/runs/123/job/456 "fix the CI failure"
   deerbox prune
   deerbox prune --force`;
 
