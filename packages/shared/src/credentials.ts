@@ -12,6 +12,8 @@ export type CredentialType = "subscription" | "api-token" | "none";
  *   2. ~/.claude/agent-oauth-token flat file
  *   3. macOS Keychain (darwin only) — Claude Code stores OAuth here
  *   4. ~/.claude.json — Claude Code stores OAuth here on Linux
+ *   5. ~/.claude/.credentials.json — Claude Code stores OAuth here on Linux and Windows
+ *      Reference: https://code.claude.com/docs/en/authentication#credential-management
  *
  * OAuth always wins over API key: if an OAuth token is found, ANTHROPIC_API_KEY
  * is removed from the environment.
@@ -58,8 +60,20 @@ export async function resolveCredentials(
     } catch { /* ignore — keychain unavailable or no entry */ }
   }
   if (!process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-    // 3. Read from ~/.claude/.credentials.json where Claude Code stores OAuth on Linux and Windows
-    // Reference: https://code.claude.com/docs/en/authentication#credential-management
+    // 3. Read from ~/.claude.json where Claude Code stores OAuth on Linux
+    try {
+      const f = Bun.file(join(homeDir, ".claude.json"));
+      if (await f.exists()) {
+        const creds = JSON.parse(await f.text());
+        const accessToken = creds?.claudeAiOauth?.accessToken;
+        if (typeof accessToken === "string" && accessToken.length > 0) {
+          process.env.CLAUDE_CODE_OAUTH_TOKEN = accessToken;
+        }
+      }
+    } catch { /* ignore — file absent or malformed */ }
+  }
+  if (!process.env.CLAUDE_CODE_OAUTH_TOKEN) {
+    // 4. Read from ~/.claude/.credentials.json where Claude Code stores OAuth on Linux and Windows
     try {
       const f = Bun.file(join(homeDir, ".claude", ".credentials.json"));
       if (await f.exists()) {
