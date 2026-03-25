@@ -35,6 +35,8 @@ export {
   ensureDeerEmojiPrefix,
   parsePRMetadataResponse,
   buildClaudeSubprocessEnv,
+  isPRAuthorFromLogins,
+  isPRAuthor,
 } from "./git/finalize";
 export type {
   CreatePRResult,
@@ -54,6 +56,11 @@ export type { PruneResult, PruneOptions } from "./prune";
 // PR comments context
 export { fetchPRComments, formatPRComments } from "./pr-comments";
 export type { PRReviewComment, PRIssueComment, GhApiRunner, FetchPRCommentsResult } from "./pr-comments";
+
+// --from resolution strategies
+export { resolveFrom, actionStrategy, prStrategy, branchStrategy } from "./from";
+export { parseActionUrl, formatActionLogs, fetchActionLogs } from "./from";
+export type { FromResolution, FromStrategy, GhRunner, ActionUrlParts, FetchActionLogsResult } from "./from";
 
 // Utilities
 export { generateTaskId, dataDir } from "./task";

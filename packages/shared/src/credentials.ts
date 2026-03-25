@@ -11,7 +11,10 @@ export type CredentialType = "subscription" | "api-token" | "none";
  *   1. CLAUDE_CODE_OAUTH_TOKEN env var (already set)
  *   2. ~/.claude/agent-oauth-token flat file
  *   3. macOS Keychain (darwin only) — Claude Code stores OAuth here
- *   4. ~/.claude.json — Claude Code stores OAuth here on Linux
+ *   4. ~/.claude.json — Claude Code stores OAuth here on Linux (primary)
+ *   5. ~/.config/claude/config.json — XDG-compliant fallback on Linux
+ *   6. ~/.claude/.credentials.json — Claude Code stores OAuth here on Linux (fallback) and Windows
+ *      Reference: https://code.claude.com/docs/en/authentication#credential-management
  *
  * OAuth always wins over API key: if an OAuth token is found, ANTHROPIC_API_KEY
  * is removed from the environment.
@@ -58,17 +61,22 @@ export async function resolveCredentials(
     } catch { /* ignore — keychain unavailable or no entry */ }
   }
   if (!process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-    // 3. Read from ~/.claude.json where Claude Code stores OAuth on Linux
-    try {
-      const f = Bun.file(join(homeDir, ".claude.json"));
-      if (await f.exists()) {
-        const creds = JSON.parse(await f.text());
-        const accessToken = creds?.claudeAiOauth?.accessToken;
-        if (typeof accessToken === "string" && accessToken.length > 0) {
-          process.env.CLAUDE_CODE_OAUTH_TOKEN = accessToken;
+    // 3. Read from ~/.claude.json or ~/.config/claude/config.json where Claude Code stores OAuth on Linux.
+    // ~/.claude.json is the primary location; ~/.config/claude/config.json is the XDG-compliant fallback.
+    const candidatePaths = [
+      join(homeDir, ".claude.json"),
+      join(homeDir, ".config", "claude", "config.json"),
+      join(homeDir, ".claude", ".credentials.json"),
+    ];
+    for (const candidatePath of candidatePaths) {
+      try {
+        const token = JSON.parse(await Bun.file(candidatePath).text())?.claudeAiOauth?.accessToken;
+        if (typeof token === "string" && token.length > 0) {
+          process.env.CLAUDE_CODE_OAUTH_TOKEN = token;
+          break;
         }
-      }
-    } catch { /* ignore — file absent or malformed */ }
+      } catch { /* ignore — file absent or malformed */ }
+    }
   }
   // Strip API key if OAuth is now available (OAuth always wins)
   if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {

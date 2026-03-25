@@ -196,6 +196,69 @@ describe("resolveCredentials", () => {
     });
   });
 
+  describe("~/.config/claude/config.json OAuth credentials (XDG path)", () => {
+    test("reads claudeAiOauth.accessToken from ~/.config/claude/config.json", async () => {
+      const home = makeTempHome();
+      try {
+        mkdirSync(join(home, ".config", "claude"), { recursive: true });
+        writeFileSync(
+          join(home, ".config", "claude", "config.json"),
+          JSON.stringify({
+            claudeAiOauth: {
+              accessToken: "tok_from_xdg_config",
+              refreshToken: "refresh_xxx",
+              expiresAt: "2099-01-01T00:00:00.000Z",
+            },
+          }),
+        );
+        const result = await resolveCredentials({ homeDir: home, skipKeychain: true });
+        expect(result).toBe("subscription");
+        expect(process.env.CLAUDE_CODE_OAUTH_TOKEN).toBe("tok_from_xdg_config");
+      } finally {
+        rmSync(home, { recursive: true });
+      }
+    });
+
+    test("prefers ~/.claude.json over ~/.config/claude/config.json", async () => {
+      const home = makeTempHome();
+      try {
+        writeFileSync(
+          join(home, ".claude.json"),
+          JSON.stringify({ claudeAiOauth: { accessToken: "tok_from_claude_json" } }),
+        );
+        mkdirSync(join(home, ".config", "claude"), { recursive: true });
+        writeFileSync(
+          join(home, ".config", "claude", "config.json"),
+          JSON.stringify({ claudeAiOauth: { accessToken: "tok_from_xdg_config" } }),
+        );
+        await resolveCredentials({ homeDir: home, skipKeychain: true });
+        expect(process.env.CLAUDE_CODE_OAUTH_TOKEN).toBe("tok_from_claude_json");
+      } finally {
+        rmSync(home, { recursive: true });
+      }
+    });
+
+    test("falls back to ~/.config/claude/config.json when ~/.claude.json has no token", async () => {
+      const home = makeTempHome();
+      try {
+        writeFileSync(
+          join(home, ".claude.json"),
+          JSON.stringify({ oauthAccount: { accountUuid: "uuid-xxx" } }),
+        );
+        mkdirSync(join(home, ".config", "claude"), { recursive: true });
+        writeFileSync(
+          join(home, ".config", "claude", "config.json"),
+          JSON.stringify({ claudeAiOauth: { accessToken: "tok_from_xdg_config" } }),
+        );
+        const result = await resolveCredentials({ homeDir: home, skipKeychain: true });
+        expect(result).toBe("subscription");
+        expect(process.env.CLAUDE_CODE_OAUTH_TOKEN).toBe("tok_from_xdg_config");
+      } finally {
+        rmSync(home, { recursive: true });
+      }
+    });
+  });
+
   describe("ANTHROPIC_API_KEY fallback", () => {
     test("returns api-token when only API key is set", async () => {
       process.env.ANTHROPIC_API_KEY = "sk-ant-test";

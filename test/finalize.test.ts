@@ -2,7 +2,7 @@ import { test, expect, describe, beforeEach, afterEach } from "bun:test";
 import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
-import { ensureDeerEmojiPrefix, findPRTemplate, parsePRMetadataResponse, buildClaudeSubprocessEnv } from "deerbox";
+import { ensureDeerEmojiPrefix, findPRTemplate, parsePRMetadataResponse, buildClaudeSubprocessEnv, isPRAuthorFromLogins } from "deerbox";
 
 describe("ensureDeerEmojiPrefix", () => {
   test("adds deer emoji to plain title", () => {
@@ -216,5 +216,31 @@ describe("buildClaudeSubprocessEnv", () => {
     const env = buildClaudeSubprocessEnv({ DEFINED: "yes", UNDEFINED: undefined } as Record<string, string | undefined>);
     expect(env.DEFINED).toBe("yes");
     expect("UNDEFINED" in env).toBe(false);
+  });
+});
+
+describe("isPRAuthorFromLogins", () => {
+  test("returns true when logins match", () => {
+    expect(isPRAuthorFromLogins("alice", "alice")).toBe(true);
+  });
+
+  test("returns false when logins differ", () => {
+    expect(isPRAuthorFromLogins("alice", "bob")).toBe(false);
+  });
+
+  test("returns true when current user login is unknown (empty string)", () => {
+    expect(isPRAuthorFromLogins("", "alice")).toBe(true);
+  });
+
+  test("returns true when PR author login is unknown (empty string)", () => {
+    expect(isPRAuthorFromLogins("alice", "")).toBe(true);
+  });
+
+  test("returns true when both logins are empty", () => {
+    expect(isPRAuthorFromLogins("", "")).toBe(true);
+  });
+
+  test("is case-sensitive", () => {
+    expect(isPRAuthorFromLogins("Alice", "alice")).toBe(false);
   });
 });
