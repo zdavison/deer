@@ -16,6 +16,20 @@ import { createInterface } from "node:readline";
 
 import authProxySource from "./auth-proxy-server.mjs" with { type: "text" };
 
+export type CredentialSource =
+  | { type: "agent-token-file"; path: string }
+  | { type: "keychain"; service: string }
+  | { type: "file"; paths: string[] };
+
+export interface OAuthRefresh {
+  /** Ordered credential sources — first match wins */
+  sources: CredentialSource[];
+  /** Header name to inject (e.g. "authorization") */
+  headerName: string;
+  /** Template with `${token}` placeholder (e.g. "Bearer ${token}") */
+  headerTemplate: string;
+}
+
 export interface ProxyUpstream {
   /** Domain to match (e.g. "api.anthropic.com") */
   domain: string;
@@ -31,6 +45,11 @@ export interface ProxyUpstream {
    * @example ["\\.git/(info/refs|git-receive-pack)$"] — only git push paths
    */
   allowedPaths?: string[];
+  /**
+   * If present, enables transparent 401 retry with token refresh.
+   * Only set for OAuth-authenticated upstreams (not API key upstreams).
+   */
+  oauthRefresh?: OAuthRefresh;
 }
 
 export interface AuthProxy {
