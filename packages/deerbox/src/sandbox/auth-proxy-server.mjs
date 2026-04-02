@@ -11,9 +11,75 @@
 import { createServer, request as httpRequest, Agent as HttpAgent } from "node:http";
 import { request as httpsRequest, Agent as HttpsAgent } from "node:https";
 import { unlinkSync } from "node:fs";
+import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 const httpsAgent = new HttpsAgent({ keepAlive: true, keepAliveMsecs: 60_000 });
 const httpAgent = new HttpAgent({ keepAlive: true, keepAliveMsecs: 60_000 });
+
+/** Collect all request body chunks into a single Buffer. */
+function collectBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
+
+/**
+ * Try each credential source in order, return the first OAuth token found.
+ * Returns null if no source yields a token.
+ */
+function resolveTokenFromSources(sources) {
+  for (const source of sources) {
+    try {
+      if (source.type === "agent-token-file") {
+        const token = readFileSync(source.path, "utf-8").trim();
+        if (token) return token;
+      } else if (source.type === "keychain") {
+        const raw = execSync(
+          `security find-generic-password -s "${source.service}" -w`,
+          { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] },
+        ).trim();
+        const token = JSON.parse(raw)?.claudeAiOauth?.accessToken;
+        if (typeof token === "string" && token) return token;
+      } else if (source.type === "file") {
+        for (const filePath of source.paths) {
+          try {
+            const token = JSON.parse(readFileSync(filePath, "utf-8"))?.claudeAiOauth?.accessToken;
+            if (typeof token === "string" && token) return token;
+          } catch { /* try next path */ }
+        }
+      }
+    } catch { /* try next source */ }
+  }
+  return null;
+}
+
+/** Per-domain in-flight refresh promises — serializes concurrent 401 retries. */
+const refreshLocks = new Map();
+
+/**
+ * Re-read OAuth credentials for an upstream and update its in-memory headers.
+ * If a refresh is already in progress for this domain, waits for it instead
+ * of starting a second one.
+ */
+function refreshToken(upstream) {
+  if (refreshLocks.has(upstream.domain)) {
+    return refreshLocks.get(upstream.domain);
+  }
+  const promise = Promise.resolve().then(() => {
+    const token = resolveTokenFromSources(upstream.oauthRefresh.sources);
+    if (token) {
+      upstream.headers[upstream.oauthRefresh.headerName] =
+        upstream.oauthRefresh.headerTemplate.replace("${token}", token);
+    }
+    return token;
+  }).finally(() => refreshLocks.delete(upstream.domain));
+  refreshLocks.set(upstream.domain, promise);
+  return promise;
+}
 
 const socketPath = process.argv[2];
 const upstreams = JSON.parse(process.argv[3]);
@@ -22,21 +88,21 @@ function log(message) {
   process.stdout.write(JSON.stringify({ log: message }) + "\n");
 }
 
-function forwardToUpstream(upstream, path, req, res) {
+function forwardToUpstream(upstream, path, method, res, bodyBuffer, isRetry) {
   const targetUrl = new URL(path, upstream.target);
-  const method = req.method ?? "GET";
   const startTime = Date.now();
   const isHttps = targetUrl.protocol === "https:";
   const doRequest = isHttps ? httpsRequest : httpRequest;
 
-  const fwdHeaders = {};
-  for (const [key, value] of Object.entries(req.headers)) {
-    if (key === "host" || key === "connection" || key === "proxy-connection") continue;
-    if (value !== undefined) fwdHeaders[key] = value;
-  }
-  fwdHeaders["host"] = targetUrl.host;
-  for (const [k, v] of Object.entries(upstream.headers)) {
-    fwdHeaders[k] = v;
+  const fwdHeaders = {
+    host: targetUrl.host,
+    ...upstream.headers,
+  };
+  // We have the full body buffered, so set an accurate content-length
+  // and remove transfer-encoding (no longer applicable).
+  delete fwdHeaders["transfer-encoding"];
+  if (bodyBuffer.length > 0) {
+    fwdHeaders["content-length"] = String(bodyBuffer.length);
   }
 
   const proxyReq = doRequest(
@@ -51,6 +117,29 @@ function forwardToUpstream(upstream, path, req, res) {
     (proxyRes) => {
       const elapsed = Date.now() - startTime;
       const connType = proxyReq.reusedSocket ? "reused" : "new";
+
+      if (proxyRes.statusCode === 401 && !isRetry && upstream.oauthRefresh) {
+        proxyRes.resume(); // drain and discard the 401 body
+        refreshToken(upstream).then((token) => {
+          if (token) {
+            forwardToUpstream(upstream, path, method, res, bodyBuffer, true);
+          } else {
+            log(`[proxy] ${method} ${upstream.domain}${path} → 401 (refresh found no token)`);
+            if (!res.headersSent) {
+              res.writeHead(401, { "content-type": "text/plain" });
+              res.end("auth-proxy: upstream 401 - no token found during refresh");
+            }
+          }
+        }).catch((err) => {
+          log(`[proxy] ${method} ${upstream.domain}${path} → 401 (refresh error: ${err.message})`);
+          if (!res.headersSent) {
+            res.writeHead(401, { "content-type": "text/plain" });
+            res.end(`auth-proxy: upstream 401 - refresh error: ${err.message}`);
+          }
+        });
+        return;
+      }
+
       log(`[proxy] ${method} ${upstream.domain}${path} → ${proxyRes.statusCode} (${elapsed}ms, ${connType})`);
       res.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
       proxyRes.pipe(res);
@@ -66,18 +155,22 @@ function forwardToUpstream(upstream, path, req, res) {
     }
   });
 
-  req.pipe(proxyReq);
+  proxyReq.end(bodyBuffer);
 }
 
-function handleRequest(req, res) {
+async function handleRequest(req, res) {
   const rawUrl = req.url ?? "/";
+  const method = req.method ?? "GET";
+
+  // Buffer the full request body before forwarding so we can replay it on retry.
+  const bodyBuffer = await collectBody(req);
 
   let parsedUrl;
   try {
     parsedUrl = new URL(rawUrl);
   } catch {
     if (upstreams.length > 0) {
-      forwardToUpstream(upstreams[0], rawUrl, req, res);
+      forwardToUpstream(upstreams[0], rawUrl, method, res, bodyBuffer, false);
       return;
     }
     log(`[proxy] 502 invalid URL ${rawUrl}`);
@@ -98,7 +191,7 @@ function handleRequest(req, res) {
   if (upstream.allowedPaths?.length) {
     const allowed = upstream.allowedPaths.some((pattern) => new RegExp(pattern).test(parsedUrl.pathname));
     if (!allowed) {
-      log(`[proxy] 403 blocked path ${req.method ?? "GET"} ${upstream.domain}${parsedUrl.pathname}`);
+      log(`[proxy] 403 blocked path ${method} ${upstream.domain}${parsedUrl.pathname}`);
       res.writeHead(403, { "content-type": "text/plain" });
       res.end("auth-proxy: path not allowed");
       return;
@@ -106,13 +199,20 @@ function handleRequest(req, res) {
   }
 
   const path = parsedUrl.pathname + parsedUrl.search;
-  forwardToUpstream(upstream, path, req, res);
+  forwardToUpstream(upstream, path, method, res, bodyBuffer, false);
 }
 
 // Clean up stale socket
 try { unlinkSync(socketPath); } catch { /* ignore */ }
 
-const server = createServer(handleRequest);
+const server = createServer((req, res) => {
+  handleRequest(req, res).catch((err) => {
+    if (!res.headersSent) {
+      res.writeHead(500, { "content-type": "text/plain" });
+      res.end(`auth-proxy: internal error: ${err.message}`);
+    }
+  });
+});
 
 server.listen(socketPath, () => {
   process.stdout.write(JSON.stringify({ ready: true }) + "\n");
