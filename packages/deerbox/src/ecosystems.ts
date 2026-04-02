@@ -56,6 +56,7 @@ const pnpmPlugin: EcosystemPlugin = {
   name: "pnpm",
   detect: async (repoPath) => pathExists(join(repoPath, "pnpm-lock.yaml")),
   strategies: [
+    { type: "readonly-cache", hostPath: "~/.pnpm-store" },
     { type: "prepopulate", source: "node_modules", lockfile: "pnpm-lock.yaml" },
     { type: "env", vars: { PNPM_HOME: ".pnpm-store" } },
   ],
@@ -73,6 +74,7 @@ const npmPlugin: EcosystemPlugin = {
     return hasPackageLock && !hasPnpmLock && !hasBunLock && !hasBunLockb;
   },
   strategies: [
+    { type: "readonly-cache", hostPath: "~/.npm" },
     { type: "prepopulate", source: "node_modules", lockfile: "package-lock.json" },
   ],
 };

@@ -151,6 +151,7 @@ function buildSrtSettings(options: SandboxRuntimeOptions, srtBinDir: string | nu
     ...(options.repoGitDir ? [options.repoGitDir] : []),
     ...(process.env.PATH?.split(":").filter((p) => p.startsWith(HOME)) ?? []),
     ...(srtBinDir ? [srtBinDir] : []),
+    ...(options.extraReadPaths ?? []),
   ];
 
   // Deny read access to all HOME entries except .claude* and required roots.
