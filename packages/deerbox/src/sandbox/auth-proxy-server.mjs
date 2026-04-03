@@ -88,16 +88,23 @@ function log(message) {
   process.stdout.write(JSON.stringify({ log: message }) + "\n");
 }
 
-function forwardToUpstream(upstream, path, method, res, bodyBuffer, isRetry) {
+function forwardToUpstream(upstream, path, method, reqHeaders, res, bodyBuffer, isRetry) {
   const targetUrl = new URL(path, upstream.target);
   const startTime = Date.now();
   const isHttps = targetUrl.protocol === "https:";
   const doRequest = isHttps ? httpsRequest : httpRequest;
 
-  const fwdHeaders = {
-    host: targetUrl.host,
-    ...upstream.headers,
-  };
+  // Start with original request headers, skip hop-by-hop headers,
+  // then overlay upstream auth headers and fix host.
+  const fwdHeaders = {};
+  for (const [key, value] of Object.entries(reqHeaders)) {
+    if (key === "host" || key === "connection" || key === "proxy-connection") continue;
+    if (value !== undefined) fwdHeaders[key] = value;
+  }
+  fwdHeaders["host"] = targetUrl.host;
+  for (const [k, v] of Object.entries(upstream.headers)) {
+    fwdHeaders[k] = v;
+  }
   // We have the full body buffered, so set an accurate content-length
   // and remove transfer-encoding (no longer applicable).
   delete fwdHeaders["transfer-encoding"];
@@ -122,7 +129,7 @@ function forwardToUpstream(upstream, path, method, res, bodyBuffer, isRetry) {
         proxyRes.resume(); // drain and discard the 401 body
         refreshToken(upstream).then((token) => {
           if (token) {
-            forwardToUpstream(upstream, path, method, res, bodyBuffer, true);
+            forwardToUpstream(upstream, path, method, reqHeaders, res, bodyBuffer, true);
           } else {
             log(`[proxy] ${method} ${upstream.domain}${path} → 401 (refresh found no token)`);
             if (!res.headersSent) {
@@ -170,7 +177,7 @@ async function handleRequest(req, res) {
     parsedUrl = new URL(rawUrl);
   } catch {
     if (upstreams.length > 0) {
-      forwardToUpstream(upstreams[0], rawUrl, method, res, bodyBuffer, false);
+      forwardToUpstream(upstreams[0], rawUrl, method, req.headers, res, bodyBuffer, false);
       return;
     }
     log(`[proxy] 502 invalid URL ${rawUrl}`);
@@ -199,7 +206,7 @@ async function handleRequest(req, res) {
   }
 
   const path = parsedUrl.pathname + parsedUrl.search;
-  forwardToUpstream(upstream, path, method, res, bodyBuffer, false);
+  forwardToUpstream(upstream, path, method, req.headers, res, bodyBuffer, false);
 }
 
 // Clean up stale socket
