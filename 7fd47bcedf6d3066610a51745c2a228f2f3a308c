@@ -1,0 +1,23 @@
+packages/deerbox/src/sandbox/auth-proxy-server.mjs
+  aaa2c3b1b797da67 91,97-107,132,180,209
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "7fd47bcedf6d3066610a51745c2a228f2f3a308c",
+  "prompts": {
+    "aaa2c3b1b797da67": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d5ab8549-5be7-4beb-88e3-87f56d296e0a",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "deer-agent",
+      "messages": [],
+      "total_additions": 15,
+      "total_deletions": 8,
+      "accepted_lines": 15,
+      "overriden_lines": 0
+    }
+  }
+}
