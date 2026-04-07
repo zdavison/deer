@@ -183,8 +183,8 @@ async function cmdRun(prompt: string | undefined, args: string[]) {
     if (branch && branch !== "HEAD") originalBranch = branch;
 
     // If we're inside a linked git worktree, reuse it rather than creating
-    // a new one. This happens when an agent running in a worktree spawns
-    // a nested deerbox invocation.
+    // a new one. This supports users who already use worktrees and run
+    // deerbox from within one.
     const wtCtx = await detectWorktreeContext(startDir);
     if (wtCtx) {
       const realRepo = await detectRepo(wtCtx.repoPath);

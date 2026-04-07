@@ -57,8 +57,8 @@ export interface PrepareOptions {
   };
   /**
    * If provided, run Claude in an existing worktree without creating a new
-   * one. The worktree will not be destroyed on cleanup. Used when deerbox is
-   * invoked from within an existing linked git worktree.
+   * one. The worktree will not be destroyed on cleanup. Used when the user
+   * already works with git worktrees and runs deerbox from within one.
    */
   reuseWorktree?: {
     worktreePath: string;
