@@ -7,6 +7,7 @@ import { join } from "node:path";
 export interface PreflightResult {
   ok: boolean;
   errors: string[];
+  warnings: string[];
   credentialType: "subscription" | "api-token" | "none";
 }
 
@@ -70,5 +71,20 @@ export async function runPreflight(): Promise<PreflightResult> {
     errors.push("No credentials — set CLAUDE_CODE_OAUTH_TOKEN, create ~/.claude/agent-oauth-token, or set ANTHROPIC_API_KEY");
   }
 
-  return { ok: errors.length === 0, errors, credentialType };
+  // Warn if ~/.claude.json contains OAuth credentials. The file is readable
+  // inside the sandbox (Claude Code needs its settings), but tokens should
+  // only live in .credentials.json / agent-oauth-token which are deny-listed.
+  const warnings: string[] = [];
+  try {
+    const claudeJson = await Bun.file(join(HOME, ".claude.json")).json();
+    if (typeof claudeJson?.claudeAiOauth?.accessToken === "string" && claudeJson.claudeAiOauth.accessToken.length > 0) {
+      warnings.push(
+        "~/.claude.json contains OAuth credentials (claudeAiOauth.accessToken) — this file is readable inside the sandbox. Move tokens to ~/.claude/.credentials.json instead.",
+      );
+    }
+  } catch {
+    // File doesn't exist or isn't valid JSON — nothing to warn about
+  }
+
+  return { ok: errors.length === 0, errors, warnings, credentialType };
 }

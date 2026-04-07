@@ -36,6 +36,7 @@ export interface DeerConfig {
 export interface PreflightResult {
   ok: boolean;
   errors: string[];
+  warnings: string[];
   credentialType: "subscription" | "api-token" | "none";
 }
 

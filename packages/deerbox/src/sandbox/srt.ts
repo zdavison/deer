@@ -195,7 +195,14 @@ function buildSrtSettings(options: SandboxRuntimeOptions, srtBinDir: string | nu
 
   // Deny read access to all home entries except .claude* and required roots.
   // Dynamically enumerated so new dotfiles/dirs are automatically blocked.
-  const denyRead = buildHomeDenyList(requiredPaths, home);
+  const denyRead = [
+    ...buildHomeDenyList(requiredPaths, home),
+    // Credential files inside ~/.claude* must be explicitly denied even though
+    // the .claude directory itself is allowed. The sandbox must never see real
+    // tokens — all auth is handled by the host-side MITM proxy.
+    join(claudeDir, ".credentials.json"),
+    join(claudeDir, "agent-oauth-token"),
+  ];
 
   return {
     network,
@@ -212,7 +219,10 @@ function buildSrtSettings(options: SandboxRuntimeOptions, srtBinDir: string | nu
         "/private/tmp",
         ...(options.extraWritePaths ?? []),
       ],
-      denyWrite: [],
+      denyWrite: [
+        join(claudeDir, ".credentials.json"),
+        join(claudeDir, "agent-oauth-token"),
+      ],
     },
     // Claude Code runs interactively and needs setRawMode (tcsetattr)
     // on PTY devices for its terminal UI.

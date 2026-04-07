@@ -25,7 +25,6 @@ import { resolveCredentials } from "@deer/shared";
 import { killAuthProxy } from "./sandbox/auth-proxy";
 import { VERSION } from "./constants";
 import { DEFAULT_MODEL, setLang, detectLang, checkAndUpdate } from "@deer/shared";
-import { t } from "./i18n";
 import { dataDir } from "./task";
 import { createPullRequest, updatePullRequest, hasChanges } from "./git/finalize";
 import { runPostSession, interactivePromptChoice, defaultOpenShell, defaultMergeBranch } from "./post-session";
@@ -208,6 +207,9 @@ async function cmdRun(prompt: string | undefined, args: string[]) {
     console.error("Preflight checks failed:");
     for (const e of preflight.errors) console.error(`  - ${e}`);
     process.exit(1);
+  }
+  for (const w of preflight.warnings) {
+    console.error(`⚠ ${w}`);
   }
 
   await resolveCredentials();

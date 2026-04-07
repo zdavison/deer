@@ -117,7 +117,7 @@ export default function Dashboard({ cwd, mockAgents }: { cwd: string; mockAgents
 
   useEffect(() => {
     if (!mockAgents) deerboxPreflight().then(setPreflight).catch((err: Error) => {
-      setPreflight({ ok: false, errors: [t("input_preflight_failed"), err.message], credentialType: "none" });
+      setPreflight({ ok: false, errors: [t("input_preflight_failed"), err.message], warnings: [], credentialType: "none" });
     });
     deerboxConfig(cwd).then((cfg) => {
       configRef.current = cfg;
@@ -218,6 +218,12 @@ export default function Dashboard({ cwd, mockAgents }: { cwd: string; mockAgents
           ))}
         </Box>
       )}
+      {/* Preflight warnings */}
+      {preflight?.warnings?.map((w, i) => (
+        <Box key={`warn-${i}`} paddingX={1}>
+          <Text color="yellow">⚠ {w}</Text>
+        </Box>
+      ))}
 
       {/* Agent list */}
       <Box flexDirection="column" height={listHeight} paddingX={1}>
