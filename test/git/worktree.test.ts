@@ -1,5 +1,6 @@
 import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { detectRepo, createWorktree, checkoutWorktree, removeWorktree, generateTaskId, dataDir } from "../../packages/deerbox/src/index";
+import { detectRepo, createWorktree, checkoutWorktree, removeWorktree, generateTaskId, dataDir, detectWorktreeContext } from "../../packages/deerbox/src/index";
+import { resolve } from "node:path";
 import { mkdtemp, rm, mkdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -186,6 +187,81 @@ describe("checkoutWorktree", () => {
     const taskId = generateTaskId();
 
     expect(checkoutWorktree(repoPath, taskId, "non-existent-branch")).rejects.toThrow();
+  });
+});
+
+describe("detectWorktreeContext", () => {
+  let tmpDir: string;
+  const createdWorktrees: Array<{ repoPath: string; worktreePath: string }> = [];
+
+  beforeEach(async () => {
+    tmpDir = await realpath(await mkdtemp(join(tmpdir(), "deer-wtctx-test-")));
+    createdWorktrees.length = 0;
+  });
+
+  afterEach(async () => {
+    for (const wt of createdWorktrees) {
+      await Bun.$`git -C ${wt.repoPath} worktree remove ${wt.worktreePath} --force`.quiet().nothrow();
+      const taskDir = join(wt.worktreePath, "..");
+      await rm(taskDir, { recursive: true, force: true });
+    }
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  test("returns null for the main working tree", async () => {
+    const { repoPath } = await createTestRepo(tmpDir);
+    const result = await detectWorktreeContext(repoPath);
+    expect(result).toBeNull();
+  });
+
+  test("returns null for a subdirectory of the main working tree", async () => {
+    const { repoPath } = await createTestRepo(tmpDir);
+    const subDir = join(repoPath, "src");
+    await mkdir(subDir, { recursive: true });
+
+    const result = await detectWorktreeContext(subDir);
+    expect(result).toBeNull();
+  });
+
+  test("returns null for a non-git directory", async () => {
+    const noGitDir = join(tmpDir, "no-git");
+    await mkdir(noGitDir, { recursive: true });
+
+    const result = await detectWorktreeContext(noGitDir);
+    expect(result).toBeNull();
+  });
+
+  test("returns context when in a linked worktree", async () => {
+    const { repoPath } = await createTestRepo(tmpDir);
+    const taskId = generateTaskId();
+
+    const info = await createWorktree(repoPath, taskId, "main");
+    createdWorktrees.push({ repoPath, worktreePath: info.worktreePath });
+
+    const result = await detectWorktreeContext(info.worktreePath);
+
+    expect(result).not.toBeNull();
+    expect(result!.repoPath).toBe(repoPath);
+    expect(result!.repoGitDir).toBe(resolve(repoPath, ".git"));
+    expect(result!.worktreePath).toBe(info.worktreePath);
+    expect(result!.branch).toBe(`deer/${taskId}`);
+  });
+
+  test("returns context from a subdirectory of a linked worktree", async () => {
+    const { repoPath } = await createTestRepo(tmpDir);
+    const taskId = generateTaskId();
+
+    const info = await createWorktree(repoPath, taskId, "main");
+    createdWorktrees.push({ repoPath, worktreePath: info.worktreePath });
+
+    const subDir = join(info.worktreePath, "src");
+    await mkdir(subDir, { recursive: true });
+
+    const result = await detectWorktreeContext(subDir);
+
+    expect(result).not.toBeNull();
+    expect(result!.repoPath).toBe(repoPath);
+    expect(result!.worktreePath).toBe(info.worktreePath);
   });
 });
 

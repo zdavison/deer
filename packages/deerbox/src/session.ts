@@ -56,6 +56,17 @@ export interface PrepareOptions {
     branch: string;
   };
   /**
+   * If provided, run Claude in an existing worktree without creating a new
+   * one. The worktree will not be destroyed on cleanup. Used when the user
+   * already works with git worktrees and runs deerbox from within one.
+   */
+  reuseWorktree?: {
+    worktreePath: string;
+    branch: string;
+    /** The main .git directory (not the worktree's .git file pointer) */
+    repoGitDir: string;
+  };
+  /**
    * If true, daemonize the auth proxy so it survives process exit.
    * The proxy PID is returned in PreparedSession.authProxyPid.
    * @default false
@@ -108,6 +119,7 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
     model = DEFAULT_MODEL,
     fromBranch,
     continueSession,
+    reuseWorktree,
     appendSystemPrompt,
     daemonize = false,
     onStatus,
@@ -126,6 +138,10 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
     worktreePath = continueSession.worktreePath;
     branch = continueSession.branch;
     onStatus?.("Resuming previous session...");
+  } else if (reuseWorktree) {
+    worktreePath = reuseWorktree.worktreePath;
+    branch = reuseWorktree.branch;
+    onStatus?.("Using existing worktree...");
   } else if (fromBranch) {
     onStatus?.("Checking out branch...");
     const worktree = await checkoutWorktree(repoPath, taskId, fromBranch);
@@ -163,7 +179,7 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
   }
 
   // Run the setup command in the worktree before the sandbox starts
-  if (!continueSession && config.defaults.setupCommand) {
+  if (!continueSession && !reuseWorktree && config.defaults.setupCommand) {
     onStatus?.("Running setup command...");
     const proc = Bun.spawn(["sh", "-c", config.defaults.setupCommand], {
       cwd: worktreePath,
@@ -179,8 +195,12 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
     }
   }
 
-  // Write a minimal gitconfig so git never reads ~/.gitconfig
-  const gitconfigPath = join(dirname(worktreePath), "gitconfig");
+  // Write a minimal gitconfig so git never reads ~/.gitconfig.
+  // When reusing an existing worktree, use a task-scoped name to avoid
+  // overwriting the outer session's gitconfig.
+  const gitconfigPath = reuseWorktree
+    ? join(dirname(worktreePath), `gitconfig-${taskId}`)
+    : join(dirname(worktreePath), "gitconfig");
   await Bun.write(
     gitconfigPath,
     [
@@ -259,7 +279,7 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
   // Build the full sandboxed command via the runtime
   const runtimeOpts = {
     worktreePath,
-    repoGitDir: resolve(repoPath, ".git"),
+    repoGitDir: reuseWorktree?.repoGitDir ?? resolve(repoPath, ".git"),
     allowlist: config.network.allowlist,
     extraReadPaths: ecosystemResult.extraReadPaths,
     env: { ...ecosystemResult.env, ...sandboxEnvFinal },
@@ -293,9 +313,17 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
     authProxyPid: authProxy?.pid ?? null,
     async cleanup() {
       await authProxy?.close();
+      if (reuseWorktree) {
+        await Bun.$`rm -f ${gitconfigPath}`.quiet().nothrow();
+      }
     },
     async destroy() {
       await authProxy?.close();
+      if (reuseWorktree) {
+        // Don't remove the outer worktree; just clean up this session's gitconfig
+        await Bun.$`rm -f ${gitconfigPath}`.quiet().nothrow();
+        return;
+      }
       // Only delete deer-managed branches; preserve user branches from --from
       const branchToDelete = branch.startsWith("deer/") ? branch : undefined;
       await cleanupWorktree(repoPath, worktreePath, branchToDelete);

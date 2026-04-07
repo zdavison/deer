@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { join, dirname, resolve } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { dataDir } from "../task";
 
@@ -6,6 +6,53 @@ export interface WorktreeInfo {
   repoPath: string;
   worktreePath: string;
   branch: string;
+}
+
+export interface WorktreeContext {
+  /** The real repository root (parent of the main .git directory) */
+  repoPath: string;
+  /** The main .git directory (not the worktree's .git file pointer) */
+  repoGitDir: string;
+  /** The worktree root */
+  worktreePath: string;
+  /** Current branch checked out in the worktree */
+  branch: string;
+}
+
+/**
+ * Detects whether `dir` is inside a linked git worktree (not the main
+ * working tree). If so, returns info about the real repository. Returns null
+ * if `dir` is the main working tree, not a git repo, or HEAD is detached.
+ */
+export async function detectWorktreeContext(dir: string): Promise<WorktreeContext | null> {
+  const gitDirResult = await Bun.$`git -C ${dir} rev-parse --git-dir`.quiet().nothrow();
+  if (gitDirResult.exitCode !== 0) return null;
+
+  const commonDirResult = await Bun.$`git -C ${dir} rev-parse --git-common-dir`.quiet().nothrow();
+  if (commonDirResult.exitCode !== 0) return null;
+
+  // Resolve both against dir so relative paths (e.g. ".git") compare correctly
+  // against absolute ones (git-common-dir is often absolute in linked worktrees).
+  const gitDir = resolve(dir, gitDirResult.stdout.toString().trim());
+  const commonDir = resolve(dir, commonDirResult.stdout.toString().trim());
+
+  // In the main working tree git-dir equals git-common-dir; in a linked
+  // worktree they differ (git-dir points into .git/worktrees/<name>).
+  if (gitDir === commonDir) return null;
+
+  const repoGitDir = commonDir;
+  const repoPath = dirname(repoGitDir);
+
+  const toplevelResult = await Bun.$`git -C ${dir} rev-parse --show-toplevel`.quiet().nothrow();
+  if (toplevelResult.exitCode !== 0) return null;
+  const worktreePath = toplevelResult.stdout.toString().trim();
+
+  const branchResult = await Bun.$`git -C ${dir} rev-parse --abbrev-ref HEAD`.quiet().nothrow();
+  if (branchResult.exitCode !== 0) return null;
+  const branch = branchResult.stdout.toString().trim();
+  if (!branch || branch === "HEAD") return null;
+
+  return { repoPath, repoGitDir, worktreePath, branch };
 }
 
 /**

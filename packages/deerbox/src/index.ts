@@ -5,8 +5,8 @@ export type { PrepareOptions, PreparedSession } from "./session";
 // Startup
 export { detectRepo } from "@deer/shared";
 export type { RepoInfo } from "@deer/shared";
-export { createWorktree, checkoutWorktree, removeWorktree, cleanupWorktree } from "./git/worktree";
-export type { WorktreeInfo } from "./git/worktree";
+export { createWorktree, checkoutWorktree, removeWorktree, cleanupWorktree, detectWorktreeContext } from "./git/worktree";
+export type { WorktreeInfo, WorktreeContext } from "./git/worktree";
 export { loadConfig, DEFAULT_CONFIG } from "./config";
 export type { DeerConfig, ProxyCredential } from "./config";
 export { runPreflight } from "./preflight";

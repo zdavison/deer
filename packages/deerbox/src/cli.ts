@@ -15,7 +15,9 @@
 
 import { join } from "node:path";
 import { prepare, taskWorktreePath } from "./session";
+import type { PrepareOptions } from "./session";
 import { detectRepo } from "@deer/shared";
+import { detectWorktreeContext } from "./git/worktree";
 import { cleanupWorktree } from "./git/worktree";
 import { loadConfig } from "./config";
 import { runPreflight } from "./preflight";
@@ -171,6 +173,7 @@ async function cmdRun(prompt: string | undefined, args: string[]) {
   let repoPath: string;
   let defaultBranch: string;
   let originalBranch: string | undefined;
+  let reuseWorktree: PrepareOptions["reuseWorktree"];
   try {
     const repo = await detectRepo(startDir);
     repoPath = repo.repoPath;
@@ -178,6 +181,23 @@ async function cmdRun(prompt: string | undefined, args: string[]) {
     const branchResult = await Bun.$`git -C ${repoPath} rev-parse --abbrev-ref HEAD`.quiet().nothrow();
     const branch = branchResult.stdout.toString().trim();
     if (branch && branch !== "HEAD") originalBranch = branch;
+
+    // If we're inside a linked git worktree, reuse it rather than creating
+    // a new one. This supports users who already use worktrees and run
+    // deerbox from within one.
+    const wtCtx = await detectWorktreeContext(startDir);
+    if (wtCtx) {
+      const realRepo = await detectRepo(wtCtx.repoPath);
+      repoPath = realRepo.repoPath;
+      defaultBranch = realRepo.defaultBranch;
+      reuseWorktree = {
+        worktreePath: wtCtx.worktreePath,
+        branch: wtCtx.branch,
+        repoGitDir: wtCtx.repoGitDir,
+      };
+      // Don't attempt to check out back to the outer agent's branch post-session
+      originalBranch = undefined;
+    }
   } catch (err) {
     console.error(`Error: ${err instanceof Error ? err.message : err}`);
     process.exit(1);
@@ -216,6 +236,7 @@ async function cmdRun(prompt: string | undefined, args: string[]) {
     fromBranch: fromResolution?.branch,
     config,
     model,
+    reuseWorktree,
     appendSystemPrompt: fromResolution?.appendSystemPrompt,
     onStatus: (msg) => console.error(`  ${msg}`),
   });
