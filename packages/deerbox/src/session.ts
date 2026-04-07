@@ -8,11 +8,12 @@
  */
 
 import { join, dirname, resolve } from "node:path";
+import { mkdir, cp, access, readFile, writeFile } from "node:fs/promises";
 import { createWorktree, checkoutWorktree, removeWorktree, cleanupWorktree } from "./git/worktree";
 import { generateTaskId, dataDir } from "./task";
 import { loadConfig, type DeerConfig } from "./config";
 import { resolveRuntime } from "./sandbox/resolve";
-import { detectLang } from "@deer/shared";
+import { detectLang, HOME } from "@deer/shared";
 import { applyEcosystems } from "./ecosystems";
 import { resolveProxyUpstreams } from "./proxy";
 import { startAuthProxy, type AuthProxy } from "./sandbox/auth-proxy";
@@ -99,6 +100,65 @@ export interface PreparedSession {
   cleanup(): Promise<void>;
   /** Stop the auth proxy AND remove the worktree and branch. */
   destroy(): Promise<void>;
+}
+
+/**
+ * Items to copy from ~/.claude into the per-task claude config dir.
+ * Directories are copied recursively; files are copied as-is.
+ * All are sourced from the ~/.claude directory.
+ */
+const CLAUDE_DIR_ITEMS: Array<{ name: string; isDir: boolean }> = [
+  { name: "CLAUDE.md", isDir: false },
+  { name: "settings.json", isDir: false },
+  { name: "settings.local.json", isDir: false },
+  { name: "commands", isDir: true },
+  { name: "plugins", isDir: true },
+  { name: "skills", isDir: true },
+  { name: "hooks", isDir: true },
+];
+
+/**
+ * Create a per-task Claude config directory populated with a curated,
+ * read-safe copy of ~/.claude content.
+ *
+ * Directories are copied recursively. ~/.claude.json is copied with
+ * oauthToken and apiKey fields stripped, since auth is handled by the
+ * host-side MITM proxy and credentials must never enter the sandbox.
+ *
+ * Items absent from ~/.claude are silently skipped.
+ *
+ * @param claudeConfigDir - Absolute path to the per-task claude config dir to create
+ * @param home - The user's home directory
+ */
+export async function setupClaudeConfigDir(claudeConfigDir: string, home: string): Promise<void> {
+  await mkdir(claudeConfigDir, { recursive: true });
+
+  const sourceClaudeDir = join(home, ".claude");
+
+  for (const item of CLAUDE_DIR_ITEMS) {
+    const src = join(sourceClaudeDir, item.name);
+    const dst = join(claudeConfigDir, item.name);
+    const exists = await access(src).then(() => true).catch(() => false);
+    if (!exists) continue;
+    await cp(src, dst, { recursive: item.isDir });
+  }
+
+  // Copy ~/.claude.json with credentials stripped
+  const hostClaudeJson = join(home, ".claude.json");
+  const hasClaudeJson = await access(hostClaudeJson).then(() => true).catch(() => false);
+  if (hasClaudeJson) {
+    const raw = await readFile(hostClaudeJson, "utf-8");
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      // Unparseable — skip rather than crash the session
+      return;
+    }
+    delete parsed.oauthToken;
+    delete parsed.apiKey;
+    await writeFile(join(claudeConfigDir, ".claude.json"), JSON.stringify(parsed, null, 2));
+  }
 }
 
 // ── Implementation ───────────────────────────────────────────────────
@@ -230,6 +290,9 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
     ].join("\n") + "\n",
   );
 
+  const claudeConfigDir = join(dataDir(), "tasks", taskId, "claude-config");
+  await setupClaudeConfigDir(claudeConfigDir, HOME);
+
   onStatus?.("Starting sandbox...");
 
   // Resolve credentials → MITM proxy
@@ -271,6 +334,7 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
   const sandboxEnvFinal: Record<string, string> = {
     GIT_CONFIG_GLOBAL: gitconfigPath,
     GIT_CONFIG_NOSYSTEM: "1",
+    CLAUDE_CONFIG_DIR: claudeConfigDir,
     ...(lang !== "en" ? { CLAUDE_CODE_LOCALE: lang } : {}),
     ...placeholderEnv,
     ...sandboxEnv,
@@ -284,6 +348,7 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
     extraReadPaths: ecosystemResult.extraReadPaths,
     env: { ...ecosystemResult.env, ...sandboxEnvFinal },
     mitmProxy,
+    claudeConfigDir,
   };
 
   try {
