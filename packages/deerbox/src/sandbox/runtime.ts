@@ -31,6 +31,13 @@ export interface SandboxRuntimeOptions {
     socketPath: string;
     domains: string[];
   };
+  /**
+   * Path to the per-task Claude config directory to use as CLAUDE_CONFIG_DIR.
+   * If omitted, srt.ts falls back to `<dirname(worktreePath)>/claude-config`.
+   * Always set this explicitly from session.ts to handle reuseWorktree correctly.
+   * @example "/home/user/.local/share/deer/tasks/deer_abc123/claude-config"
+   */
+  claudeConfigDir?: string;
 }
 
 /** Cleanup function returned by prepare() to tear down runtime resources */
