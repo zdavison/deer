@@ -228,3 +228,115 @@ describe("srt settings - symlink targets in allowed dirs are reachable", () => {
     expect(denyRead).not.toContain(commandTarget);
   });
 });
+
+describe("srt settings - per-task claude config dir isolation", () => {
+  const tmpDirs: string[] = [];
+
+  afterEach(async () => {
+    for (const d of tmpDirs.splice(0)) {
+      await rm(d, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  async function makeTmpDir(): Promise<string> {
+    const d = await mkdtemp(join(tmpdir(), "deer-srt-claude-cfg-"));
+    tmpDirs.push(d);
+    return d;
+  }
+
+  async function makeSettings(home: string): Promise<Record<string, unknown>> {
+    const taskDir = await makeTmpDir();
+    const worktreeDir = join(taskDir, "worktree");
+    await mkdir(worktreeDir);
+
+    const runtime = createSrtRuntime({ home });
+    await runtime.prepare?.({
+      worktreePath: worktreeDir,
+      allowlist: [],
+    });
+
+    const settingsPath = join(taskDir, "srt-settings.json");
+    return JSON.parse(await readFile(settingsPath, "utf-8"));
+  }
+
+  test("~/.claude is denied for reading", async () => {
+    const home = await makeTmpDir();
+    await mkdir(join(home, ".claude"));
+
+    const settings = await makeSettings(home);
+    const denyRead: string[] = settings.filesystem.denyRead;
+
+    expect(denyRead).toContain(join(home, ".claude"));
+  });
+
+  test("~/.claude is denied for writing", async () => {
+    const home = await makeTmpDir();
+    const settings = await makeSettings(home);
+    const denyWrite: string[] = settings.filesystem.denyWrite;
+
+    expect(denyWrite).toContain(join(home, ".claude"));
+  });
+
+  test("~/.claude.json is denied for writing", async () => {
+    const home = await makeTmpDir();
+    const settings = await makeSettings(home);
+    const denyWrite: string[] = settings.filesystem.denyWrite;
+
+    expect(denyWrite).toContain(join(home, ".claude.json"));
+  });
+
+  test("~/.claude is not in allowWrite", async () => {
+    const home = await makeTmpDir();
+    const settings = await makeSettings(home);
+    const allowWrite: string[] = settings.filesystem.allowWrite;
+
+    expect(allowWrite).not.toContain(join(home, ".claude"));
+  });
+
+  test("~/.claude.json is not in allowWrite", async () => {
+    const home = await makeTmpDir();
+    const settings = await makeSettings(home);
+    const allowWrite: string[] = settings.filesystem.allowWrite;
+
+    expect(allowWrite).not.toContain(join(home, ".claude.json"));
+  });
+
+  test("per-task claude-config dir is in allowWrite", async () => {
+    const home = await makeTmpDir();
+    const taskDir = await makeTmpDir();
+    const worktreeDir = join(taskDir, "worktree");
+    await mkdir(worktreeDir);
+
+    const runtime = createSrtRuntime({ home });
+    await runtime.prepare?.({
+      worktreePath: worktreeDir,
+      allowlist: [],
+    });
+
+    const settingsPath = join(taskDir, "srt-settings.json");
+    const settings = JSON.parse(await readFile(settingsPath, "utf-8"));
+    const allowWrite: string[] = settings.filesystem.allowWrite;
+
+    expect(allowWrite).toContain(join(taskDir, "claude-config"));
+  });
+
+  test("credential files inside claude-config are denied for reading", async () => {
+    const home = await makeTmpDir();
+    const taskDir = await makeTmpDir();
+    const worktreeDir = join(taskDir, "worktree");
+    await mkdir(worktreeDir);
+
+    const runtime = createSrtRuntime({ home });
+    await runtime.prepare?.({
+      worktreePath: worktreeDir,
+      allowlist: [],
+    });
+
+    const settingsPath = join(taskDir, "srt-settings.json");
+    const settings = JSON.parse(await readFile(settingsPath, "utf-8"));
+    const denyRead: string[] = settings.filesystem.denyRead;
+
+    expect(denyRead).toContain(join(taskDir, "claude-config", ".credentials.json"));
+    expect(denyRead).toContain(join(taskDir, "claude-config", "agent-oauth-token"));
+  });
+});
