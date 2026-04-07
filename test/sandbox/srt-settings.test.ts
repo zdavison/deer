@@ -93,6 +93,52 @@ describe("srt settings - git write permissions", () => {
   });
 });
 
+describe("srt settings - cross-task isolation", () => {
+  const tmpDirs: string[] = [];
+
+  afterEach(async () => {
+    for (const d of tmpDirs.splice(0)) {
+      await rm(d, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  async function makeTmpDir(): Promise<string> {
+    const d = await mkdtemp(join(tmpdir(), "deer-srt-isolation-"));
+    tmpDirs.push(d);
+    return d;
+  }
+
+  test("sibling task directories are blocked via denyRead/allowRead", async () => {
+    // tasks/
+    //   current-task/worktree/   <- this task
+    //   sibling-task/worktree/   <- must not be readable
+    const tasksRoot = await makeTmpDir();
+    const currentTaskDir = join(tasksRoot, "current-task");
+    const siblingTaskDir = join(tasksRoot, "sibling-task");
+    const worktreeDir = join(currentTaskDir, "worktree");
+    await mkdir(worktreeDir, { recursive: true });
+    await mkdir(join(siblingTaskDir, "worktree"), { recursive: true });
+
+    const runtime = createSrtRuntime();
+    await runtime.prepare?.({
+      worktreePath: worktreeDir,
+      allowlist: [],
+    });
+
+    const settingsPath = join(currentTaskDir, "srt-settings.json");
+    const settings = JSON.parse(await readFile(settingsPath, "utf-8"));
+    const denyRead: string[] = settings.filesystem.denyRead;
+    const allowRead: string[] = settings.filesystem.allowRead;
+
+    // The tasks root must be denied to block sibling tasks
+    expect(denyRead).toContain(tasksRoot);
+    // The current task dir must be re-allowed
+    expect(allowRead).toContain(currentTaskDir);
+    // Sibling task dir must not appear in allowRead
+    expect(allowRead).not.toContain(siblingTaskDir);
+  });
+});
+
 describe("resolveSymlinkTargets", () => {
   const tmpDirs: string[] = [];
 
