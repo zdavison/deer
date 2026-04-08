@@ -341,7 +341,7 @@ describe("srt settings - per-task claude config dir isolation", () => {
   });
 });
 
-describe("srt settings - filesystem denyRead (default and high security)", () => {
+describe("srt settings - filesystem denyRead", () => {
   const tmpDirs: string[] = [];
 
   afterEach(async () => {
@@ -351,51 +351,48 @@ describe("srt settings - filesystem denyRead (default and high security)", () =>
   });
 
   async function makeTmpDir(): Promise<string> {
-    const d = await mkdtemp(join(tmpdir(), "deer-srt-high-sec-"));
+    const d = await mkdtemp(join(tmpdir(), "deer-srt-sec-"));
     tmpDirs.push(d);
     return d;
   }
 
-  async function makeSettings(
-    home: string,
-    security: "default" | "high" = "default",
-  ): Promise<Record<string, unknown>> {
+  async function makeSettings(home: string): Promise<Record<string, unknown>> {
     const taskDir = await makeTmpDir();
     const worktreeDir = join(taskDir, "worktree");
     await mkdir(worktreeDir);
 
     const runtime = createSrtRuntime({ home });
-    await runtime.prepare?.({ worktreePath: worktreeDir, allowlist: [], security });
+    await runtime.prepare?.({ worktreePath: worktreeDir, allowlist: [] });
 
     const settingsPath = join(taskDir, "srt-settings.json");
     return JSON.parse(await readFile(settingsPath, "utf-8"));
   }
 
-  test("denies /etc/shadow at default security", async () => {
+  test("denies /etc/shadow", async () => {
     const home = await makeTmpDir();
-    const settings = await makeSettings(home, "default");
+    const settings = await makeSettings(home);
     expect(settings.filesystem.denyRead).toContain("/etc/shadow");
   });
 
-  test("denies /etc/sudoers at default security", async () => {
+  test("denies /etc/sudoers", async () => {
     const home = await makeTmpDir();
-    const settings = await makeSettings(home, "default");
+    const settings = await makeSettings(home);
     expect(settings.filesystem.denyRead).toContain("/etc/sudoers");
   });
 
-  test("denies /etc/sudoers.d at default security", async () => {
+  test("denies /etc/sudoers.d", async () => {
     const home = await makeTmpDir();
-    const settings = await makeSettings(home, "default");
+    const settings = await makeSettings(home);
     expect(settings.filesystem.denyRead).toContain("/etc/sudoers.d");
   });
 
-  test("denies /root at default security", async () => {
+  test("denies /root", async () => {
     const home = await makeTmpDir();
-    const settings = await makeSettings(home, "default");
+    const settings = await makeSettings(home);
     expect(settings.filesystem.denyRead).toContain("/root");
   });
 
-  test("denies other users under /home at default security", async () => {
+  test("denies other users under /home", async () => {
     // Use a synthetic /home parent by placing the fake home under a tmp subdir
     const fakeHomeParent = await makeTmpDir();
     const currentUserHome = join(fakeHomeParent, "currentuser");
@@ -408,7 +405,7 @@ describe("srt settings - filesystem denyRead (default and high security)", () =>
     await mkdir(worktreeDir);
 
     const runtime = createSrtRuntime({ home: currentUserHome });
-    await runtime.prepare?.({ worktreePath: worktreeDir, allowlist: [], security: "default" });
+    await runtime.prepare?.({ worktreePath: worktreeDir, allowlist: [] });
 
     const settingsPath = join(taskDir, "srt-settings.json");
     const settings = JSON.parse(await readFile(settingsPath, "utf-8"));
@@ -418,9 +415,9 @@ describe("srt settings - filesystem denyRead (default and high security)", () =>
     expect(denyRead).not.toContain(currentUserHome);
   });
 
-  test("denies sensitive dirs under .local/share at default security", async () => {
+  test("denies sensitive dirs under .local/share", async () => {
     const home = await makeTmpDir();
-    const settings = await makeSettings(home, "default");
+    const settings = await makeSettings(home);
     const denyRead: string[] = settings.filesystem.denyRead;
 
     expect(denyRead).toContain(join(home, ".local", "share", "keyrings"));

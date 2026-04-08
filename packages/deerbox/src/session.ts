@@ -14,8 +14,6 @@ import { generateTaskId, dataDir, repoSlug } from "./task";
 import { loadConfig, type DeerConfig } from "./config";
 import { resolveRuntime } from "./sandbox/resolve";
 import { detectLang, HOME, DEFAULT_MODEL } from "@deer/shared";
-import type { SecurityLevel } from "./config";
-import { resolveSecurityStrategy } from "./sandbox/security";
 import { applyEcosystems } from "./ecosystems";
 import { resolveProxyUpstreams } from "./proxy";
 import { startAuthProxy, type AuthProxy } from "./sandbox/auth-proxy";
@@ -80,11 +78,6 @@ export interface PrepareOptions {
    * prompt — Claude receives it as background context and does not act on it immediately.
    */
   appendSystemPrompt?: string;
-  /**
-   * Sandbox security level. Overrides `config.sandbox.security` when set.
-   * @default "default"
-   */
-  security?: SecurityLevel;
   /** Callback for status updates during setup */
   onStatus?: (message: string) => void;
   /** Callback for auth proxy log messages */
@@ -102,12 +95,6 @@ export interface PreparedSession {
   command: string[];
   /** PID of the daemonized auth proxy, or null if no proxy was started */
   authProxyPid: number | null;
-  /**
-   * Security visibility report emitted when `--security high` is active.
-   * Lists every env var visible in the sandbox (values redacted) and the
-   * filesystem denyRead paths. Null when security level is "default".
-   */
-  securityReport: string | null;
   /** Stop the auth proxy (if running). Does NOT remove the worktree. */
   cleanup(): Promise<void>;
   /** Stop the auth proxy AND remove the worktree and branch. */
@@ -201,7 +188,6 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
   } = options;
 
   const config = options.config ?? await loadConfig(repoPath);
-  const security = options.security ?? config.sandbox.security;
   const runtime = resolveRuntime(config);
   const taskId = options.taskId ?? continueSession?.taskId ?? generateTaskId();
 
@@ -364,8 +350,6 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
     env: { ...ecosystemResult.env, ...sandboxEnvFinal },
     mitmProxy,
     claudeConfigDir,
-    security,
-    credentialEnvAllowlist: config.sandbox.credentialEnvAllowlist,
   };
 
   try {
@@ -376,52 +360,6 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
       await removeWorktree(repoPath, worktreePath).catch(() => {});
     }
     throw err;
-  }
-
-  // For --security high, compute and emit a visibility report showing every
-  // env var and blocked filesystem path that the sandbox will see.
-  let securityReport: string | null = null;
-  if (security === "high") {
-    // Mirror the env merging that buildCommand will apply
-    const filteredHost = resolveSecurityStrategy(security).filterEnv(process.env, config.sandbox.credentialEnvAllowlist);
-    const visibleEnv: Record<string, string> = {
-      ...filteredHost,
-      ...ecosystemResult.env,
-      ...sandboxEnvFinal,
-      HOME,
-      PATH: process.env.PATH ?? "/usr/bin:/bin:/usr/local/bin",
-      TERM: process.env.TERM ?? "xterm-256color",
-    };
-    delete visibleEnv["CLAUDECODE"];
-
-    const totalHostVars = Object.values(process.env).filter((v) => v !== undefined).length;
-    const strippedCount = totalHostVars - Object.keys(filteredHost).length;
-
-    // Read srt-settings.json for the denyRead list
-    let denyRead: string[] = [];
-    try {
-      const settingsPath = join(dirname(worktreePath), "srt-settings.json");
-      const settings = JSON.parse(await Bun.file(settingsPath).text()) as Record<string, unknown>;
-      const fs = settings.filesystem as Record<string, unknown> | undefined;
-      denyRead = (fs?.denyRead as string[] | undefined) ?? [];
-    } catch { /* settings not available for this runtime */ }
-
-    const lines: string[] = [
-      `=== deer --security=high ===`,
-      `Env vars visible in sandbox: ${Object.keys(visibleEnv).length} (${strippedCount} stripped from host env)`,
-      ...Object.keys(visibleEnv)
-        .sort()
-        .map((k) => `  ${k}=[${visibleEnv[k] ? "set" : "empty"}]`),
-    ];
-
-    if (denyRead.length > 0) {
-      lines.push(``, `Filesystem denyRead: ${denyRead.length} paths blocked`);
-      for (const p of denyRead) lines.push(`  ${p}`);
-    }
-
-    lines.push(`===`);
-    securityReport = lines.join("\n");
-    onStatus?.(securityReport);
   }
 
   const appendSysPromptArgs = appendSystemPrompt ? ["--append-system-prompt", appendSystemPrompt] : [];
@@ -439,7 +377,6 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
     branch,
     command,
     authProxyPid: authProxy?.pid ?? null,
-    securityReport,
     async cleanup() {
       await authProxy?.close();
       if (reuseWorktree) {

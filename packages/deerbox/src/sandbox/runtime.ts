@@ -1,5 +1,3 @@
-import type { SecurityLevel } from "../config";
-
 /**
  * Abstract sandbox runtime interface.
  *
@@ -40,18 +38,6 @@ export interface SandboxRuntimeOptions {
    * @example "/home/user/.local/share/deer/tasks/deer_abc123/claude-config"
    */
   claudeConfigDir?: string;
-  /**
-   * Sandbox security level controlling host environment variable filtering.
-   * @default "default"
-   */
-  security?: SecurityLevel;
-  /**
-   * Env var names to pass through even if they appear in the blocked credential
-   * list. Combined with the built-in blocked list (allowlist wins).
-   * @default []
-   * @example ["GITHUB_TOKEN", "NPM_TOKEN"]
-   */
-  credentialEnvAllowlist?: string[];
 }
 
 /** Cleanup function returned by prepare() to tear down runtime resources */

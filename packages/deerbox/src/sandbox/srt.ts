@@ -1,6 +1,6 @@
 import { join, dirname, basename } from "node:path";
 import { readdirSync, readFileSync, realpathSync } from "node:fs";
-import { resolveSecurityStrategy } from "./security";
+import { extraDenyRead } from "./security/default";
 import { createRequire } from "node:module";
 import type { SandboxRuntime, SandboxRuntimeOptions, SandboxCleanup } from "./runtime";
 import { HOME } from "@deer/shared";
@@ -239,9 +239,8 @@ function buildSrtSettings(options: SandboxRuntimeOptions, srtBinDir: string | nu
     // from different repos can't read each other. Tasks within the same
     // repo remain visible to each other.
     ...buildSiblingRepoDenyList(options.worktreePath),
-    // Additional paths from the active security strategy (empty for "default",
-    // system credential files + other users + password manager dirs for "high").
-    ...resolveSecurityStrategy(options.security ?? "default").extraDenyRead(home),
+    // System credential files, root home, password manager dirs, other users' home dirs.
+    ...extraDenyRead(home),
   ];
 
   return {
@@ -304,20 +303,20 @@ export function createSrtRuntime(opts?: { home?: string }): SandboxRuntime {
     },
 
     buildCommand(options: SandboxRuntimeOptions, innerCommand: string[]): string[] {
-      const { worktreePath, env, security = "default", credentialEnvAllowlist } = options;
+      const { worktreePath, env } = options;
 
-      // Filter credential vars from host env, then overlay the explicit sandbox
-      // env (proxy vars, git config, etc.) which always wins. This ensures user
-      // tool vars (GOPATH, UV_CACHE_DIR, NODE_ENV, …) pass through while
-      // credential vars are stripped per the active security strategy.
-      const filteredHost = resolveSecurityStrategy(security).filterEnv(process.env, credentialEnvAllowlist);
-      const mergedEnv: Record<string, string> = {
-        ...filteredHost,
-        ...(env ?? {}),
-        HOME: home,
-        PATH: process.env.PATH ?? "/usr/bin:/bin:/usr/local/bin",
-        TERM: process.env.TERM ?? "xterm-256color",
-      };
+      // Spread host env, then overlay explicit sandbox env (proxy placeholders,
+      // git config, etc.). Proxy-injected credentials (e.g. ANTHROPIC_API_KEY)
+      // are redacted to "proxy-managed" via placeholderEnv in the env overlay,
+      // so the real values never reach the sandbox.
+      const mergedEnv: Record<string, string> = {};
+      for (const [k, v] of Object.entries(process.env)) {
+        if (v !== undefined) mergedEnv[k] = v;
+      }
+      Object.assign(mergedEnv, env ?? {});
+      mergedEnv.HOME = home;
+      mergedEnv.PATH = process.env.PATH ?? "/usr/bin:/bin:/usr/local/bin";
+      mergedEnv.TERM = process.env.TERM ?? "xterm-256color";
       // Must never be set inside the sandbox
       delete mergedEnv["CLAUDECODE"];
 

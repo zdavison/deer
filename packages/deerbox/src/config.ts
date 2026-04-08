@@ -3,18 +3,6 @@ import { join } from "node:path";
 import { HOME } from "@deer/shared";
 
 /**
- * Sandbox security level controlling credential filtering of the host environment.
- *
- * - `"default"` — strips a curated list of exact well-known credential env var names
- * - `"high"` — additionally strips any env var whose name matches credential keyword
- *   patterns (e.g. `*_TOKEN`, `*_SECRET`, `*_PASSWORD`); prints a sandbox visibility
- *   report at startup showing every env var and denyRead path visible to the sandbox
- *
- * @default "default"
- */
-export type SecurityLevel = "default" | "high";
-
-/**
  * Maps a host env var to auth headers injected by the host-side MITM proxy.
  *
  * The sandbox never sees the real credential. SRT's proxy forwards matching
@@ -80,20 +68,6 @@ export interface DeerConfig {
      */
     proxyCredentials: ProxyCredential[];
     /**
-     * Sandbox security level.
-     * @default "default"
-     */
-    security: SecurityLevel;
-    /**
-     * Env var names to pass through into the sandbox even if they appear in the
-     * blocked credential list. Combined with the built-in blocked list (allowlist
-     * wins). Configured via `credential_env_allowlist` in deer.toml.
-     *
-     * @default []
-     * @example ["GITHUB_TOKEN", "NPM_TOKEN"]
-     */
-    credentialEnvAllowlist: string[];
-    /**
      * Ecosystem plugin configuration.
      */
     ecosystems?: {
@@ -125,8 +99,6 @@ export const DEFAULT_CONFIG: DeerConfig = {
   },
   sandbox: {
     runtime: "srt",
-    security: "default",
-    credentialEnvAllowlist: [],
     envPassthrough: [],
     proxyCredentials: [
       {
@@ -219,12 +191,6 @@ function applyRepoLocal(config: DeerConfig, repoLocal: Record<string, unknown>):
   }
 
   const sandbox = repoLocal.sandbox as Record<string, unknown> | undefined;
-  if (sandbox?.credential_env_allowlist && Array.isArray(sandbox.credential_env_allowlist)) {
-    result.sandbox.credentialEnvAllowlist = [
-      ...result.sandbox.credentialEnvAllowlist,
-      ...(sandbox.credential_env_allowlist as string[]),
-    ];
-  }
   if (sandbox?.env_passthrough_extra && Array.isArray(sandbox.env_passthrough_extra)) {
     result.sandbox.envPassthrough = [
       ...result.sandbox.envPassthrough,
@@ -319,8 +285,6 @@ function tomlToConfig(toml: Record<string, unknown>): Partial<DeerConfig> {
   if (sandbox) {
     result.sandbox = {
       ...(sandbox.runtime !== undefined && { runtime: sandbox.runtime }),
-      ...(sandbox.security !== undefined && { security: sandbox.security }),
-      ...(sandbox.credential_env_allowlist !== undefined && { credentialEnvAllowlist: sandbox.credential_env_allowlist }),
       ...(sandbox.env_passthrough !== undefined && { envPassthrough: sandbox.env_passthrough }),
       ...(sandbox.proxy_credentials !== undefined && { proxyCredentials: sandbox.proxy_credentials }),
       ...(sandbox.ecosystems_disabled !== undefined && {
