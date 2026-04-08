@@ -32,6 +32,12 @@ export interface SandboxRuntimeOptions {
     domains: string[];
   };
   /**
+   * Environment variable names to exclude from the sandbox.
+   * Removed from the host-env spread before the explicit `env` overlay is applied,
+   * so proxy-managed placeholders (e.g. ANTHROPIC_API_KEY=proxy-managed) are unaffected.
+   */
+  envBlocklist?: string[];
+  /**
    * Path to the per-task Claude config directory to use as CLAUDE_CONFIG_DIR.
    * If omitted, srt.ts falls back to `<dirname(worktreePath)>/claude-config`.
    * Always set this explicitly from session.ts to handle reuseWorktree correctly.

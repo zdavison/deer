@@ -31,6 +31,13 @@ import { runPostSession, interactivePromptChoice, defaultOpenShell, defaultMerge
 import { prune } from "./prune";
 import { resolveFrom } from "./from";
 import type { FromResolution } from "./from";
+import {
+  detectRiskyEnvVars,
+  loadEnvPolicy,
+  saveEnvPolicy,
+  getUnreviewedRiskyVars,
+  runEnvReview,
+} from "@deer/shared";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -140,6 +147,24 @@ async function cmdPrune(args: string[]) {
   console.log(`  task dirs cleaned:        ${result.tasksRemoved}`);
 }
 
+// ── Subcommand: env ──────────────────────────────────────────────────
+
+async function cmdEnv() {
+  const policy = loadEnvPolicy();
+  const riskyVars = detectRiskyEnvVars();
+
+  if (riskyVars.length === 0) {
+    console.error("No risky environment variables detected.");
+    return;
+  }
+
+  // Pass all risky vars (not just unreviewed) so the user can change existing decisions.
+  // Already-approved vars will be pre-checked in the UI.
+  const updatedPolicy = await runEnvReview(riskyVars, policy);
+  await saveEnvPolicy(updatedPolicy);
+  console.error("Environment variable policy saved.");
+}
+
 // ── Subcommand: preflight ────────────────────────────────────────────
 
 async function cmdPreflight() {
@@ -210,6 +235,15 @@ async function cmdRun(prompt: string | undefined, args: string[]) {
   }
   for (const w of preflight.warnings) {
     console.error(`⚠ ${w}`);
+  }
+
+  // Env var review — only in interactive mode (not in prepare/preflight/etc.)
+  const envPolicy = loadEnvPolicy();
+  const riskyVars = detectRiskyEnvVars();
+  const unreviewedVars = getUnreviewedRiskyVars(riskyVars, envPolicy);
+  if (unreviewedVars.length > 0) {
+    const updatedPolicy = await runEnvReview(unreviewedVars, envPolicy);
+    await saveEnvPolicy(updatedPolicy);
   }
 
   await resolveCredentials();
@@ -313,6 +347,7 @@ Usage:
   deerbox prune [options]       Remove dangling worktrees and task dirs
   deerbox preflight             Run preflight checks (JSON output)
   deerbox config [options]      Dump merged config (JSON output)
+  deerbox env                   Review and update the env var policy
 
 Interactive options:
   -m, --model <model>           Claude model (default: ${DEFAULT_MODEL})
@@ -352,6 +387,7 @@ async function main() {
   if (first === "prune") return cmdPrune(args.slice(1));
   if (first === "preflight") return cmdPreflight();
   if (first === "config") return cmdConfig(args.slice(1));
+  if (first === "env") return cmdEnv();
 
   // Auto-update only in interactive mode
   await checkAndUpdate({ name: "deerbox", version: VERSION });

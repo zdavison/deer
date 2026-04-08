@@ -331,6 +331,12 @@ export function createSrtRuntime(opts?: { home?: string }): SandboxRuntime {
       for (const [k, v] of Object.entries(process.env)) {
         if (v !== undefined) mergedEnv[k] = v;
       }
+      // Remove user-blocked vars before the explicit env overlay.
+      // The overlay is applied after, so proxy-managed placeholders
+      // (e.g. ANTHROPIC_API_KEY=proxy-managed) are unaffected.
+      for (const key of options.envBlocklist ?? []) {
+        delete mergedEnv[key];
+      }
       Object.assign(mergedEnv, env ?? {});
       mergedEnv.HOME = home;
       mergedEnv.PATH = process.env.PATH ?? "/usr/bin:/bin:/usr/local/bin";

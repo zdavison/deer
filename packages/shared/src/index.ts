@@ -17,6 +17,20 @@ export type { RepoInfo } from "./git/detect";
 export { checkAndUpdate } from "./updater";
 export type { UpdateOptions } from "./updater";
 
+// Env var risk detection and policy management
+export {
+  detectRiskyEnvVars,
+  loadEnvPolicy,
+  saveEnvPolicy,
+  getUnreviewedRiskyVars,
+  applyEnvPolicy,
+  ENV_POLICY_PATH,
+} from "./env-check";
+export type { RiskyEnvVar, EnvPolicy } from "./env-check";
+
+// Interactive env review UI (terminal multi-select)
+export { runEnvReview } from "./env-review";
+
 // Git finalize (PR creation)
 export {
   createPullRequest,
