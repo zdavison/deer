@@ -35,8 +35,8 @@ import {
   detectRiskyEnvVars,
   loadEnvPolicy,
   saveEnvPolicy,
-  getUnreviewedRiskyVars,
   runEnvReview,
+  runEnvPreflight,
 } from "@deer/shared";
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -153,16 +153,13 @@ async function cmdEnv() {
   const policy = loadEnvPolicy();
   const riskyVars = detectRiskyEnvVars();
 
-  if (riskyVars.length === 0) {
-    console.error("No risky environment variables detected.");
-    return;
-  }
-
   // Pass all risky vars (not just unreviewed) so the user can change existing decisions.
   // Already-approved vars will be pre-checked in the UI.
-  const updatedPolicy = await runEnvReview(riskyVars, policy);
-  await saveEnvPolicy(updatedPolicy);
-  console.error("Environment variable policy saved.");
+  if (riskyVars.length > 0) {
+    const updatedPolicy = await runEnvReview(riskyVars, policy);
+    await saveEnvPolicy(updatedPolicy);
+    console.error("Environment variable policy saved.");
+  }
 }
 
 // ── Subcommand: preflight ────────────────────────────────────────────
@@ -238,13 +235,7 @@ async function cmdRun(prompt: string | undefined, args: string[]) {
   }
 
   // Env var review — only in interactive mode (not in prepare/preflight/etc.)
-  const envPolicy = loadEnvPolicy();
-  const riskyVars = detectRiskyEnvVars();
-  const unreviewedVars = getUnreviewedRiskyVars(riskyVars, envPolicy);
-  if (unreviewedVars.length > 0) {
-    const updatedPolicy = await runEnvReview(unreviewedVars, envPolicy);
-    await saveEnvPolicy(updatedPolicy);
-  }
+  await runEnvPreflight();
 
   await resolveCredentials();
 

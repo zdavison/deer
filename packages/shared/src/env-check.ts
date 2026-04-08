@@ -70,6 +70,10 @@ const SAFE_PREFIXES = ["XDG_", "LC_", "DEER_", "GNOME_", "GTK_", "SYSTEMD_", "SS
 /**
  * Patterns matched against the full var name (case-insensitive).
  * Each entry is [pattern, human-readable reason].
+ *
+ * Patterns are derived from well-known secret scanning tools:
+ * - gitleaks: https://github.com/gitleaks/gitleaks/blob/master/config/gitleaks.toml
+ * - trufflehog: https://github.com/trufflesecurity/trufflehog/tree/main/pkg/detectors
  */
 const RISKY_KEY_PATTERNS: Array<[RegExp, string]> = [
   [/_KEY$/i, "key"],
@@ -88,24 +92,45 @@ const RISKY_KEY_PATTERNS: Array<[RegExp, string]> = [
   [/ACCESS_KEY/i, "access key"],
   [/SECRET_KEY/i, "secret key"],
   [/SIGNING_KEY/i, "signing key"],
+  [/^.*_DSN$/i, "data source name"],
+  [/^.*_CONNECTION_STRING$/i, "connection string"],
 ];
 
 /**
  * Value prefixes that indicate a known secret format regardless of key name.
  * Used as a secondary heuristic when the key name doesn't match.
+ *
+ * Sources: gitleaks default config, trufflehog detectors, GitHub secret scanning patterns.
  */
 const RISKY_VALUE_PREFIXES = [
-  "sk-",    // OpenAI / Anthropic (ANTHROPIC_API_KEY excluded separately)
-  "ghp_",   // GitHub personal access token
-  "gho_",   // GitHub OAuth token
-  "ghs_",   // GitHub server-to-server token
-  "ghu_",   // GitHub user-to-server token
-  "xoxb-",  // Slack bot token
-  "xoxe-",  // Slack
-  "xoxp-",  // Slack user token
-  "xoxa-",  // Slack
-  "ya29.",  // Google OAuth access token
+  "sk-",      // OpenAI / Anthropic (ANTHROPIC_API_KEY excluded separately)
+  "sk_live_", // Stripe live secret key
+  "sk_test_", // Stripe test secret key
+  "rk_live_", // Stripe restricted key
+  "ghp_",     // GitHub personal access token
+  "gho_",     // GitHub OAuth token
+  "ghs_",     // GitHub server-to-server token
+  "ghu_",     // GitHub user-to-server token
+  "github_pat_", // GitHub fine-grained PAT
+  "glpat-",   // GitLab personal access token
+  "xoxb-",    // Slack bot token
+  "xoxe-",    // Slack
+  "xoxp-",    // Slack user token
+  "xoxa-",    // Slack
+  "ya29.",    // Google OAuth access token
+  "AIza",     // Google API key
+  "AKIA",     // AWS access key ID
+  "SG.",      // SendGrid API key
+  "key-",     // Mailgun API key
+  "AC",       // Twilio Account SID (followed by 32 hex chars — caught by value-length check)
+  "EAA",      // Facebook/Meta access token
 ];
+
+/**
+ * Matches URL/connection strings with embedded credentials: scheme://user:pass@host
+ * Covers DATABASE_URL, REDIS_URL, MONGODB_URI, postgresql://, mysql://, etc.
+ */
+const CREDENTIAL_URL_PATTERN = /^[a-z][a-z0-9+.-]*:\/\/[^@/\s]+:[^@/\s]+@/i;
 
 /**
  * Detect environment variables that look like they may contain secrets.
@@ -140,6 +165,10 @@ export function detectRiskyEnvVars(
           break;
         }
       }
+    }
+
+    if (!reason && CREDENTIAL_URL_PATTERN.test(value)) {
+      reason = "credential URL";
     }
 
     if (reason) {

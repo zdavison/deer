@@ -29,7 +29,7 @@ export {
 export type { RiskyEnvVar, EnvPolicy } from "./env-check";
 
 // Interactive env review UI (terminal multi-select)
-export { runEnvReview } from "./env-review";
+export { runEnvReview, runEnvPreflight } from "./env-review";
 
 // Git finalize (PR creation)
 export {

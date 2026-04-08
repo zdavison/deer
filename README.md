@@ -102,7 +102,7 @@ By default the worktree is cleaned up when you're done. The `m` option merges th
 
 ### Reviewing env var access
 
-On first run, deer detects environment variables that look like secrets and shows an interactive prompt:
+On every run, deer detects environment variables that look like secrets. If any new unreviewed vars are found, an interactive prompt is shown:
 
 ```
   ⚠  Risky environment variables detected
@@ -117,7 +117,7 @@ On first run, deer detects environment variables that look like secrets and show
   ↑/↓ navigate  space toggle  enter confirm   unchecked = blocked
 ```
 
-Vars start **unchecked (blocked)** by default. Toggle with `space`, confirm with `enter`. Your choices are saved and won't be asked again unless new vars appear.
+Vars start **unchecked (blocked)** by default. Toggle with `space`, confirm with `enter`. Your choices are saved — already-reviewed vars are skipped on subsequent runs. If a new unreviewed var is detected, the full list of risky vars is shown again so you can review everything in context.
 
 To change your decisions later:
 

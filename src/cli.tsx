@@ -42,8 +42,8 @@ import {
   detectRiskyEnvVars,
   loadEnvPolicy,
   saveEnvPolicy,
-  getUnreviewedRiskyVars,
   runEnvReview,
+  runEnvPreflight,
 } from "@deer/shared";
 
 setLang(detectLang());
@@ -106,13 +106,11 @@ async function main() {
   if (process.argv[2] === "env") {
     const policy = loadEnvPolicy();
     const riskyVars = detectRiskyEnvVars();
-    if (riskyVars.length === 0) {
-      console.error("No risky environment variables detected.");
-      return;
+    if (riskyVars.length > 0) {
+      const updatedPolicy = await runEnvReview(riskyVars, policy);
+      await saveEnvPolicy(updatedPolicy);
+      console.error("Environment variable policy saved.");
     }
-    const updatedPolicy = await runEnvReview(riskyVars, policy);
-    await saveEnvPolicy(updatedPolicy);
-    console.error("Environment variable policy saved.");
     return;
   }
 
@@ -147,13 +145,7 @@ async function main() {
   // Env var review — runs before alt-screen so raw-mode and alt-screen don't conflict.
   // deerbox (when invoked as a subprocess by deer) skips its own review because it
   // runs non-interactive subcommands (prepare/preflight/etc.) that never show UI.
-  const envPolicy = loadEnvPolicy();
-  const riskyVars = detectRiskyEnvVars();
-  const unreviewedVars = getUnreviewedRiskyVars(riskyVars, envPolicy);
-  if (unreviewedVars.length > 0) {
-    const updatedPolicy = await runEnvReview(unreviewedVars, envPolicy);
-    await saveEnvPolicy(updatedPolicy);
-  }
+  await runEnvPreflight();
 
   // Enter alternate screen buffer
   process.stdout.write("\x1b[?1049h");

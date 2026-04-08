@@ -1,3 +1,4 @@
+import { detectRiskyEnvVars, loadEnvPolicy, saveEnvPolicy, getUnreviewedRiskyVars } from "./env-check";
 import type { RiskyEnvVar, EnvPolicy } from "./env-check";
 
 const ESC = "\x1b";
@@ -142,4 +143,20 @@ export async function runEnvReview(
 
     process.stdin.on("data", onData);
   });
+}
+
+/**
+ * Preflight env-var review — detects risky vars, shows interactive review for any
+ * not yet in the policy, and saves the updated policy. Shared by both `deer` and
+ * `deerbox` so the logic is identical in both entry points.
+ *
+ * Safe to call on every startup: only prompts when new unreviewed vars are found.
+ */
+export async function runEnvPreflight(): Promise<void> {
+  const policy = loadEnvPolicy();
+  const riskyVars = detectRiskyEnvVars();
+  const unreviewedVars = getUnreviewedRiskyVars(riskyVars, policy);
+  if (unreviewedVars.length === 0) return;
+  const updatedPolicy = await runEnvReview(unreviewedVars, policy);
+  await saveEnvPolicy(updatedPolicy);
 }
