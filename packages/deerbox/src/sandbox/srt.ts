@@ -41,7 +41,7 @@ function resolveSrtBin(): string {
 
 /**
  * Enumerate $HOME entries and return denyRead paths for everything
- * except .claude* and entries that are ancestors of required paths
+ * except entries that are ancestors of required paths
  * (worktree, claude binary, deer data dir, etc.).
  *
  * @param requiredPaths - Absolute paths that must remain readable.
@@ -63,7 +63,7 @@ function buildHomeDenyList(requiredPaths: string[], home: string): string[] {
   try {
     const entries = readdirSync(home);
     return entries
-      .filter((name) => !name.startsWith(".claude") && name !== ".mcp.json" && !requiredRoots.has(name))
+      .filter((name) => name !== ".mcp.json" && !requiredRoots.has(name))
       .map((name) => join(home, name));
   } catch {
     // Fallback to known sensitive paths if home is unreadable
@@ -109,11 +109,11 @@ function resolveWorktreeGitDir(worktreePath: string): string | null {
  * Resolve real filesystem paths behind symlinks within a directory tree.
  *
  * Scans `dir` and all of its immediate subdirectories for symlinks and
- * returns their resolved real paths. This ensures tools (skills, agents,
- * commands, or any other extension) symlinked from within ~/.claude/ to
- * paths outside ~/.claude/ are included in the sandbox's allowed paths.
+ * returns their resolved real paths. This ensures symlinked tools
+ * (skills, agents, commands, or any other extension) are included in
+ * the sandbox's allowed paths.
  *
- * @param dir - Root directory to scan (typically ~/.claude)
+ * @param dir - Root directory to scan
  */
 export function resolveSymlinkTargets(dir: string): string[] {
   const paths: string[] = [];
@@ -145,7 +145,7 @@ export function resolveSymlinkTargets(dir: string): string[] {
  * Build an SRT settings JSON object from deer's sandbox options.
  */
 function buildSrtSettings(options: SandboxRuntimeOptions, srtBinDir: string | null, home: string): Record<string, unknown> {
-  const claudeDir = join(home, ".claude");
+  const claudeConfigDir = options.claudeConfigDir ?? join(dirname(options.worktreePath), "claude-config");
 
   const network: Record<string, unknown> = {
     allowedDomains: options.allowlist,
@@ -180,9 +180,7 @@ function buildSrtSettings(options: SandboxRuntimeOptions, srtBinDir: string | nu
   }
 
   // Collect paths that must stay readable: worktree, repo .git dir,
-  // PATH entries under home, the deer data dir (worktree parent), and
-  // real paths behind any symlinks within ~/.claude/ so that tools
-  // symlinked from external locations remain accessible in the sandbox.
+  // PATH entries under home, and the deer data dir (worktree parent).
   const requiredPaths = [
     options.worktreePath,
     dirname(options.worktreePath),
@@ -190,18 +188,18 @@ function buildSrtSettings(options: SandboxRuntimeOptions, srtBinDir: string | nu
     ...(process.env.PATH?.split(":").filter((p) => p.startsWith(home)) ?? []),
     ...(srtBinDir ? [srtBinDir] : []),
     ...(options.extraReadPaths ?? []),
-    ...resolveSymlinkTargets(claudeDir),
+    ...resolveSymlinkTargets(claudeConfigDir),
   ];
 
-  // Deny read access to all home entries except .claude* and required roots.
+  // Deny read access to all home entries except required roots.
   // Dynamically enumerated so new dotfiles/dirs are automatically blocked.
   const denyRead = [
     ...buildHomeDenyList(requiredPaths, home),
-    // Credential files inside ~/.claude* must be explicitly denied even though
-    // the .claude directory itself is allowed. The sandbox must never see real
-    // tokens — all auth is handled by the host-side MITM proxy.
-    join(claudeDir, ".credentials.json"),
-    join(claudeDir, "agent-oauth-token"),
+    // Credential files inside the per-task claude-config dir must be explicitly
+    // denied. The sandbox must never see real tokens — all auth is handled by
+    // the host-side MITM proxy.
+    join(claudeConfigDir, ".credentials.json"),
+    join(claudeConfigDir, "agent-oauth-token"),
     // Block all sibling task directories. The tasks root (parent of the task
     // dir) is readable via .local, so we must explicitly deny it and then
     // re-allow only this task's own directory via allowRead below.
@@ -221,15 +219,16 @@ function buildSrtSettings(options: SandboxRuntimeOptions, srtBinDir: string | nu
         // Per-worktree gitdir (.git/worktrees/<name>/) and shared git
         // subdirectories needed for git add (objects) and commit (refs).
         ...gitWritePaths,
-        claudeDir,
-        join(home, ".claude.json"),
+        claudeConfigDir,
         "/tmp",
         "/private/tmp",
         ...(options.extraWritePaths ?? []),
       ],
       denyWrite: [
-        join(claudeDir, ".credentials.json"),
-        join(claudeDir, "agent-oauth-token"),
+        join(home, ".claude"),
+        join(home, ".claude.json"),
+        join(claudeConfigDir, ".credentials.json"),
+        join(claudeConfigDir, "agent-oauth-token"),
       ],
     },
     // Claude Code runs interactively and needs setRawMode (tcsetattr)
