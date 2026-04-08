@@ -37,7 +37,7 @@ curl -fsSL https://raw.githubusercontent.com/zdavison/deer/main/install.sh | bas
 To install a specific version:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/zdavison/deer/main/install.sh | bash -s -- --version 0.7.8
+curl -fsSL https://raw.githubusercontent.com/zdavison/deer/main/install.sh | bash -s -- --version 0.8.1
 ```
 
 ### Supported platforms

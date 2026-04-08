@@ -4,7 +4,7 @@ set -eu
 # deer installer — downloads deer + deerbox binaries and the sandbox runtime.
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/zdavison/deer/main/install.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/zdavison/deer/main/install.sh | bash -s -- --version 0.7.8
+#   curl -fsSL https://raw.githubusercontent.com/zdavison/deer/main/install.sh | bash -s -- --version 0.8.1
 
 REPO="zdavison/deer"
 INSTALL_DIR="${HOME}/.local/bin"
@@ -66,7 +66,7 @@ while [ $# -gt 0 ]; do
     --version=*)  VERSION="${1#--version=}"; shift ;;
     --help|-h)
       printf 'Usage: install.sh [--version <version>]\n'
-      printf '  --version, -v   Install a specific version (e.g. 0.7.8)\n'
+      printf '  --version, -v   Install a specific version (e.g. 0.8.1)\n'
       printf '  --help, -h      Show this help\n'
       exit 0
       ;;
