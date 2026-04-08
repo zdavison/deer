@@ -325,7 +325,10 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
   let authProxy: AuthProxy | null = null;
   let mitmProxy: { socketPath: string; domains: string[] } | undefined;
   if (upstreams.length > 0) {
-    const socketPath = join(dirname(worktreePath), `deer-auth-${taskId}.sock`);
+    // Use a short filename to stay within macOS's 104-byte sun_path limit.
+    // The task dir path can be long, so we use "proxy.sock" instead of
+    // repeating the taskId (which is already in the directory path).
+    const socketPath = join(dirname(worktreePath), "proxy.sock");
     authProxy = await startAuthProxy(socketPath, upstreams, onProxyLog, daemonize);
     mitmProxy = { socketPath: authProxy.socketPath, domains: authProxy.domains };
   }

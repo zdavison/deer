@@ -11,7 +11,7 @@
 
 import { spawn } from "node:child_process";
 import { join } from "node:path";
-import { mkdirSync, writeFileSync, existsSync, openSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync, openSync, unlinkSync, readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 
 import authProxySource from "./auth-proxy-server.mjs" with { type: "text" };
@@ -93,10 +93,13 @@ export async function startAuthProxy(
   const pidFilePath = `${socketPath}.pid`;
 
   if (daemonize) {
-    // Daemonized mode: no pipes — poll for the socket file to appear
+    // Daemonized mode: no pipes — poll for the socket file to appear.
+    // Stderr goes to a temp file so we can report errors if the child crashes.
+    const errFile = `${socketPath}.err`;
+    const errFd = openSync(errFile, "w");
     const devNull = openSync("/dev/null", "w");
     const child = spawn("node", [serverScript, socketPath, JSON.stringify(upstreams)], {
-      stdio: ["ignore", devNull, devNull],
+      stdio: ["ignore", devNull, errFd],
       detached: true,
     });
 
@@ -108,6 +111,7 @@ export async function startAuthProxy(
     for (let i = 0; i < 20; i++) {
       await new Promise((r) => setTimeout(r, 500));
       if (existsSync(socketPath)) {
+        try { unlinkSync(errFile); } catch { /* ignore */ }
         return {
           socketPath,
           domains: upstreams.map((u) => u.domain),
@@ -117,7 +121,15 @@ export async function startAuthProxy(
           },
         };
       }
+      // Check if process died early
+      try { process.kill(pid, 0); } catch {
+        let detail = "";
+        try { detail = readFileSync(errFile, "utf-8").trim(); } catch { /* ignore */ }
+        try { unlinkSync(errFile); } catch { /* ignore */ }
+        throw new Error(`auth-proxy subprocess exited before ready${detail ? `: ${detail}` : ""}`);
+      }
     }
+    try { unlinkSync(errFile); } catch { /* ignore */ }
     throw new Error("auth-proxy subprocess did not create socket in 10s");
   }
 

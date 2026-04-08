@@ -108,7 +108,7 @@ async function cmdDestroy(args: string[]) {
   const branch = `deer/${taskId}`;
 
   // Kill auth proxy by PID file
-  const pidFile = join(taskDir, `deer-auth-${taskId}.sock.pid`);
+  const pidFile = join(taskDir, "proxy.sock.pid");
   try {
     const pid = parseInt(await Bun.file(pidFile).text(), 10);
     if (!isNaN(pid)) killAuthProxy(pid);

@@ -74,8 +74,15 @@ function refreshToken(upstream) {
 const socketPath = process.argv[2];
 const upstreams = JSON.parse(process.argv[3]);
 
+let stdoutBroken = false;
 function log(message) {
-  process.stdout.write(JSON.stringify({ log: message }) + "\n");
+  if (stdoutBroken) return;
+  try {
+    process.stdout.write(JSON.stringify({ log: message }) + "\n");
+  } catch {
+    // Parent disconnected the pipe (daemonized mode) — stop writing
+    stdoutBroken = true;
+  }
 }
 
 /**
@@ -255,8 +262,15 @@ const server = createServer((req, res) => {
   }
 });
 
+// Prevent EPIPE crashes when parent disconnects stdout (daemonized mode)
+process.stdout.on("error", () => { stdoutBroken = true; });
+
 server.listen(socketPath, () => {
-  process.stdout.write(JSON.stringify({ ready: true }) + "\n");
+  try {
+    process.stdout.write(JSON.stringify({ ready: true }) + "\n");
+  } catch {
+    stdoutBroken = true;
+  }
 });
 
 // Graceful shutdown

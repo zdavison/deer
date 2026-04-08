@@ -323,27 +323,30 @@ export function createSrtRuntime(opts?: { home?: string }): SandboxRuntime {
     buildCommand(options: SandboxRuntimeOptions, innerCommand: string[]): string[] {
       const { worktreePath, env } = options;
 
-      // Spread host env, then overlay explicit sandbox env (proxy placeholders,
-      // git config, etc.). Proxy-injected credentials (e.g. ANTHROPIC_API_KEY)
-      // are redacted to "proxy-managed" via placeholderEnv in the env overlay,
-      // so the real values never reach the sandbox.
-      const mergedEnv: Record<string, string> = {};
-      for (const [k, v] of Object.entries(process.env)) {
-        if (v !== undefined) mergedEnv[k] = v;
-      }
-      Object.assign(mergedEnv, env ?? {});
-      mergedEnv.HOME = home;
-      mergedEnv.PATH = process.env.PATH ?? "/usr/bin:/bin:/usr/local/bin";
-      mergedEnv.TERM = process.env.TERM ?? "xterm-256color";
-      // Must never be set inside the sandbox
-      delete mergedEnv["CLAUDECODE"];
+      // Build the sandbox env overlay. SRT injects proxy env vars
+      // (HTTP_PROXY, HTTPS_PROXY, etc.) before sandbox-exec, so we must NOT
+      // use `env -i` which would wipe them. Instead we overlay our vars and
+      // explicitly unset sensitive ones that shouldn't leak into the sandbox.
+      const overlay: Record<string, string> = {};
+      overlay.HOME = home;
+      overlay.PATH = process.env.PATH ?? "/usr/bin:/bin:/usr/local/bin";
+      overlay.TERM = process.env.TERM ?? "xterm-256color";
+      Object.assign(overlay, env ?? {});
 
-      // Use exec env -i to replace the inherited environment entirely with the
-      // merged set. This prevents any credential vars that leaked into the SRT
-      // process's inherited env from reaching the inner command.
-      const envAssigns = Object.entries(mergedEnv).map(([k, v]) => `${k}=${shellq(v)}`);
+      // Vars that must never reach the sandbox (real credentials, host state)
+      const unsafeVars = [
+        "CLAUDECODE",
+        "ANTHROPIC_API_KEY",
+        "CLAUDE_CODE_OAUTH_TOKEN",
+      ];
+      // Don't unset vars that the overlay explicitly sets (e.g. placeholder values)
+      const unsets = unsafeVars
+        .filter((k) => !(k in (env ?? {})))
+        .map((k) => `-u ${k}`);
+
+      const envAssigns = Object.entries(overlay).map(([k, v]) => `${k}=${shellq(v)}`);
       const escapedInner = innerCommand.map(shellq).join(" ");
-      const shellCmd = `cd ${shellq(worktreePath)} && exec env -i ${envAssigns.join(" ")} ${escapedInner}`;
+      const shellCmd = `cd ${shellq(worktreePath)} && exec env ${unsets.join(" ")} ${envAssigns.join(" ")} ${escapedInner}`;
 
       return [srtBin, "-s", settingsPath, "-c", shellCmd];
     },
