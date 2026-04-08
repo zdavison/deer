@@ -21,15 +21,17 @@ const cyan = (s: string) => `${ESC}[36m${s}${ESC}[39m`;
  * Returns the updated policy with user decisions merged into the existing one.
  */
 export async function runEnvReview(
-  unreviewedVars: RiskyEnvVar[],
+  vars: RiskyEnvVar[],
   existingPolicy: EnvPolicy,
 ): Promise<EnvPolicy> {
-  if (unreviewedVars.length === 0) return existingPolicy;
+  if (vars.length === 0) return existingPolicy;
 
-  // Non-interactive fallback: auto-block all unreviewed vars
+  // Non-interactive fallback: auto-block only vars not yet reviewed; keep existing decisions.
   if (!process.stdin.isTTY) {
+    const reviewed = new Set([...existingPolicy.blocked, ...existingPolicy.approved]);
+    const newlyBlocked = vars.filter((v) => !reviewed.has(v.key)).map((v) => v.key);
     return {
-      blocked: [...existingPolicy.blocked, ...unreviewedVars.map((v) => v.key)],
+      blocked: [...existingPolicy.blocked, ...newlyBlocked],
       approved: [...existingPolicy.approved],
     };
   }
@@ -37,7 +39,7 @@ export async function runEnvReview(
   const out = process.stderr;
   // Pre-check vars the user has already approved so their state is visible
   const checked = new Set<string>(
-    unreviewedVars.filter((v) => existingPolicy.approved.includes(v.key)).map((v) => v.key),
+    vars.filter((v) => existingPolicy.approved.includes(v.key)).map((v) => v.key),
   );
   let cursor = 0;
 
@@ -51,8 +53,8 @@ export async function runEnvReview(
     }
 
     const lines: string[] = [];
-    for (let i = 0; i < unreviewedVars.length; i++) {
-      const v = unreviewedVars[i];
+    for (let i = 0; i < vars.length; i++) {
+      const v = vars[i];
       const isCursor = i === cursor;
       const isChecked = checked.has(v.key);
       const arrow = isCursor ? cyan("▶") : " ";
@@ -76,9 +78,12 @@ export async function runEnvReview(
   };
 
   const buildPolicy = (): EnvPolicy => {
-    const newBlocked = [...existingPolicy.blocked];
-    const newApproved = [...existingPolicy.approved];
-    for (const v of unreviewedVars) {
+    // Remove displayed vars from existing lists, then re-add based on current selection.
+    // This correctly handles re-reviews (e.g. user flips a previously approved var to blocked).
+    const displayedKeys = new Set(vars.map((v) => v.key));
+    const newBlocked = existingPolicy.blocked.filter((k) => !displayedKeys.has(k));
+    const newApproved = existingPolicy.approved.filter((k) => !displayedKeys.has(k));
+    for (const v of vars) {
       if (checked.has(v.key)) {
         newApproved.push(v.key);
       } else {
@@ -127,11 +132,11 @@ export async function runEnvReview(
         renderList();
       } else if (key === `${ESC}[B`) {
         // Down arrow
-        cursor = Math.min(unreviewedVars.length - 1, cursor + 1);
+        cursor = Math.min(vars.length - 1, cursor + 1);
         renderList();
       } else if (key === " ") {
         // Space — toggle selection
-        const varKey = unreviewedVars[cursor].key;
+        const varKey = vars[cursor].key;
         if (checked.has(varKey)) {
           checked.delete(varKey);
         } else {
@@ -150,13 +155,15 @@ export async function runEnvReview(
  * not yet in the policy, and saves the updated policy. Shared by both `deer` and
  * `deerbox` so the logic is identical in both entry points.
  *
- * Safe to call on every startup: only prompts when new unreviewed vars are found.
+ * Safe to call on every startup: only prompts when new unreviewed vars are found,
+ * but shows all risky vars (including previously reviewed ones) so the user can
+ * change past decisions.
  */
 export async function runEnvPreflight(): Promise<void> {
   const policy = loadEnvPolicy();
   const riskyVars = detectRiskyEnvVars();
   const unreviewedVars = getUnreviewedRiskyVars(riskyVars, policy);
   if (unreviewedVars.length === 0) return;
-  const updatedPolicy = await runEnvReview(unreviewedVars, policy);
+  const updatedPolicy = await runEnvReview(riskyVars, policy);
   await saveEnvPolicy(updatedPolicy);
 }
