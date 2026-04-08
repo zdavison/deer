@@ -23,3 +23,14 @@ export function dataDir(): string {
   const home = process.env.HOME;
   return `${home}/.local/share/deer`;
 }
+
+/**
+ * Derive a human-readable slug from a repository path.
+ * Uses the directory basename, which is sufficient for scoping tasks
+ * on the same machine.
+ * @duplicate src/task.ts — keep both in sync
+ * @example repoSlug("/home/user/projects/my-app") => "my-app"
+ */
+export function repoSlug(repoPath: string): string {
+  return require("node:path").basename(repoPath);
+}

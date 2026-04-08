@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { join, basename } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { HOME } from "./constants";
 
@@ -28,10 +28,19 @@ export function dataDir(): string {
 }
 
 /**
- * Returns the worktree path for a given task ID.
+ * Derive a human-readable slug from a repository path.
+ * @duplicate packages/deerbox/src/task.ts — keep both in sync
+ * @example repoSlug("/home/user/projects/my-app") => "my-app"
  */
-export function taskWorktreePath(taskId: string): string {
-  return join(dataDir(), "tasks", taskId, "worktree");
+export function repoSlug(repoPath: string): string {
+  return basename(repoPath);
+}
+
+/**
+ * Returns the worktree path for a given task ID scoped by repository.
+ */
+export function taskWorktreePath(repoPath: string, taskId: string): string {
+  return join(dataDir(), "tasks", repoSlug(repoPath), taskId, "worktree");
 }
 
 // ── Prompt Input History ──────────────────────────────────────────────

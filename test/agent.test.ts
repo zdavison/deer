@@ -4,7 +4,6 @@ import { dirname, join } from "node:path";
 setDefaultTimeout(30_000);
 import { resolveProxyUpstreams, DEFAULT_CONFIG, createSrtRuntime } from "../packages/deerbox/src/index";
 import type { ProxyCredential } from "../packages/deerbox/src/index";
-import { dataDir } from "../src/task";
 import { startAgent, getAgentOutput, deleteTask } from "../src/agent";
 import type { AgentHandle, AgentStatus } from "../src/agent";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -362,7 +361,7 @@ describe("agent lifecycle", () => {
     expect(await Bun.file(join(handle.worktreePath, "README.md")).exists()).toBe(false);
 
     // Task directory should be removed
-    const taskDir = join(dataDir(), "tasks", handle.taskId);
+    const taskDir = dirname(handle.worktreePath);
     const { statSync } = await import("node:fs");
     let dirExists = false;
     try { statSync(taskDir); dirExists = true; } catch { /* gone */ }

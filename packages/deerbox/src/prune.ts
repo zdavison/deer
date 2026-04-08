@@ -51,16 +51,31 @@ export async function getRepoPathFromWorktree(worktreePath: string): Promise<str
   return dirname(absGitDir);
 }
 
+/**
+ * Enumerate all task directories across all repo slugs.
+ * Layout: tasks/<repoSlug>/<taskId>/
+ */
 async function getTaskDirs(): Promise<string[]> {
   const tasksDir = join(dataDir(), "tasks");
+  const dirs: string[] = [];
   try {
-    const entries = await readdir(tasksDir, { withFileTypes: true });
-    return entries
-      .filter((e) => e.isDirectory())
-      .map((e) => join(tasksDir, e.name));
+    const repoEntries = await readdir(tasksDir, { withFileTypes: true });
+    for (const repo of repoEntries) {
+      if (!repo.isDirectory()) continue;
+      const repoDir = join(tasksDir, repo.name);
+      try {
+        const taskEntries = await readdir(repoDir, { withFileTypes: true });
+        for (const task of taskEntries) {
+          if (task.isDirectory()) dirs.push(join(repoDir, task.name));
+        }
+      } catch {
+        // Unreadable repo dir — skip
+      }
+    }
   } catch {
-    return [];
+    // No tasks dir at all
   }
+  return dirs;
 }
 
 async function removeWorktreeAndBranch(

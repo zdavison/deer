@@ -133,10 +133,11 @@ deer treats deerbox as a black box — all interaction happens through CLI subco
 ```
 ~/.local/share/deer/
   deer.db                    # SQLite database — single source of truth for all task state
-  tasks/<taskId>/
+  tasks/<repoSlug>/<taskId>/
     worktree/                # git worktree (only writable path in sandbox)
     srt-settings.json        # SRT sandbox config
     gitconfig                # minimal gitconfig for sandbox
+    claude-config/           # per-task Claude config (CLAUDE_CONFIG_DIR)
   prompt-history.json        # TUI prompt input history
   node_modules/              # srt binary location for compiled binary
 ```

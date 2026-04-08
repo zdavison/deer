@@ -10,7 +10,7 @@
 import { join, dirname, resolve } from "node:path";
 import { mkdir, cp, access, readFile, writeFile } from "node:fs/promises";
 import { createWorktree, checkoutWorktree, removeWorktree, cleanupWorktree } from "./git/worktree";
-import { generateTaskId, dataDir } from "./task";
+import { generateTaskId, dataDir, repoSlug } from "./task";
 import { loadConfig, type DeerConfig } from "./config";
 import { resolveRuntime } from "./sandbox/resolve";
 import { detectLang, HOME, DEFAULT_MODEL } from "@deer/shared";
@@ -291,7 +291,7 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
     ].join("\n") + "\n",
   );
 
-  const claudeConfigDir = join(dataDir(), "tasks", taskId, "claude-config");
+  const claudeConfigDir = join(dataDir(), "tasks", repoSlug(repoPath), taskId, "claude-config");
   await setupClaudeConfigDir(claudeConfigDir, HOME);
 
   onStatus?.("Starting sandbox...");
@@ -398,8 +398,8 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
 }
 
 /**
- * Returns the worktree path for a given task ID.
+ * Returns the worktree path for a given task ID scoped by repository.
  */
-export function taskWorktreePath(taskId: string): string {
-  return join(dataDir(), "tasks", taskId, "worktree");
+export function taskWorktreePath(repoPath: string, taskId: string): string {
+  return join(dataDir(), "tasks", repoSlug(repoPath), taskId, "worktree");
 }

@@ -25,7 +25,7 @@ import { resolveCredentials } from "@deer/shared";
 import { killAuthProxy } from "./sandbox/auth-proxy";
 import { VERSION } from "./constants";
 import { DEFAULT_MODEL, setLang, detectLang, checkAndUpdate } from "@deer/shared";
-import { dataDir } from "./task";
+import { dataDir, repoSlug } from "./task";
 import { createPullRequest, updatePullRequest, hasChanges } from "./git/finalize";
 import { runPostSession, interactivePromptChoice, defaultOpenShell, defaultMergeBranch } from "./post-session";
 import { prune } from "./prune";
@@ -103,8 +103,8 @@ async function cmdDestroy(args: string[]) {
     process.exit(1);
   }
 
-  const worktreePath = taskWorktreePath(taskId);
-  const taskDir = join(dataDir(), "tasks", taskId);
+  const worktreePath = taskWorktreePath(repoPath, taskId);
+  const taskDir = join(dataDir(), "tasks", repoSlug(repoPath), taskId);
   const branch = `deer/${taskId}`;
 
   // Kill auth proxy by PID file

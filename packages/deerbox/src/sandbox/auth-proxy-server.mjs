@@ -17,16 +17,6 @@ import { readFileSync } from "node:fs";
 const httpsAgent = new HttpsAgent({ keepAlive: true, keepAliveMsecs: 60_000 });
 const httpAgent = new HttpAgent({ keepAlive: true, keepAliveMsecs: 60_000 });
 
-/** Collect all request body chunks into a single Buffer. */
-function collectBody(req) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    req.on("data", (chunk) => chunks.push(chunk));
-    req.on("end", () => resolve(Buffer.concat(chunks)));
-    req.on("error", reject);
-  });
-}
-
 /**
  * Try each credential source in order, return the first OAuth token found.
  * Returns null if no source yields a token.
@@ -88,7 +78,18 @@ function log(message) {
   process.stdout.write(JSON.stringify({ log: message }) + "\n");
 }
 
-function forwardToUpstream(upstream, path, method, reqHeaders, res, bodyBuffer, isRetry) {
+/**
+ * Forward a request to an upstream server.
+ *
+ * @param {object} upstream - Upstream config (domain, target, headers, oauthRefresh)
+ * @param {string} path - Request path
+ * @param {string} method - HTTP method
+ * @param {object} reqHeaders - Original request headers
+ * @param {object} res - Client response to write to
+ * @param {import("node:stream").Readable|Buffer} bodySource - Request body as a stream (first attempt) or Buffer (401 retry)
+ * @param {boolean} isRetry - Whether this is a 401 retry
+ */
+function forwardToUpstream(upstream, path, method, reqHeaders, res, bodySource, isRetry) {
   const targetUrl = new URL(path, upstream.target);
   const startTime = Date.now();
   const isHttps = targetUrl.protocol === "https:";
@@ -105,11 +106,29 @@ function forwardToUpstream(upstream, path, method, reqHeaders, res, bodyBuffer, 
   for (const [k, v] of Object.entries(upstream.headers)) {
     fwdHeaders[k] = v;
   }
-  // We have the full body buffered, so set an accurate content-length
-  // and remove transfer-encoding (no longer applicable).
-  delete fwdHeaders["transfer-encoding"];
-  if (bodyBuffer.length > 0) {
-    fwdHeaders["content-length"] = String(bodyBuffer.length);
+
+  const isBuffer = Buffer.isBuffer(bodySource);
+
+  // On retry, set accurate content-length from the buffered body.
+  // On first attempt, pass through the original headers (content-length
+  // or transfer-encoding from the client).
+  if (isBuffer) {
+    delete fwdHeaders["transfer-encoding"];
+    if (bodySource.length > 0) {
+      fwdHeaders["content-length"] = String(bodySource.length);
+    }
+  }
+
+  // Collect chunks for potential 401 retry (only on first attempt)
+  const bodyChunks = [];
+  let bodyBufferPromise;
+  if (isBuffer) {
+    bodyBufferPromise = Promise.resolve(bodySource);
+  } else {
+    bodyBufferPromise = new Promise((resolve) => {
+      bodySource.on("data", (chunk) => bodyChunks.push(chunk));
+      bodySource.on("end", () => resolve(Buffer.concat(bodyChunks)));
+    });
   }
 
   const proxyReq = doRequest(
@@ -127,16 +146,19 @@ function forwardToUpstream(upstream, path, method, reqHeaders, res, bodyBuffer, 
 
       if (proxyRes.statusCode === 401 && !isRetry && upstream.oauthRefresh) {
         proxyRes.resume(); // drain and discard the 401 body
-        refreshToken(upstream).then((token) => {
-          if (token) {
-            forwardToUpstream(upstream, path, method, reqHeaders, res, bodyBuffer, true);
-          } else {
-            log(`[proxy] ${method} ${upstream.domain}${path} → 401 (refresh found no token)`);
-            if (!res.headersSent) {
-              res.writeHead(401, { "content-type": "text/plain" });
-              res.end("auth-proxy: upstream 401 - no token found during refresh");
+        // Wait for body to be fully collected, then retry with buffered body
+        bodyBufferPromise.then((bodyBuffer) => {
+          return refreshToken(upstream).then((token) => {
+            if (token) {
+              forwardToUpstream(upstream, path, method, reqHeaders, res, bodyBuffer, true);
+            } else {
+              log(`[proxy] ${method} ${upstream.domain}${path} → 401 (refresh found no token)`);
+              if (!res.headersSent) {
+                res.writeHead(401, { "content-type": "text/plain" });
+                res.end("auth-proxy: upstream 401 - no token found during refresh");
+              }
             }
-          }
+          });
         }).catch((err) => {
           log(`[proxy] ${method} ${upstream.domain}${path} → 401 (refresh error: ${err.message})`);
           if (!res.headersSent) {
@@ -153,6 +175,14 @@ function forwardToUpstream(upstream, path, method, reqHeaders, res, bodyBuffer, 
     },
   );
 
+  // Disable Nagle's algorithm on upstream TCP connections to reduce
+  // streaming latency for small SSE chunks.
+  proxyReq.on("socket", (socket) => {
+    if (typeof socket.setNoDelay === "function") {
+      socket.setNoDelay(true);
+    }
+  });
+
   proxyReq.on("error", (err) => {
     const elapsed = Date.now() - startTime;
     log(`[proxy] ${method} ${upstream.domain}${path} → 502 error (${elapsed}ms): ${err.message}`);
@@ -162,22 +192,24 @@ function forwardToUpstream(upstream, path, method, reqHeaders, res, bodyBuffer, 
     }
   });
 
-  proxyReq.end(bodyBuffer);
+  // Stream body directly to upstream (or send buffered body on retry)
+  if (isBuffer) {
+    proxyReq.end(bodySource);
+  } else {
+    bodySource.pipe(proxyReq);
+  }
 }
 
-async function handleRequest(req, res) {
+function handleRequest(req, res) {
   const rawUrl = req.url ?? "/";
   const method = req.method ?? "GET";
-
-  // Buffer the full request body before forwarding so we can replay it on retry.
-  const bodyBuffer = await collectBody(req);
 
   let parsedUrl;
   try {
     parsedUrl = new URL(rawUrl);
   } catch {
     if (upstreams.length > 0) {
-      forwardToUpstream(upstreams[0], rawUrl, method, req.headers, res, bodyBuffer, false);
+      forwardToUpstream(upstreams[0], rawUrl, method, req.headers, res, req, false);
       return;
     }
     log(`[proxy] 502 invalid URL ${rawUrl}`);
@@ -206,19 +238,21 @@ async function handleRequest(req, res) {
   }
 
   const path = parsedUrl.pathname + parsedUrl.search;
-  forwardToUpstream(upstream, path, method, req.headers, res, bodyBuffer, false);
+  forwardToUpstream(upstream, path, method, req.headers, res, req, false);
 }
 
 // Clean up stale socket
 try { unlinkSync(socketPath); } catch { /* ignore */ }
 
 const server = createServer((req, res) => {
-  handleRequest(req, res).catch((err) => {
+  try {
+    handleRequest(req, res);
+  } catch (err) {
     if (!res.headersSent) {
       res.writeHead(500, { "content-type": "text/plain" });
       res.end(`auth-proxy: internal error: ${err.message}`);
     }
-  });
+  }
 });
 
 server.listen(socketPath, () => {

@@ -93,7 +93,7 @@ describe("srt settings - git write permissions", () => {
   });
 });
 
-describe("srt settings - cross-task isolation", () => {
+describe("srt settings - cross-repo isolation", () => {
   const tmpDirs: string[] = [];
 
   afterEach(async () => {
@@ -108,13 +108,15 @@ describe("srt settings - cross-task isolation", () => {
     return d;
   }
 
-  test("sibling task directories are blocked via denyRead/allowRead", async () => {
+  test("sibling repo directories are blocked via denyRead", async () => {
     // tasks/
-    //   current-task/worktree/   <- this task
-    //   sibling-task/worktree/   <- must not be readable
+    //   my-repo/current-task/worktree/   <- this task
+    //   other-repo/other-task/worktree/  <- must not be readable
     const tasksRoot = await makeTmpDir();
-    const currentTaskDir = join(tasksRoot, "current-task");
-    const siblingTaskDir = join(tasksRoot, "sibling-task");
+    const currentRepoDir = join(tasksRoot, "my-repo");
+    const currentTaskDir = join(currentRepoDir, "current-task");
+    const siblingRepoDir = join(tasksRoot, "other-repo");
+    const siblingTaskDir = join(siblingRepoDir, "other-task");
     const worktreeDir = join(currentTaskDir, "worktree");
     await mkdir(worktreeDir, { recursive: true });
     await mkdir(join(siblingTaskDir, "worktree"), { recursive: true });
@@ -128,14 +130,40 @@ describe("srt settings - cross-task isolation", () => {
     const settingsPath = join(currentTaskDir, "srt-settings.json");
     const settings = JSON.parse(await readFile(settingsPath, "utf-8"));
     const denyRead: string[] = settings.filesystem.denyRead;
-    const allowRead: string[] = settings.filesystem.allowRead;
 
-    // The tasks root must be denied to block sibling tasks
-    expect(denyRead).toContain(tasksRoot);
-    // The current task dir must be re-allowed
-    expect(allowRead).toContain(currentTaskDir);
-    // Sibling task dir must not appear in allowRead
-    expect(allowRead).not.toContain(siblingTaskDir);
+    // Sibling repo dir must be denied
+    expect(denyRead).toContain(siblingRepoDir);
+    // Current repo dir must NOT be denied
+    expect(denyRead).not.toContain(currentRepoDir);
+    // Tasks root must NOT be denied (SRT doesn't support allowRead overrides)
+    expect(denyRead).not.toContain(tasksRoot);
+  });
+
+  test("same-repo sibling tasks are visible", async () => {
+    // tasks/
+    //   my-repo/task-a/worktree/   <- this task
+    //   my-repo/task-b/worktree/   <- same repo, should be visible
+    const tasksRoot = await makeTmpDir();
+    const repoDir = join(tasksRoot, "my-repo");
+    const taskADir = join(repoDir, "task-a");
+    const taskBDir = join(repoDir, "task-b");
+    const worktreeDir = join(taskADir, "worktree");
+    await mkdir(worktreeDir, { recursive: true });
+    await mkdir(join(taskBDir, "worktree"), { recursive: true });
+
+    const runtime = createSrtRuntime();
+    await runtime.prepare?.({
+      worktreePath: worktreeDir,
+      allowlist: [],
+    });
+
+    const settingsPath = join(taskADir, "srt-settings.json");
+    const settings = JSON.parse(await readFile(settingsPath, "utf-8"));
+    const denyRead: string[] = settings.filesystem.denyRead;
+
+    // Neither the repo dir nor sibling task dir should be denied
+    expect(denyRead).not.toContain(repoDir);
+    expect(denyRead).not.toContain(taskBDir);
   });
 });
 

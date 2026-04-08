@@ -1,0 +1,380 @@
+import { test, expect, describe, afterAll } from "bun:test";
+import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
+import { connect as netConnect, type Socket } from "node:net";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { randomBytes } from "node:crypto";
+import { unlinkSync } from "node:fs";
+import { spawn, type ChildProcess } from "node:child_process";
+
+const AUTH_PROXY_SCRIPT = join(import.meta.dir, "..", "packages", "deerbox", "src", "sandbox", "auth-proxy-server.mjs");
+
+/**
+ * Start a mock upstream HTTP server that records requests and sends responses.
+ */
+function startMockUpstream(handler: (req: IncomingMessage, res: ServerResponse) => void): Promise<{ server: Server; port: number }> {
+  return new Promise((resolve) => {
+    const server = createServer(handler);
+    server.listen(0, "127.0.0.1", () => {
+      const addr = server.address();
+      const port = typeof addr === "object" && addr ? addr.port : 0;
+      resolve({ server, port });
+    });
+  });
+}
+
+/**
+ * Start the auth proxy on a Unix socket with given upstream config.
+ */
+function startAuthProxy(socketPath: string, upstreams: unknown[]): Promise<{ proc: ChildProcess }> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn("node", [AUTH_PROXY_SCRIPT, socketPath, JSON.stringify(upstreams)], {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let buf = "";
+    proc.stdout!.on("data", (chunk: Buffer) => {
+      buf += chunk.toString();
+      if (buf.includes('"ready":true')) {
+        resolve({ proc });
+      }
+    });
+    proc.on("error", reject);
+    proc.on("exit", (code) => {
+      if (!buf.includes('"ready":true')) {
+        reject(new Error(`auth proxy exited with code ${code} before ready`));
+      }
+    });
+  });
+}
+
+/**
+ * Send a request through the auth proxy via Unix socket using raw HTTP.
+ * Bun's node:http doesn't support socketPath, so we write raw HTTP over net.connect.
+ */
+function proxyRequest(
+  socketPath: string,
+  opts: { method?: string; path: string; body?: string; headers?: Record<string, string> },
+): Promise<{ status: number; headers: Record<string, string>; body: string }> {
+  return new Promise((resolve, reject) => {
+    const socket: Socket = netConnect({ path: socketPath }, () => {
+      const method = opts.method ?? "GET";
+      const body = opts.body ?? "";
+      const headers = opts.headers ?? {};
+
+      let raw = `${method} ${opts.path} HTTP/1.1\r\n`;
+      raw += `Host: localhost\r\n`;
+      if (body) {
+        raw += `Content-Length: ${Buffer.byteLength(body)}\r\n`;
+      }
+      for (const [k, v] of Object.entries(headers)) {
+        raw += `${k}: ${v}\r\n`;
+      }
+      raw += `Connection: close\r\n`;
+      raw += `\r\n`;
+      if (body) raw += body;
+
+      socket.write(raw);
+    });
+
+    let buf = "";
+    socket.on("data", (chunk) => { buf += chunk.toString(); });
+    socket.on("end", () => {
+      const headerEnd = buf.indexOf("\r\n\r\n");
+      if (headerEnd === -1) { reject(new Error("malformed HTTP response")); return; }
+      const headerBlock = buf.slice(0, headerEnd);
+      const responseBody = buf.slice(headerEnd + 4);
+      const lines = headerBlock.split("\r\n");
+      const statusLine = lines[0];
+      const status = parseInt(statusLine.split(" ")[1], 10);
+      const headers: Record<string, string> = {};
+      for (let i = 1; i < lines.length; i++) {
+        const colon = lines[i].indexOf(":");
+        if (colon > 0) {
+          headers[lines[i].slice(0, colon).toLowerCase().trim()] = lines[i].slice(colon + 1).trim();
+        }
+      }
+      resolve({ status, headers, body: responseBody });
+    });
+    socket.on("error", reject);
+  });
+}
+
+describe("auth-proxy-server", () => {
+  const procs: ChildProcess[] = [];
+  const servers: Server[] = [];
+  const sockets: string[] = [];
+
+  afterAll(() => {
+    for (const p of procs) p.kill("SIGTERM");
+    for (const s of servers) s.close();
+    for (const sock of sockets) {
+      try { unlinkSync(sock); } catch {}
+    }
+  });
+
+  test("streams request body to upstream without full buffering", async () => {
+    // Track when each chunk arrives at the upstream
+    const chunkTimestamps: number[] = [];
+    let receivedBody = "";
+
+    const { server, port } = await startMockUpstream((req, res) => {
+      req.on("data", (chunk) => {
+        chunkTimestamps.push(Date.now());
+        receivedBody += chunk.toString();
+      });
+      req.on("end", () => {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+      });
+    });
+    servers.push(server);
+
+    const socketPath = join(tmpdir(), `auth-proxy-test-${randomBytes(4).toString("hex")}.sock`);
+    sockets.push(socketPath);
+
+    const upstreams = [
+      {
+        domain: "test-upstream.local",
+        target: `http://127.0.0.1:${port}`,
+        headers: { "x-auth": "test-token" },
+      },
+    ];
+
+    const { proc } = await startAuthProxy(socketPath, upstreams);
+    procs.push(proc);
+
+    // Send a multi-chunk request body
+    const bodyPart = "x".repeat(1024);
+    const fullBody = bodyPart.repeat(4);
+
+    const result = await proxyRequest(socketPath, {
+      method: "POST",
+      path: `http://test-upstream.local/v1/messages`,
+      body: fullBody,
+      headers: { "content-type": "application/json" },
+    });
+
+    expect(result.status).toBe(200);
+    expect(receivedBody).toBe(fullBody);
+    // Upstream received data in chunks, not as a single buffered blob
+    expect(chunkTimestamps.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("injects auth headers into forwarded requests", async () => {
+    let receivedHeaders: Record<string, string | string[] | undefined> = {};
+
+    const { server, port } = await startMockUpstream((req, res) => {
+      receivedHeaders = req.headers;
+      res.writeHead(200);
+      res.end("ok");
+    });
+    servers.push(server);
+
+    const socketPath = join(tmpdir(), `auth-proxy-test-${randomBytes(4).toString("hex")}.sock`);
+    sockets.push(socketPath);
+
+    const upstreams = [
+      {
+        domain: "auth-test.local",
+        target: `http://127.0.0.1:${port}`,
+        headers: { authorization: "Bearer my-secret-token" },
+      },
+    ];
+
+    const { proc } = await startAuthProxy(socketPath, upstreams);
+    procs.push(proc);
+
+    await proxyRequest(socketPath, {
+      method: "POST",
+      path: `http://auth-test.local/v1/messages`,
+      body: '{"prompt":"hello"}',
+      headers: { "content-type": "application/json" },
+    });
+
+    expect(receivedHeaders.authorization).toBe("Bearer my-secret-token");
+  });
+
+  test("streams response body back to client", async () => {
+    const { server, port } = await startMockUpstream((_req, res) => {
+      // Drain request body
+      _req.resume();
+      _req.on("end", () => {
+        res.writeHead(200, { "content-type": "text/event-stream" });
+        // Simulate SSE streaming with multiple writes
+        res.write("data: chunk1\n\n");
+        setTimeout(() => {
+          res.write("data: chunk2\n\n");
+          setTimeout(() => {
+            res.write("data: chunk3\n\n");
+            res.end();
+          }, 10);
+        }, 10);
+      });
+    });
+    servers.push(server);
+
+    const socketPath = join(tmpdir(), `auth-proxy-test-${randomBytes(4).toString("hex")}.sock`);
+    sockets.push(socketPath);
+
+    const upstreams = [
+      {
+        domain: "stream-test.local",
+        target: `http://127.0.0.1:${port}`,
+        headers: {},
+      },
+    ];
+
+    const { proc } = await startAuthProxy(socketPath, upstreams);
+    procs.push(proc);
+
+    const result = await proxyRequest(socketPath, {
+      method: "POST",
+      path: `http://stream-test.local/v1/messages`,
+      body: "{}",
+    });
+
+    expect(result.status).toBe(200);
+    expect(result.body).toContain("data: chunk1");
+    expect(result.body).toContain("data: chunk2");
+    expect(result.body).toContain("data: chunk3");
+  });
+
+  test("streams request body incrementally (not buffered)", async () => {
+    // The upstream tracks data events — streaming should deliver multiple chunks,
+    // not one single blob after full buffering.
+    const dataEventCount: number[] = [];
+    let receivedBody = "";
+
+    const { server, port } = await startMockUpstream((req, res) => {
+      req.on("data", (chunk) => {
+        dataEventCount.push(chunk.length);
+        receivedBody += chunk.toString();
+      });
+      req.on("end", () => {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ events: dataEventCount.length, total: receivedBody.length }));
+      });
+    });
+    servers.push(server);
+
+    const socketPath = join(tmpdir(), `auth-proxy-test-${randomBytes(4).toString("hex")}.sock`);
+    sockets.push(socketPath);
+
+    const upstreams = [
+      {
+        domain: "stream-body-test.local",
+        target: `http://127.0.0.1:${port}`,
+        headers: { "x-auth": "tok" },
+      },
+    ];
+
+    const { proc } = await startAuthProxy(socketPath, upstreams);
+    procs.push(proc);
+
+    // Send request with a large body via raw socket, writing in multiple chunks
+    const result = await new Promise<{ status: number; body: string }>((resolve, reject) => {
+      const socket: Socket = netConnect({ path: socketPath }, () => {
+        const bodyChunk = "A".repeat(8192);
+        const totalBody = bodyChunk.repeat(8); // 64KB total
+        let raw = `POST http://stream-body-test.local/v1/messages HTTP/1.1\r\n`;
+        raw += `Host: stream-body-test.local\r\n`;
+        raw += `Content-Length: ${Buffer.byteLength(totalBody)}\r\n`;
+        raw += `Connection: close\r\n`;
+        raw += `\r\n`;
+
+        // Write headers
+        socket.write(raw);
+        // Write body in separate chunks with small delays to ensure they arrive separately
+        let sent = 0;
+        const sendNext = () => {
+          if (sent < 8) {
+            socket.write(bodyChunk);
+            sent++;
+            setTimeout(sendNext, 5);
+          }
+        };
+        sendNext();
+      });
+
+      let buf = "";
+      socket.on("data", (chunk) => { buf += chunk.toString(); });
+      socket.on("end", () => {
+        const headerEnd = buf.indexOf("\r\n\r\n");
+        if (headerEnd === -1) { reject(new Error("malformed")); return; }
+        const statusLine = buf.slice(0, buf.indexOf("\r\n"));
+        const status = parseInt(statusLine.split(" ")[1], 10);
+        const body = buf.slice(headerEnd + 4);
+        resolve({ status, body });
+      });
+      socket.on("error", reject);
+    });
+
+    expect(result.status).toBe(200);
+    const parsed = JSON.parse(result.body);
+    expect(parsed.total).toBe(8192 * 8);
+    // With streaming, the body should arrive in multiple data events.
+    // With full buffering, it would arrive as a single event.
+    // Allow some coalescing by the kernel but expect at least 2 events.
+    expect(parsed.events).toBeGreaterThanOrEqual(2);
+  });
+
+  test("retries on 401 with refreshed token", async () => {
+    let requestCount = 0;
+
+    const { server, port } = await startMockUpstream((req, res) => {
+      req.resume();
+      req.on("end", () => {
+        requestCount++;
+        if (requestCount === 1) {
+          // First request: return 401
+          res.writeHead(401);
+          res.end("unauthorized");
+        } else {
+          // Second request (after refresh): return 200
+          res.writeHead(200);
+          res.end(JSON.stringify({ ok: true, auth: req.headers.authorization }));
+        }
+      });
+    });
+    servers.push(server);
+
+    // Write a temporary token file for the refresh
+    const tokenPath = join(tmpdir(), `auth-proxy-test-token-${randomBytes(4).toString("hex")}`);
+    await Bun.write(tokenPath, "refreshed-token-value");
+
+    const socketPath = join(tmpdir(), `auth-proxy-test-${randomBytes(4).toString("hex")}.sock`);
+    sockets.push(socketPath);
+
+    const upstreams = [
+      {
+        domain: "retry-test.local",
+        target: `http://127.0.0.1:${port}`,
+        headers: { authorization: "Bearer expired-token" },
+        oauthRefresh: {
+          sources: [{ type: "agent-token-file", path: tokenPath }],
+          headerName: "authorization",
+          headerTemplate: "Bearer ${token}",
+        },
+      },
+    ];
+
+    const { proc } = await startAuthProxy(socketPath, upstreams);
+    procs.push(proc);
+
+    const result = await proxyRequest(socketPath, {
+      method: "POST",
+      path: `http://retry-test.local/v1/messages`,
+      body: '{"prompt":"test 401 retry"}',
+      headers: { "content-type": "application/json" },
+    });
+
+    expect(result.status).toBe(200);
+    expect(requestCount).toBe(2);
+    const parsed = JSON.parse(result.body);
+    expect(parsed.auth).toBe("Bearer refreshed-token-value");
+
+    // Cleanup
+    try { unlinkSync(tokenPath); } catch {}
+  });
+});

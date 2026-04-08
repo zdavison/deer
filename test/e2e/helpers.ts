@@ -218,7 +218,8 @@ export async function withSlowFakeClaude<T>(
 // ── Task discovery ────────────────────────────────────────────────────
 
 /**
- * Scan dataDir/tasks/ for a taskId directory created after a given timestamp.
+ * Scan dataDir/tasks/<repoSlug>/ for a taskId directory created after a given timestamp.
+ * Searches across all repo slug directories.
  * Returns the taskId of the first matching directory found.
  */
 export async function waitForNewTaskDir(
@@ -229,23 +230,35 @@ export async function waitForNewTaskDir(
   let found: string | undefined;
   await waitFor(
     async () => {
-      let entries: string[];
+      let repoEntries: string[];
       try {
-        entries = await readdir(tasksDir);
+        repoEntries = await readdir(tasksDir);
       } catch {
         return false;
       }
-      found = (
-        await Promise.all(
-          entries
-            .filter((e) => e.startsWith("deer_"))
-            .map(async (e) => {
-              const s = await stat(join(tasksDir, e)).catch(() => null);
-              return s && s.ctimeMs > since ? e : null;
-            }),
-        )
-      ).find((e): e is string => e !== null);
-      return !!found;
+      for (const repo of repoEntries) {
+        let taskEntries: string[];
+        try {
+          taskEntries = await readdir(join(tasksDir, repo));
+        } catch {
+          continue;
+        }
+        const match = (
+          await Promise.all(
+            taskEntries
+              .filter((e) => e.startsWith("deer_"))
+              .map(async (e) => {
+                const s = await stat(join(tasksDir, repo, e)).catch(() => null);
+                return s && s.ctimeMs > since ? e : null;
+              }),
+          )
+        ).find((e): e is string => e !== null);
+        if (match) {
+          found = match;
+          return true;
+        }
+      }
+      return false;
     },
     { timeout: timeoutMs, label: "new task directory" },
   );

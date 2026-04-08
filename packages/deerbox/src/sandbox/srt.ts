@@ -1,4 +1,4 @@
-import { join, dirname } from "node:path";
+import { join, dirname, basename } from "node:path";
 import { readdirSync, readFileSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import type { SandboxRuntime, SandboxRuntimeOptions, SandboxCleanup } from "./runtime";
@@ -142,6 +142,39 @@ export function resolveSymlinkTargets(dir: string): string[] {
 }
 
 /**
+ * Enumerate sibling repo directories under the tasks root and return their
+ * paths. With repo-scoped task layout (`tasks/<repoSlug>/<taskId>/`), denying
+ * sibling repo dirs prevents cross-repo task access while keeping the current
+ * repo's tasks visible.
+ *
+ * KNOWN LIMITATION: This only denies repo dirs that exist at sandbox creation
+ * time. Repo dirs created after this sandbox starts will NOT be denied. SRT
+ * does not support `allowRead` (only `denyRead`), so we cannot deny the
+ * entire tasks root and re-allow the current repo — that would make the
+ * worktree invisible. Denying siblings at creation time is the best we can
+ * do without upstream SRT changes.
+ *
+ * @param worktreePath - The current task's worktree path, e.g.
+ *   `~/.local/share/deer/tasks/my-repo/deer_abc/worktree`
+ */
+function buildSiblingRepoDenyList(worktreePath: string): string[] {
+  // worktreePath = tasks/<repoSlug>/<taskId>/worktree
+  const taskDir = dirname(worktreePath);       // tasks/<repoSlug>/<taskId>
+  const repoDir = dirname(taskDir);            // tasks/<repoSlug>
+  const tasksRoot = dirname(repoDir);          // tasks/
+  const currentRepoSlug = basename(repoDir);
+
+  try {
+    const entries = readdirSync(tasksRoot);
+    return entries
+      .filter((name) => name !== currentRepoSlug)
+      .map((name) => join(tasksRoot, name));
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Build an SRT settings JSON object from deer's sandbox options.
  */
 function buildSrtSettings(options: SandboxRuntimeOptions, srtBinDir: string | null, home: string): Record<string, unknown> {
@@ -200,20 +233,17 @@ function buildSrtSettings(options: SandboxRuntimeOptions, srtBinDir: string | nu
     // the host-side MITM proxy.
     join(claudeConfigDir, ".credentials.json"),
     join(claudeConfigDir, "agent-oauth-token"),
-    // Block all sibling task directories. The tasks root (parent of the task
-    // dir) is readable via .local, so we must explicitly deny it and then
-    // re-allow only this task's own directory via allowRead below.
-    dirname(dirname(options.worktreePath)),
+    // Block sibling repo directories. With repo-scoped layout
+    // (tasks/<repoSlug>/<taskId>/), we deny other repo slugs so tasks
+    // from different repos can't read each other. Tasks within the same
+    // repo remain visible to each other.
+    ...buildSiblingRepoDenyList(options.worktreePath),
   ];
-
-  // Re-allow only this task's own directory within the denied tasks root.
-  const allowRead = [dirname(options.worktreePath)];
 
   return {
     network,
     filesystem: {
       denyRead,
-      allowRead,
       allowWrite: [
         options.worktreePath,
         // Per-worktree gitdir (.git/worktrees/<name>/) and shared git

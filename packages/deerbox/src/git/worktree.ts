@@ -1,6 +1,6 @@
 import { join, dirname, resolve } from "node:path";
 import { mkdir } from "node:fs/promises";
-import { dataDir } from "../task";
+import { dataDir, repoSlug } from "../task";
 
 export interface WorktreeInfo {
   repoPath: string;
@@ -59,7 +59,7 @@ export async function detectWorktreeContext(dir: string): Promise<WorktreeContex
  * Create a git worktree for a task.
  *
  * Branch: `deer/<taskId>`
- * Path: `~/.local/share/deer/tasks/<taskId>/worktree`
+ * Path: `~/.local/share/deer/tasks/<repoSlug>/<taskId>/worktree`
  */
 export async function createWorktree(
   repoPath: string,
@@ -67,10 +67,11 @@ export async function createWorktree(
   baseBranch: string
 ): Promise<WorktreeInfo> {
   const branch = `deer/${taskId}`;
-  const worktreePath = join(dataDir(), "tasks", taskId, "worktree");
+  const slug = repoSlug(repoPath);
+  const worktreePath = join(dataDir(), "tasks", slug, taskId, "worktree");
 
   // Ensure parent directory exists
-  await mkdir(join(dataDir(), "tasks", taskId), { recursive: true });
+  await mkdir(join(dataDir(), "tasks", slug, taskId), { recursive: true });
 
   const result =
     await Bun.$`git -C ${repoPath} worktree add -b ${branch} ${worktreePath} ${baseBranch}`.quiet();
@@ -91,7 +92,7 @@ export async function createWorktree(
  * out the given branch as-is. Used with `--from` to continue work on an
  * existing branch.
  *
- * Path: `~/.local/share/deer/tasks/<taskId>/worktree`
+ * Path: `~/.local/share/deer/tasks/<repoSlug>/<taskId>/worktree`
  */
 export async function checkoutWorktree(
   repoPath: string,
@@ -104,9 +105,10 @@ export async function checkoutWorktree(
     return { repoPath, worktreePath: existing, branch };
   }
 
-  const worktreePath = join(dataDir(), "tasks", taskId, "worktree");
+  const slug = repoSlug(repoPath);
+  const worktreePath = join(dataDir(), "tasks", slug, taskId, "worktree");
 
-  await mkdir(join(dataDir(), "tasks", taskId), { recursive: true });
+  await mkdir(join(dataDir(), "tasks", slug, taskId), { recursive: true });
 
   // Fetch the branch from origin in case it only exists remotely
   await Bun.$`git -C ${repoPath} fetch origin ${branch}:${branch}`.quiet().nothrow();

@@ -1,6 +1,5 @@
 import { useCallback, useRef } from "react";
 import type { MutableRefObject, Dispatch, SetStateAction } from "react";
-import { dataDir } from "../task";
 import type { DeerConfig, PreflightResult } from "../types";
 import { t } from "../i18n";
 import { generateTaskId } from "../task";
@@ -369,7 +368,7 @@ export function useAgentActions({
 
   const openShell = useCallback(async (agent: AgentState) => {
     if (!agent.taskId) return;
-    const worktreePath = `${dataDir()}/tasks/${agent.taskId}/worktree`;
+    const worktreePath = agent.worktreePath;
     const shell = process.env.SHELL ?? "/bin/sh";
     const sessionName = `deer-shell-${agent.taskId}`;
 
@@ -432,7 +431,7 @@ export function useAgentActions({
   const updatePr = useCallback(async (agent: AgentState) => {
     if (!agent.result?.prUrl || !agent.result?.finalBranch) return;
 
-    const worktreePath = `${dataDir()}/tasks/${agent.taskId}/worktree`;
+    const worktreePath = agent.worktreePath;
 
     agent.updatingPr = true;
     agent.lastActivity = t("activity_updating_pr");

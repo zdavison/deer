@@ -10,8 +10,8 @@ import { prune, isTmuxSessionAlive } from "../packages/deerbox/src/prune";
  * Create a fake task directory structure under the given home dir.
  * Does NOT create a real git worktree — just the directory skeleton.
  */
-async function createFakeTaskDir(homeDir: string, taskId: string): Promise<string> {
-  const taskDir = join(homeDir, ".local", "share", "deer", "tasks", taskId);
+async function createFakeTaskDir(homeDir: string, taskId: string, repoName = "test-repo"): Promise<string> {
+  const taskDir = join(homeDir, ".local", "share", "deer", "tasks", repoName, taskId);
   await mkdir(join(taskDir, "worktree"), { recursive: true });
   await writeFile(join(taskDir, "gitconfig"), "[user]\n  name = Deer\n");
   return taskDir;
