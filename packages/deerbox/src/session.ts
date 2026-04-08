@@ -13,7 +13,7 @@ import { createWorktree, checkoutWorktree, removeWorktree, cleanupWorktree } fro
 import { generateTaskId, dataDir, repoSlug } from "./task";
 import { loadConfig, type DeerConfig } from "./config";
 import { resolveRuntime } from "./sandbox/resolve";
-import { detectLang, HOME, DEFAULT_MODEL } from "@deer/shared";
+import { detectLang, HOME, DEFAULT_MODEL, loadEnvPolicy } from "@deer/shared";
 import { applyEcosystems } from "./ecosystems";
 import { resolveProxyUpstreams } from "./proxy";
 import { startAuthProxy, type AuthProxy } from "./sandbox/auth-proxy";
@@ -344,6 +344,9 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
     ...sandboxEnv,
   };
 
+  // Load the user's env policy to block any vars they've denied
+  const envPolicy = loadEnvPolicy();
+
   // Build the full sandboxed command via the runtime
   const runtimeOpts = {
     worktreePath,
@@ -353,6 +356,7 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
     env: { ...ecosystemResult.env, ...sandboxEnvFinal },
     mitmProxy,
     claudeConfigDir,
+    envBlocklist: envPolicy.blocked,
   };
 
   try {

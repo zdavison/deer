@@ -100,6 +100,37 @@ By default the worktree is cleaned up when you're done. The `m` option merges th
 | `--from <branch-or-PR>`     | `-f`  | Continue work on an existing branch or PR            |
 | `--keep`                    | `-k`  | Keep the worktree after Claude exits                 |
 
+### Reviewing env var access
+
+On every run, `deer`/`deerbox` detect environment variables that look like secrets.
+
+```
+  ⚠  Risky environment variables detected
+  ─────────────────────────────────────────────────────────────────
+  These env vars may contain secrets. Select which to allow in the
+  sandbox — unchecked vars will be blocked. Your choice is remembered.
+
+    [ ] GITHUB_TOKEN          (token)    ghp...
+  ▶ [ ] AWS_SECRET_ACCESS_KEY (key)      AKI...
+    [ ] DATABASE_PASSWORD     (password) hun...
+
+  ↑/↓ navigate  space toggle  enter confirm   unchecked = blocked
+```
+
+Your choices are saved for future runs.
+
+If any new env vars are added that you haven't reviewed, you'll see this UI again.
+
+To show this UI on demand at any time:
+
+```sh
+deer env
+# or
+deerbox env
+```
+
+This re-runs the review over all currently-detected risky vars, with your previous choices pre-filled so you can adjust them.
+
 ### `--from`: continuing work on an existing branch or PR
 
 `--from` lets you run `deerbox` against a branch that already exists, rather than starting fresh from the base branch. This is useful for iterating on a PR — for example, addressing review comments.
@@ -280,7 +311,7 @@ See `deer.toml.example` for a full annotated example.
 - **Filesystem**: the agent can only write to its git worktree; the rest of the filesystem is read-only or inaccessible.
 - **Network**: outbound traffic is filtered through a domain allowlist; only explicitly permitted domains are reachable.
 - **Credentials**: API keys and OAuth tokens never enter the sandbox — a host-side MITM proxy intercepts requests to credentialed domains and injects auth headers transparently. By default this applies to `claude` keys/OAuth tokens only, but you can add additional ones if necessary.
-- **Environment**: only explicitly listed env vars are forwarded; host secrets are not leaked via the process environment.
+- **Environment**: on every run, deer scans your environment for vars that look like secrets (API keys, tokens, passwords, etc.). If any new unreviewed vars are detected, you're prompted to choose which to allow in the sandbox. Your choices are saved to `~/.local/share/deer/env-policy.json` and applied to every session. Previously reviewed vars won't trigger the prompt again unless new ones appear. You can revisit all decisions at any time with `deer env` or `deerbox env`. Vars managed by the auth proxy (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`) are excluded from this check since they never reach the sandbox in plaintext regardless.
 
 ---
 

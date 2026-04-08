@@ -333,14 +333,15 @@ export function createSrtRuntime(opts?: { home?: string }): SandboxRuntime {
       overlay.TERM = process.env.TERM ?? "xterm-256color";
       Object.assign(overlay, env ?? {});
 
-      // Vars that must never reach the sandbox (real credentials, host state)
-      const unsafeVars = [
-        "CLAUDECODE",
-        "ANTHROPIC_API_KEY",
-        "CLAUDE_CODE_OAUTH_TOKEN",
-      ];
+      // Vars to explicitly remove from the sandbox environment.
+      // CLAUDECODE must never be set (prevents nested deer detection).
+      // User-blocked vars are removed via the env policy blocklist.
+      const unsafeVars = new Set<string>(["CLAUDECODE"]);
+      for (const key of options.envBlocklist ?? []) {
+        unsafeVars.add(key);
+      }
       // Don't unset vars that the overlay explicitly sets (e.g. placeholder values)
-      const unsets = unsafeVars
+      const unsets = [...unsafeVars]
         .filter((k) => !(k in (env ?? {})))
         .map((k) => `-u ${k}`);
 

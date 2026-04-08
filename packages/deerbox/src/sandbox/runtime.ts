@@ -23,6 +23,12 @@ export interface SandboxRuntimeOptions {
   /** Extra environment variables to inject into the sandbox */
   env?: Record<string, string>;
   /**
+   * Environment variable names to exclude from the sandbox.
+   * Removed from the host-env spread before the explicit `env` overlay is applied,
+   * so proxy-managed placeholders (e.g. ANTHROPIC_API_KEY=proxy-managed) are unaffected.
+   */
+  envBlocklist?: string[];
+  /**
    * MITM proxy configuration for credential injection.
    * When set, SRT routes matching domains through this Unix socket proxy
    * which injects auth headers before forwarding to the real upstream.
