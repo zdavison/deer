@@ -1,6 +1,5 @@
 import { join, dirname, basename } from "node:path";
 import { readdirSync, readFileSync, realpathSync } from "node:fs";
-import { extraDenyRead } from "./security/default";
 import { createRequire } from "node:module";
 import type { SandboxRuntime, SandboxRuntimeOptions, SandboxCleanup } from "./runtime";
 import { HOME } from "@deer/shared";
@@ -239,8 +238,27 @@ function buildSrtSettings(options: SandboxRuntimeOptions, srtBinDir: string | nu
     // from different repos can't read each other. Tasks within the same
     // repo remain visible to each other.
     ...buildSiblingRepoDenyList(options.worktreePath),
-    // System credential files, root home, password manager dirs, other users' home dirs.
-    ...extraDenyRead(home),
+    // System credential files and root's home directory
+    "/etc/shadow",
+    "/etc/sudoers",
+    "/etc/sudoers.d",
+    "/root",
+    // Password manager dirs under .local/share
+    join(home, ".local", "share", "keyrings"),
+    join(home, ".local", "share", "gnome-keyring"),
+    join(home, ".local", "share", "pass"),
+    join(home, ".local", "share", "org.keepassxc.KeePassXC"),
+    // Other users' home directories
+    ...(() => {
+      const homeParent = dirname(home);
+      const currentUsername = basename(home);
+      if (homeParent === home) return [];
+      try {
+        return readdirSync(homeParent)
+          .filter(name => name !== currentUsername)
+          .map(name => join(homeParent, name));
+      } catch { return []; }
+    })(),
   ];
 
   return {
