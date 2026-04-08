@@ -238,6 +238,27 @@ function buildSrtSettings(options: SandboxRuntimeOptions, srtBinDir: string | nu
     // from different repos can't read each other. Tasks within the same
     // repo remain visible to each other.
     ...buildSiblingRepoDenyList(options.worktreePath),
+    // System credential files and root's home directory
+    "/etc/shadow",
+    "/etc/sudoers",
+    "/etc/sudoers.d",
+    "/root",
+    // Password manager dirs under .local/share
+    join(home, ".local", "share", "keyrings"),
+    join(home, ".local", "share", "gnome-keyring"),
+    join(home, ".local", "share", "pass"),
+    join(home, ".local", "share", "org.keepassxc.KeePassXC"),
+    // Other users' home directories
+    ...(() => {
+      const homeParent = dirname(home);
+      const currentUsername = basename(home);
+      if (homeParent === home) return [];
+      try {
+        return readdirSync(homeParent)
+          .filter(name => name !== currentUsername)
+          .map(name => join(homeParent, name));
+      } catch { return []; }
+    })(),
   ];
 
   return {
@@ -302,26 +323,27 @@ export function createSrtRuntime(opts?: { home?: string }): SandboxRuntime {
     buildCommand(options: SandboxRuntimeOptions, innerCommand: string[]): string[] {
       const { worktreePath, env } = options;
 
-      // Build env exports + cd + exec
-      const envExports: string[] = [];
-
-      if (env) {
-        for (const [key, value] of Object.entries(env)) {
-          envExports.push(`export ${key}=${shellq(value)}`);
-        }
+      // Spread host env, then overlay explicit sandbox env (proxy placeholders,
+      // git config, etc.). Proxy-injected credentials (e.g. ANTHROPIC_API_KEY)
+      // are redacted to "proxy-managed" via placeholderEnv in the env overlay,
+      // so the real values never reach the sandbox.
+      const mergedEnv: Record<string, string> = {};
+      for (const [k, v] of Object.entries(process.env)) {
+        if (v !== undefined) mergedEnv[k] = v;
       }
+      Object.assign(mergedEnv, env ?? {});
+      mergedEnv.HOME = home;
+      mergedEnv.PATH = process.env.PATH ?? "/usr/bin:/bin:/usr/local/bin";
+      mergedEnv.TERM = process.env.TERM ?? "xterm-256color";
+      // Must never be set inside the sandbox
+      delete mergedEnv["CLAUDECODE"];
 
-      envExports.push(`export HOME=${shellq(home)}`);
-      envExports.push("unset CLAUDECODE");
-
-      if (process.env.PATH) {
-        envExports.push(`export PATH=${shellq(process.env.PATH)}`);
-      }
-      envExports.push(`export TERM=${shellq(process.env.TERM ?? "xterm-256color")}`);
-
+      // Use exec env -i to replace the inherited environment entirely with the
+      // merged set. This prevents any credential vars that leaked into the SRT
+      // process's inherited env from reaching the inner command.
+      const envAssigns = Object.entries(mergedEnv).map(([k, v]) => `${k}=${shellq(v)}`);
       const escapedInner = innerCommand.map(shellq).join(" ");
-
-      const shellCmd = `${envExports.join("; ")}; cd ${shellq(worktreePath)} && exec ${escapedInner}`;
+      const shellCmd = `cd ${shellq(worktreePath)} && exec env -i ${envAssigns.join(" ")} ${escapedInner}`;
 
       return [srtBin, "-s", settingsPath, "-c", shellCmd];
     },
