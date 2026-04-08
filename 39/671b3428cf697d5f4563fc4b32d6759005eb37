@@ -1,0 +1,73 @@
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "39671b3428cf697d5f4563fc4b32d6759005eb37",
+  "prompts": {
+    "016dc436b1de4da2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a6c37ac2-1c8d-40ec-a400-18b5540da2f5",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "deer-agent <deer@noreply>",
+      "messages": [],
+      "total_additions": 27,
+      "total_deletions": 16,
+      "accepted_lines": 27,
+      "overriden_lines": 0
+    },
+    "31acd683bb4f138f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1eccf32b-54ed-4397-bc27-74bcfe513108",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "deer-agent <deer@noreply>",
+      "messages": [],
+      "total_additions": 3,
+      "total_deletions": 0,
+      "accepted_lines": 3,
+      "overriden_lines": 0
+    },
+    "7d82dd523eaf7aee": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8d668425-349d-4ebf-b06b-5aed2995ce19",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "deer-agent <deer@noreply>",
+      "messages": [],
+      "total_additions": 79,
+      "total_deletions": 25,
+      "accepted_lines": 66,
+      "overriden_lines": 0
+    },
+    "ae6ec4124ba28b96": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "28184ee0-294f-4fff-bfa6-076c95cc4756",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "deer-agent <deer@noreply>",
+      "messages": [],
+      "total_additions": 166,
+      "total_deletions": 121,
+      "accepted_lines": 152,
+      "overriden_lines": 0
+    },
+    "fb771eb14da1a1aa": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d7fc8eab-342a-40af-91e7-35ddc0d3ad72",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "deer-agent <deer@noreply>",
+      "messages": [],
+      "total_additions": 6,
+      "total_deletions": 0,
+      "accepted_lines": 6,
+      "overriden_lines": 0
+    }
+  }
+}
