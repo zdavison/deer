@@ -9,7 +9,7 @@
 import { test, expect, describe, afterEach } from "bun:test";
 import { createSrtRuntime } from "../../packages/deerbox/src/index";
 import { resolveSymlinkTargets } from "../../packages/deerbox/src/sandbox/srt";
-import { mkdtemp, rm, mkdir, writeFile, readFile, symlink } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile, readFile, symlink, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -188,7 +188,8 @@ describe("resolveSymlinkTargets", () => {
     await symlink(target, join(claudeDir, "my-skill"));
 
     const result = resolveSymlinkTargets(claudeDir);
-    expect(result).toContain(target);
+    // Use realpath to normalize /tmp -> /private/tmp on macOS
+    expect(result).toContain(await realpath(target));
   });
 
   test("resolves symlinks in immediate subdirectories", async () => {
@@ -199,7 +200,8 @@ describe("resolveSymlinkTargets", () => {
     await symlink(target, join(subdir, "my-skill"));
 
     const result = resolveSymlinkTargets(claudeDir);
-    expect(result).toContain(target);
+    // Use realpath to normalize /tmp -> /private/tmp on macOS
+    expect(result).toContain(await realpath(target));
   });
 
   test("does not recurse deeper than one level", async () => {

@@ -1,5 +1,8 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { unlinkSync } from "node:fs";
+import { test, expect, describe, beforeEach, afterEach, beforeAll, afterAll } from "bun:test";
+import { unlinkSync, mkdirSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import {
   getDb,
   closeDb,
@@ -15,9 +18,12 @@ import {
   repoHash,
   isProcessAlive,
 } from "../src/db";
-import { dataDir } from "../src/task";
 
-const dbPath = `${dataDir()}/deer.db`;
+// Use a writable temp dir for the database so tests work in sandboxed environments
+const testDataDir = mkdtempSync(join(tmpdir(), "deer-db-test-"));
+process.env.DEER_DATA_DIR = testDataDir;
+
+const dbPath = join(testDataDir, "deer.db");
 
 beforeEach(() => {
   closeDb();
@@ -28,6 +34,12 @@ beforeEach(() => {
 
 afterEach(() => {
   closeDb();
+});
+
+afterAll(() => {
+  closeDb();
+  try { rmSync(testDataDir, { recursive: true, force: true }); } catch {}
+  delete process.env.DEER_DATA_DIR;
 });
 
 describe("repoHash", () => {

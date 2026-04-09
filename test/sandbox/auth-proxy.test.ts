@@ -1,11 +1,21 @@
-import { test, expect, describe, afterEach } from "bun:test";
+import { test, expect, describe, afterEach, afterAll } from "bun:test";
 import { startAuthProxy } from "../../packages/deerbox/src/index";
 import type { ProxyUpstream } from "../../packages/deerbox/src/index";
 import { createServer, type Server } from "node:http";
 import { connect } from "node:net";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { mkdtempSync, rmSync } from "node:fs";
+
+// Use worktree-relative dirs so Unix sockets work in sandboxed environments.
+// Also set DEER_DATA_DIR so auth-proxy can write its server script.
+const testDataDir = mkdtempSync(join(import.meta.dir, "../../.test-proxy-data-"));
+process.env.DEER_DATA_DIR = testDataDir;
+
+afterAll(() => {
+  delete process.env.DEER_DATA_DIR;
+  try { rmSync(testDataDir, { recursive: true, force: true }); } catch {}
+});
 
 describe("auth-proxy (Unix socket MITM)", () => {
   const cleanups: (() => Promise<void>)[] = [];
@@ -21,7 +31,7 @@ describe("auth-proxy (Unix socket MITM)", () => {
   });
 
   async function makeTmpDir(): Promise<string> {
-    const d = await mkdtemp(join(tmpdir(), "deer-proxy-test-"));
+    const d = await mkdtemp(join(import.meta.dir, "../../.test-sock-"));
     tmpDirs.push(d);
     return d;
   }

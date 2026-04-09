@@ -2,12 +2,15 @@ import { test, expect, describe, afterAll } from "bun:test";
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 import { connect as netConnect, type Socket } from "node:net";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { randomBytes } from "node:crypto";
-import { unlinkSync, existsSync, readFileSync, rmSync, statSync } from "node:fs";
+import { unlinkSync, existsSync, readFileSync, rmSync, statSync, mkdirSync } from "node:fs";
 import { spawn, type ChildProcess } from "node:child_process";
 import { connect as tlsConnect } from "node:tls";
 import { ensureCACert } from "../packages/deerbox/src/sandbox/auth-proxy";
+
+// Unix sockets require a path in the worktree (sandbox blocks /tmp sockets).
+// Use the test directory directly — macOS limits socket paths to 104 chars.
+const SOCK_BASE_DIR = import.meta.dir;
 
 const AUTH_PROXY_SCRIPT = join(import.meta.dir, "..", "packages", "deerbox", "src", "sandbox", "auth-proxy-server.mjs");
 
@@ -142,7 +145,7 @@ describe("auth-proxy-server", () => {
     });
     servers.push(server);
 
-    const socketPath = join(tmpdir(), `auth-proxy-test-${randomBytes(4).toString("hex")}.sock`);
+    const socketPath = join(SOCK_BASE_DIR, `p-${randomBytes(4).toString("hex")}.sock`);
     sockets.push(socketPath);
 
     const upstreams = [
@@ -183,7 +186,7 @@ describe("auth-proxy-server", () => {
     });
     servers.push(server);
 
-    const socketPath = join(tmpdir(), `auth-proxy-test-${randomBytes(4).toString("hex")}.sock`);
+    const socketPath = join(SOCK_BASE_DIR, `p-${randomBytes(4).toString("hex")}.sock`);
     sockets.push(socketPath);
 
     const upstreams = [
@@ -226,7 +229,7 @@ describe("auth-proxy-server", () => {
     });
     servers.push(server);
 
-    const socketPath = join(tmpdir(), `auth-proxy-test-${randomBytes(4).toString("hex")}.sock`);
+    const socketPath = join(SOCK_BASE_DIR, `p-${randomBytes(4).toString("hex")}.sock`);
     sockets.push(socketPath);
 
     const upstreams = [
@@ -270,7 +273,7 @@ describe("auth-proxy-server", () => {
     });
     servers.push(server);
 
-    const socketPath = join(tmpdir(), `auth-proxy-test-${randomBytes(4).toString("hex")}.sock`);
+    const socketPath = join(SOCK_BASE_DIR, `p-${randomBytes(4).toString("hex")}.sock`);
     sockets.push(socketPath);
 
     const upstreams = [
@@ -352,10 +355,10 @@ describe("auth-proxy-server", () => {
     servers.push(server);
 
     // Write a temporary token file for the refresh
-    const tokenPath = join(tmpdir(), `auth-proxy-test-token-${randomBytes(4).toString("hex")}`);
+    const tokenPath = join(SOCK_BASE_DIR, `tk-${randomBytes(4).toString("hex")}`);
     await Bun.write(tokenPath, "refreshed-token-value");
 
-    const socketPath = join(tmpdir(), `auth-proxy-test-${randomBytes(4).toString("hex")}.sock`);
+    const socketPath = join(SOCK_BASE_DIR, `p-${randomBytes(4).toString("hex")}.sock`);
     sockets.push(socketPath);
 
     const upstreams = [
@@ -406,11 +409,11 @@ describe("auth-proxy-server", () => {
     });
     servers.push(server);
 
-    const caDir = join(tmpdir(), `deer-ca-test-${randomBytes(4).toString("hex")}`);
+    const caDir = join(SOCK_BASE_DIR, `ca-${randomBytes(4).toString("hex")}`);
     tempDirs.push(caDir);
     const ca = ensureCACert(caDir);
 
-    const socketPath = join(tmpdir(), `auth-proxy-test-${randomBytes(4).toString("hex")}.sock`);
+    const socketPath = join(SOCK_BASE_DIR, `p-${randomBytes(4).toString("hex")}.sock`);
     sockets.push(socketPath);
 
     const upstreams = [
@@ -503,14 +506,14 @@ describe("auth-proxy-server", () => {
     });
     servers.push(server);
 
-    const tokenPath = join(tmpdir(), `auth-proxy-test-token-${randomBytes(4).toString("hex")}`);
+    const tokenPath = join(SOCK_BASE_DIR, `tk-${randomBytes(4).toString("hex")}`);
     await Bun.write(tokenPath, "refreshed-tls-token");
 
-    const caDir = join(tmpdir(), `deer-ca-test-${randomBytes(4).toString("hex")}`);
+    const caDir = join(SOCK_BASE_DIR, `ca-${randomBytes(4).toString("hex")}`);
     tempDirs.push(caDir);
     const ca = ensureCACert(caDir);
 
-    const socketPath = join(tmpdir(), `auth-proxy-test-${randomBytes(4).toString("hex")}.sock`);
+    const socketPath = join(SOCK_BASE_DIR, `p-${randomBytes(4).toString("hex")}.sock`);
     sockets.push(socketPath);
 
     const upstreams = [
@@ -590,7 +593,7 @@ describe("auth-proxy-server", () => {
 
 describe("CA certificate", () => {
   test("ensureCACert generates cert and key files", async () => {
-    const dir = join(tmpdir(), `deer-ca-test-${randomBytes(4).toString("hex")}`);
+    const dir = join(SOCK_BASE_DIR, `ca-${randomBytes(4).toString("hex")}`);
     const result = ensureCACert(dir);
     expect(result.certPath).toBe(join(dir, "deer-ca.crt"));
     expect(result.keyPath).toBe(join(dir, "deer-ca.key"));

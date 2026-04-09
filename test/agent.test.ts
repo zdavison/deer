@@ -1,5 +1,7 @@
 import { test, expect, describe, afterEach, setDefaultTimeout, beforeEach } from "bun:test";
 import { dirname, join } from "node:path";
+import { mkdtempSync, rmSync, realpathSync } from "node:fs";
+import { tmpdir } from "node:os";
 
 setDefaultTimeout(30_000);
 import { resolveProxyUpstreams, DEFAULT_CONFIG, createSrtRuntime } from "../packages/deerbox/src/index";
@@ -7,7 +9,17 @@ import type { ProxyCredential } from "../packages/deerbox/src/index";
 import { startAgent, getAgentOutput, deleteTask } from "../src/agent";
 import type { AgentHandle, AgentStatus } from "../src/agent";
 import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+
+// Use a writable temp dir for dataDir so deerbox subprocesses can create worktrees.
+const testDataDir = realpathSync(mkdtempSync(join(tmpdir(), "deer-agent-data-")));
+process.env.DEER_DATA_DIR = testDataDir;
+
+// Check tmux availability (may be blocked in sandboxed environments)
+const tmuxAvailable = (() => {
+  const r = Bun.spawnSync(["tmux", "ls"], { stderr: "pipe" });
+  const stderr = r.stderr ? Buffer.from(r.stderr).toString() : "";
+  return !stderr.includes("Operation not permitted") && !stderr.includes("No such file");
+})();
 
 /**
  * Create a temporary git repo for testing.
@@ -210,7 +222,7 @@ describe("resolveProxyUpstreams", () => {
 
 // ── agent lifecycle ───────────────────────────────────────────────────
 
-describe("agent lifecycle", () => {
+describe.skipIf(!tmuxAvailable)("agent lifecycle", () => {
   const repos: string[] = [];
   const handles: AgentHandle[] = [];
 
@@ -545,4 +557,11 @@ describe("agent lifecycle", () => {
     // Status should indicate a continue, not a fresh worktree creation
     expect(statuses.some((s) => s.phase === "setup")).toBe(true);
   });
+});
+
+// Cleanup test data dir after all tests
+import { afterAll } from "bun:test";
+afterAll(() => {
+  delete process.env.DEER_DATA_DIR;
+  try { rmSync(testDataDir, { recursive: true, force: true }); } catch {}
 });

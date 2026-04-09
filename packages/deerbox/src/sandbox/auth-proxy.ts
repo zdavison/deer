@@ -67,10 +67,10 @@ export interface AuthProxy {
  * Materialize the auth proxy server script to disk so Node.js can run it.
  */
 function ensureServerScript(): string {
-  const dataDir = join(process.env.HOME ?? "/root", ".local", "share", "deer");
-  const scriptPath = join(dataDir, "auth-proxy-server.mjs");
+  const dir = process.env.DEER_DATA_DIR ?? join(process.env.HOME ?? "/root", ".local", "share", "deer");
+  const scriptPath = join(dir, "auth-proxy-server.mjs");
 
-  mkdirSync(dataDir, { recursive: true });
+  mkdirSync(dir, { recursive: true });
   writeFileSync(scriptPath, authProxySource, "utf-8");
 
   return scriptPath;

@@ -19,14 +19,14 @@
     },
     "packages/deerbox": {
       "name": "deerbox",
-      "version": "0.7.3",
+      "version": "0.8.1",
       "bin": {
         "deerbox": "src/cli.ts",
       },
       "dependencies": {
         "@anthropic-ai/sandbox-runtime": "^0.0.40",
         "@deer/shared": "workspace:*",
-        "@iarna/toml": "^3.0.0",
+        "@iarna/toml": "^2.2.5",
       },
       "devDependencies": {
         "bun-types": "latest",
@@ -38,7 +38,7 @@
     },
     "packages/shared": {
       "name": "@deer/shared",
-      "version": "0.0.0",
+      "version": "0.8.1",
       "devDependencies": {
         "bun-types": "latest",
         "typescript": "^5.9.3",
@@ -55,7 +55,7 @@
 
     "@deer/shared": ["@deer/shared@workspace:packages/shared"],
 
-    "@iarna/toml": ["@iarna/toml@3.0.0", "", {}, "sha512-td6ZUkz2oS3VeleBcN+m//Q6HlCFCPrnI0FZhrt/h4XqLEdOyYp2u21nd8MdsR+WJy5r9PTDaHTDDfhf4H4l6Q=="],
+    "@iarna/toml": ["@iarna/toml@2.2.5", "", {}, "sha512-trnsAYxU3xnS1gPHPyU961coFyLkh4gAD/0zQ5mymY4yOZ+CYvsPqUbOFSw0aDM4y0tV7tiFxL/1XfXPNC6IPg=="],
 
     "@inkjs/ui": ["@inkjs/ui@2.0.0", "", { "dependencies": { "chalk": "^5.3.0", "cli-spinners": "^3.0.0", "deepmerge": "^4.3.1", "figures": "^6.1.0" }, "peerDependencies": { "ink": ">=5" } }, "sha512-5+8fJmwtF9UvikzLfph9sA+LS+l37Ij/szQltkuXLOAXwNkBX9innfzh4pLGXIB59vKEQUtc6D4qGvhD7h3pAg=="],
 

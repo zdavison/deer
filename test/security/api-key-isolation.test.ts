@@ -5,9 +5,21 @@
  * credentials. Neither CLAUDE_CODE_OAUTH_TOKEN nor ANTHROPIC_API_KEY should
  * appear in the sandbox env or the srt command arguments.
  */
-import { test, expect, describe } from "bun:test";
+import { test, expect, describe, afterAll } from "bun:test";
 import { createSrtRuntime, resolveProxyUpstreams, DEFAULT_CONFIG } from "../../packages/deerbox/src/index";
 import type { ProxyCredential, SandboxRuntimeOptions } from "../../packages/deerbox/src/index";
+import { join } from "node:path";
+import { mkdtempSync, rmSync } from "node:fs";
+
+// Use a worktree-relative dir so Unix sockets and auth-proxy script writes work
+// in sandboxed environments where /tmp sockets are blocked.
+const testDataDir = mkdtempSync(join(import.meta.dir, "../../.test-sec-data-"));
+process.env.DEER_DATA_DIR = testDataDir;
+
+afterAll(() => {
+  delete process.env.DEER_DATA_DIR;
+  try { rmSync(testDataDir, { recursive: true, force: true }); } catch {}
+});
 
 const defaults: SandboxRuntimeOptions = {
   worktreePath: "/tmp/deer-test-worktree",
@@ -185,13 +197,13 @@ describe("credential proxy resolution", () => {
     const { startAuthProxy } = await import("deerbox");
     const { mkdtemp } = await import("node:fs/promises");
     const { join } = await import("node:path");
-    const { tmpdir } = await import("node:os");
     const origOAuth = process.env.CLAUDE_CODE_OAUTH_TOKEN;
     const origKey = process.env.ANTHROPIC_API_KEY;
     process.env.CLAUDE_CODE_OAUTH_TOKEN = "oauth-the-real-one";
     process.env.ANTHROPIC_API_KEY = "sk-ant-should-not-appear";
 
-    const dir = await mkdtemp(join(tmpdir(), "deer-e2e-test-"));
+    // Use testDataDir directly for sockets — macOS limits socket paths to 104 chars
+    const dir = testDataDir;
 
     // Start a mock upstream that echoes headers
     const mock = await new Promise<{ port: number; close: () => Promise<void> }>((resolve) => {
