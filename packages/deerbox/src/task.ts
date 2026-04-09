@@ -1,3 +1,60 @@
+import { readdir, stat } from "node:fs/promises";
+import { join } from "node:path";
+
+/**
+ * A resumable deerbox task found on disk.
+ */
+export interface ContinuableTask {
+  taskId: string;
+  worktreePath: string;
+  branch: string;
+}
+
+/**
+ * Finds the most recent resumable deerbox task for a given repository.
+ *
+ * Scans `<dataDir>/tasks/<repoSlug>/` for task directories (sorted by task ID,
+ * which embeds a timestamp), verifies the worktree directory still exists, and
+ * reads the current branch from git. Returns the first valid entry, or null if
+ * none is found.
+ */
+export async function findMostRecentTask(repoPath: string): Promise<ContinuableTask | null> {
+  const tasksDir = join(dataDir(), "tasks", repoSlug(repoPath));
+
+  let entries: string[];
+  try {
+    entries = await readdir(tasksDir);
+  } catch {
+    return null;
+  }
+
+  // Task IDs embed a base36 timestamp — lexicographic descending = most recent first
+  const sorted = entries
+    .filter((e) => e.startsWith("deer_"))
+    .sort()
+    .reverse();
+
+  for (const taskId of sorted) {
+    const worktreePath = join(tasksDir, taskId, "worktree");
+
+    try {
+      const s = await stat(worktreePath);
+      if (!s.isDirectory()) continue;
+    } catch {
+      continue;
+    }
+
+    const branchResult = await Bun.$`git -C ${worktreePath} rev-parse --abbrev-ref HEAD`.quiet().nothrow();
+    if (branchResult.exitCode !== 0) continue;
+    const branch = branchResult.stdout.toString().trim();
+    if (!branch || branch === "HEAD") continue;
+
+    return { taskId, worktreePath, branch };
+  }
+
+  return null;
+}
+
 /**
  * Generate a unique, sortable, URL-safe task ID.
  *

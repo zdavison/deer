@@ -46,9 +46,9 @@ export interface PrepareOptions {
    */
   fromBranch?: string;
   /**
-   * If provided, resume an existing session instead of creating a new
-   * worktree. The worktree and branch are reused; `--continue` is passed
-   * to Claude instead of the prompt.
+   * If provided, resume an existing session instead of creating a new worktree.
+   * The worktree and branch are reused, and `--continue` is passed to Claude
+   * to resume the conversation history from the previous run.
    */
   continueSession?: {
     taskId: string;
