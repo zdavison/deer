@@ -28,6 +28,12 @@ export interface FromResolution {
    * When true, the fork remote cannot be pushed to.
    */
   isCrossRepository?: boolean;
+  /**
+   * Additional content to append to the system prompt used when Claude generates
+   * PR metadata (branch name, title, body). Strategies use this to influence the
+   * generated PR description (e.g. instructing Claude to close a related issue).
+   */
+  appendPRSystemPrompt?: string;
 }
 
 /** A strategy that can resolve a --from value. */

@@ -306,6 +306,7 @@ async function cmdRun(prompt: string | undefined, args: string[]) {
       fromPrUrl: fromPrUrl ?? undefined,
       fromPrIsFork: fromResolution?.isCrossRepository,
       originalBranch,
+      appendPRSystemPrompt: fromResolution?.appendPRSystemPrompt,
     },
     {
       hasChanges: (wt, base) => hasChanges(wt, base, initialHeadSha),
