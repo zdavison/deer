@@ -92,6 +92,12 @@ export interface CreatePROptions {
   baseBranch: string;
   /** The task prompt, or null if the session was started interactively without a prompt. */
   prompt: string | null;
+  /**
+   * Additional content to append to the system prompt used when Claude generates
+   * PR metadata. Used by --from strategies to influence the PR description
+   * (e.g. instructing Claude to include "Closes https://..." for issue strategies).
+   */
+  appendPRSystemPrompt?: string;
   /** Verbose log callback for diagnostics */
   onLog?: (message: string) => void;
 }
@@ -106,6 +112,12 @@ export interface UpdatePROptions {
   prompt: string | null;
   /** @example "https://github.com/org/repo/pull/42" */
   prUrl: string;
+  /**
+   * Additional content to append to the system prompt used when Claude generates
+   * PR metadata. Used by --from strategies to influence the PR description
+   * (e.g. instructing Claude to include "Closes https://..." for issue strategies).
+   */
+  appendPRSystemPrompt?: string;
   /** Verbose log callback for diagnostics */
   onLog?: (message: string) => void;
   /**
@@ -254,7 +266,7 @@ function extractFirstJsonObject(text: string): string | null {
  * Ask Claude to generate PR metadata (branch name, title, body) from the diff.
  * Falls back to a simple prompt-based title if Claude fails.
  */
-async function generatePRMetadata(worktreePath: string, baseBranch: string, prompt: string | null, prTemplate: string | null, onLog?: (msg: string) => void): Promise<PRMetadata> {
+async function generatePRMetadata(worktreePath: string, baseBranch: string, prompt: string | null, prTemplate: string | null, appendPRSystemPrompt?: string, onLog?: (msg: string) => void): Promise<PRMetadata> {
   // Fetch latest remote state so we compare against up-to-date origin
   await Bun.$`git -C ${worktreePath} fetch origin ${baseBranch}`.quiet().nothrow();
   const remoteBase = `origin/${baseBranch}`;
@@ -330,7 +342,8 @@ ${truncatedDiff}`;
     // directly to the real Anthropic API.
     const subprocessEnv = buildClaudeSubprocessEnv(process.env);
 
-    const proc = Bun.spawn(["claude", "-p", metadataPrompt, "--model", PR_METADATA_MODEL, "--output-format", "json", "--no-session-persistence"], {
+    const appendSysPromptArgs = appendPRSystemPrompt ? ["--append-system-prompt", appendPRSystemPrompt] : [];
+    const proc = Bun.spawn(["claude", "-p", metadataPrompt, "--model", PR_METADATA_MODEL, "--output-format", "json", "--no-session-persistence", ...appendSysPromptArgs], {
       stdout: "pipe",
       stderr: "pipe",
       timeout: 60_000,
@@ -390,7 +403,7 @@ ${truncatedDiff}`;
  * - Creates a PR via `gh pr create`
  */
 export async function createPullRequest(options: CreatePROptions): Promise<CreatePRResult> {
-  const { repoPath, worktreePath, branch, baseBranch, prompt, onLog } = options;
+  const { repoPath, worktreePath, branch, baseBranch, prompt, appendPRSystemPrompt, onLog } = options;
   const log = onLog ?? (() => {});
 
   // Stage and commit all changes first so they're visible in the diff used for
@@ -405,7 +418,7 @@ export async function createPullRequest(options: CreatePROptions): Promise<Creat
   log(`[pr] PR template: ${prTemplate ? "found" : "none"}`);
 
   log(`[pr] Generating PR metadata via Claude...`);
-  const metadata = await generatePRMetadata(worktreePath, baseBranch, prompt, prTemplate, onLog);
+  const metadata = await generatePRMetadata(worktreePath, baseBranch, prompt, prTemplate, appendPRSystemPrompt, onLog);
   log(`[pr] Metadata: branch=${metadata.branchName} title=${metadata.title}`);
 
   // Amend the placeholder commit with the real PR title. Also amend if HEAD
@@ -513,7 +526,7 @@ export async function isPRAuthor(prUrl: string, repoPath: string): Promise<boole
  * PR title and body from the latest diff.
  */
 export async function updatePullRequest(options: UpdatePROptions): Promise<void> {
-  const { repoPath, worktreePath, finalBranch, baseBranch, prompt, prUrl, onLog } = options;
+  const { repoPath, worktreePath, finalBranch, baseBranch, prompt, prUrl, appendPRSystemPrompt, onLog } = options;
   const log = onLog ?? (() => {});
 
   // Remove deer internal files before staging
@@ -529,7 +542,7 @@ export async function updatePullRequest(options: UpdatePROptions): Promise<void>
   log(`[pr] PR template: ${prTemplate ? "found" : "none"}`);
 
   log(`[pr] Generating PR metadata via Claude...`);
-  const metadata = await generatePRMetadata(worktreePath, baseBranch, prompt, prTemplate, onLog);
+  const metadata = await generatePRMetadata(worktreePath, baseBranch, prompt, prTemplate, appendPRSystemPrompt, onLog);
   log(`[pr] Metadata: title=${metadata.title}`);
 
   // Amend the placeholder commit with the real PR title. Also amend if HEAD
@@ -605,7 +618,7 @@ export async function mergeIntoLocalBranch(options: MergeIntoLocalBranchOptions)
 
   // Generate metadata via Claude for a proper commit message
   log(`[merge] Generating commit message via Claude...`);
-  const metadata = await generatePRMetadata(worktreePath, baseBranch, prompt, null, onLog);
+  const metadata = await generatePRMetadata(worktreePath, baseBranch, prompt, null, undefined, onLog);
   log(`[merge] Commit message: ${metadata.title}`);
 
   // Amend the placeholder commit with the real title

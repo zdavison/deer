@@ -44,6 +44,7 @@ export interface PostSessionDeps {
     branch: string;
     baseBranch: string;
     prompt: string | null;
+    appendPRSystemPrompt?: string;
     onLog?: (msg: string) => void;
   }) => Promise<CreatePRResult>;
   /** Update an existing pull request (called when ctx.fromPrUrl is set). */
@@ -83,6 +84,11 @@ export interface PostSessionContext {
    * menu option merges the session branch into this branch.
    */
   originalBranch?: string;
+  /**
+   * Additional content to append to the system prompt used when Claude generates
+   * PR metadata. Provided by the --from strategy.
+   */
+  appendPRSystemPrompt?: string;
 }
 
 // ── Prompt rendering ─────────────────────────────────────────────────
@@ -159,6 +165,7 @@ export async function runPostSession(
           baseBranch: ctx.baseBranch,
           prompt: ctx.prompt,
           prUrl: ctx.fromPrUrl,
+          appendPRSystemPrompt: ctx.appendPRSystemPrompt,
           onLog: (msg) => deps.log(`  ${msg}`),
         });
         deps.log(`\n${green("PR updated:")} ${ctx.fromPrUrl}`);
@@ -181,6 +188,7 @@ export async function runPostSession(
         branch: ctx.branch,
         baseBranch: ctx.baseBranch,
         prompt: ctx.prompt,
+        appendPRSystemPrompt: ctx.appendPRSystemPrompt,
         onLog: (msg) => deps.log(`  ${msg}`),
       });
       deps.log(`\n${green("PR created:")} ${result.prUrl}`);

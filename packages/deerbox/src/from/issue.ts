@@ -76,6 +76,7 @@ export const issueStrategy: FromStrategy = {
       prUrl: null,
       baseBranch: defaultBranch,
       appendSystemPrompt: formatIssue(data),
+      appendPRSystemPrompt: `This session was started from GitHub issue ${from}. When writing the PR body, include "Closes ${from}" on its own line near the end (before the horizontal rule footer).`,
     };
   },
 };
