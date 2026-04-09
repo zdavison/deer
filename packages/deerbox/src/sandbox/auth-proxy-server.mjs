@@ -12,7 +12,7 @@ import { createServer, request as httpRequest, Agent as HttpAgent } from "node:h
 import { request as httpsRequest, Agent as HttpsAgent } from "node:https";
 import { TLSSocket } from "node:tls";
 import { unlinkSync, appendFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
-import { execSync } from "node:child_process";
+import { execSync, spawn as spawnChild } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -263,6 +263,12 @@ function forwardToUpstream(upstream, path, method, reqHeaders, res, bodySource, 
     }
   });
 
+  // Prevent client disconnect from crashing the proxy via unhandled error on res.
+  res.on("error", (err) => {
+    log(`[proxy] ${method} ${upstream.domain}${path} client response error: ${err.message}`);
+    proxyReq.destroy();
+  });
+
   // Stream body directly to upstream (or send buffered body on retry)
   if (isBuffer) {
     proxyReq.end(bodySource);
@@ -353,6 +359,13 @@ server.on("connect", (req, clientSocket, head) => {
     return;
   }
 
+  // Prevent unhandled 'error' events on the client socket from crashing
+  // the process. These happen when the sandbox drops the connection
+  // (ECONNRESET, EPIPE, etc.) — harmless, but fatal without a handler.
+  clientSocket.on("error", (err) => {
+    log(`[proxy] CONNECT client socket error for ${hostname}: ${err.message}`);
+  });
+
   const upstream = upstreams.find((u) => u.domain === hostname);
   if (!upstream) {
     log(`[proxy] CONNECT 502 no upstream for ${hostname}`);
@@ -385,6 +398,45 @@ server.on("connect", (req, clientSocket, head) => {
     clientSocket.destroy();
   });
 });
+
+// Prevent unhandled errors from crashing the proxy process.
+// The proxy must stay alive for the entire sandbox session — a crash here
+// means every subsequent API call from the sandbox fails permanently.
+server.on("error", (err) => {
+  log(`[proxy] server error: ${err.message}`);
+  // If the server socket itself dies (e.g. EADDRINUSE on restart, or
+  // the Unix socket was deleted), attempt a self-restart after a brief delay.
+  if (err.code === "EADDRINUSE" || err.code === "ENOENT") {
+    selfRestart("server error: " + err.code);
+  }
+});
+process.on("uncaughtException", (err) => {
+  log(`[proxy] uncaught exception: ${err.stack || err.message}`);
+});
+process.on("unhandledRejection", (err) => {
+  log(`[proxy] unhandled rejection: ${err?.stack || err?.message || err}`);
+});
+
+/**
+ * Self-restart: close the current server and re-exec this process with
+ * the same arguments. Used as a last resort when the server enters an
+ * unrecoverable state (e.g. socket deleted from under us).
+ * Writes new PID to the pid file so cleanup still works.
+ */
+function selfRestart(reason) {
+  log(`[proxy] self-restarting (${reason})...`);
+  server.close(() => {
+    const child = spawnChild(process.execPath, process.argv.slice(1), {
+      stdio: "ignore",
+      detached: true,
+    });
+    // Update PID file so the parent can still kill the new process
+    const pidFile = socketPath + ".pid";
+    try { writeFileSync(pidFile, String(child.pid)); } catch { /* ignore */ }
+    child.unref();
+    process.exit(0);
+  });
+}
 
 // Prevent EPIPE crashes when parent disconnects stdout (daemonized mode)
 process.stdout.on("error", () => { stdoutBroken = true; });
