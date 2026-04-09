@@ -16,6 +16,7 @@
 import { join } from "node:path";
 import { prepare, taskWorktreePath } from "./session";
 import type { PrepareOptions } from "./session";
+import { findMostRecentTask } from "./task";
 import { detectRepo } from "@deer/shared";
 import { detectWorktreeContext } from "./git/worktree";
 import { cleanupWorktree } from "./git/worktree";
@@ -184,7 +185,7 @@ async function cmdConfig(args: string[]) {
 
 // ── Interactive mode (default) ───────────────────────────────────────
 
-async function cmdRun(prompt: string | undefined, args: string[]) {
+async function cmdRun(prompt: string | undefined, args: string[], continueMode: boolean = false) {
   const model = getArg(args, "--model");
   const baseBranch = getArg(args, "--base-branch") ?? getArg(args, "-b");
   const from = getArg(args, "--from") ?? getArg(args, "-f");
@@ -256,14 +257,26 @@ async function cmdRun(prompt: string | undefined, args: string[]) {
     }
   }
 
+  let continueSession: PrepareOptions["continueSession"] | undefined;
+  if (continueMode) {
+    const found = await findMostRecentTask(repoPath);
+    if (!found) {
+      console.error("No previous deerbox session found for this repository.");
+      process.exit(1);
+    }
+    continueSession = found;
+    console.error(`Resuming: ${found.taskId} (branch: ${found.branch})`);
+  }
+
   const session = await prepare({
     repoPath,
-    prompt,
+    prompt: continueMode ? undefined : prompt,
     baseBranch: fromResolution?.baseBranch ?? effectiveBranch,
     fromBranch: fromResolution?.branch,
     config,
     model,
     reuseWorktree,
+    continueSession,
     appendSystemPrompt: fromResolution?.appendSystemPrompt,
     onStatus: (msg) => console.error(`  ${msg}`),
   });
@@ -342,6 +355,7 @@ Usage:
   deerbox env                   Review and update the env var policy
 
 Interactive options:
+  -c, --continue                Resume the most recent session for this repository
   -m, --model <model>           Claude model (default: ${DEFAULT_MODEL})
   -b, --base-branch <branch>    Branch to base the worktree on
   -f, --from <source>           Start from a branch, PR (URL/#), GitHub issue URL, or GitHub Actions URL
@@ -390,12 +404,15 @@ async function main() {
 
   // Interactive mode: collect prompt from positional args
   const positional: string[] = [];
+  let continueMode = false;
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === "--model" || arg === "-m" || arg === "--base-branch" || arg === "-b" || arg === "--from" || arg === "-f") {
       i++; // skip value
     } else if (arg === "--keep" || arg === "-k") {
       // flag
+    } else if (arg === "--continue" || arg === "-c") {
+      continueMode = true;
     } else if (!arg.startsWith("-")) {
       positional.push(arg);
     } else {
@@ -406,7 +423,7 @@ async function main() {
 
   const prompt = positional.length > 0 ? positional.join(" ") : undefined;
 
-  await cmdRun(prompt, args);
+  await cmdRun(prompt, args, continueMode);
 }
 
 main().catch((err) => {

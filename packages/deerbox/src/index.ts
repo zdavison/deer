@@ -63,7 +63,8 @@ export { parseActionUrl, formatActionLogs, fetchActionLogs } from "./from";
 export type { FromResolution, FromStrategy, GhRunner, ActionUrlParts, FetchActionLogsResult } from "./from";
 
 // Utilities
-export { generateTaskId, dataDir, repoSlug } from "./task";
+export { generateTaskId, dataDir, repoSlug, findMostRecentTask } from "./task";
+export type { ContinuableTask } from "./task";
 export { detectLang, setLang, getLang, getPRLanguage } from "@deer/shared";
 export type { Lang } from "@deer/shared";
 export { VERSION } from "./constants";
