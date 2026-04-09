@@ -198,4 +198,72 @@ describe("setupClaudeConfigDir", () => {
     const exists = await access(join(claudeConfigDir, ".claude.json")).then(() => true).catch(() => false);
     expect(exists).toBe(false);
   });
+
+  test("rewrites installPath in plugins/installed_plugins.json from ~/.claude to claudeConfigDir", async () => {
+    const home = await makeHome();
+    const claudeDir = join(home, ".claude");
+    const cacheDir = join(claudeDir, "plugins", "cache", "my-marketplace", "my-plugin", "1.0.0");
+    await mkdir(cacheDir, { recursive: true });
+
+    const installedPlugins = {
+      version: 2,
+      plugins: {
+        "my-plugin@my-marketplace": [
+          {
+            scope: "global",
+            installPath: join(claudeDir, "plugins", "cache", "my-marketplace", "my-plugin", "1.0.0"),
+            version: "1.0.0",
+          },
+        ],
+      },
+    };
+    await writeFile(
+      join(claudeDir, "plugins", "installed_plugins.json"),
+      JSON.stringify(installedPlugins),
+    );
+
+    const taskDir = await makeTaskDir();
+    const claudeConfigDir = join(taskDir, "claude-config");
+    await setupClaudeConfigDir(claudeConfigDir, home);
+
+    const written = JSON.parse(
+      await readFile(join(claudeConfigDir, "plugins", "installed_plugins.json"), "utf-8"),
+    );
+    const entry = written.plugins["my-plugin@my-marketplace"][0];
+    const expectedPath = join(claudeConfigDir, "plugins", "cache", "my-marketplace", "my-plugin", "1.0.0");
+    expect(entry.installPath).toBe(expectedPath);
+  });
+
+  test("leaves installPath unchanged when it does not reference ~/.claude", async () => {
+    const home = await makeHome();
+    const claudeDir = join(home, ".claude");
+    await mkdir(join(claudeDir, "plugins"), { recursive: true });
+
+    const installedPlugins = {
+      version: 2,
+      plugins: {
+        "external-plugin@marketplace": [
+          {
+            scope: "global",
+            installPath: "/opt/plugins/external-plugin/2.0.0",
+            version: "2.0.0",
+          },
+        ],
+      },
+    };
+    await writeFile(
+      join(claudeDir, "plugins", "installed_plugins.json"),
+      JSON.stringify(installedPlugins),
+    );
+
+    const taskDir = await makeTaskDir();
+    const claudeConfigDir = join(taskDir, "claude-config");
+    await setupClaudeConfigDir(claudeConfigDir, home);
+
+    const written = JSON.parse(
+      await readFile(join(claudeConfigDir, "plugins", "installed_plugins.json"), "utf-8"),
+    );
+    const entry = written.plugins["external-plugin@marketplace"][0];
+    expect(entry.installPath).toBe("/opt/plugins/external-plugin/2.0.0");
+  });
 });

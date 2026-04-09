@@ -143,6 +143,34 @@ export async function setupClaudeConfigDir(claudeConfigDir: string, home: string
     await cp(src, dst, { recursive: item.isDir });
   }
 
+  // Rewrite installPath in plugins/installed_plugins.json to point to the
+  // per-task config dir. The plugins/ directory is copied verbatim above,
+  // but installPath values still reference ~/.claude/plugins/cache/... which
+  // is blocked by the sandbox deny list. Replace the prefix so Claude Code
+  // can load plugins from the copied cache.
+  const installedPluginsPath = join(claudeConfigDir, "plugins", "installed_plugins.json");
+  const hasInstalledPlugins = await access(installedPluginsPath).then(() => true).catch(() => false);
+  if (hasInstalledPlugins) {
+    const raw = await readFile(installedPluginsPath, "utf-8");
+    let parsed: Record<string, unknown> | null = null;
+    try { parsed = JSON.parse(raw); } catch { /* unparseable — skip */ }
+    if (parsed !== null) {
+      const globalCachePrefix = join(home, ".claude", "plugins", "cache");
+      const localCachePrefix = join(claudeConfigDir, "plugins", "cache");
+      const plugins = parsed.plugins as Record<string, Array<Record<string, unknown>>> | undefined;
+      if (plugins) {
+        for (const entries of Object.values(plugins)) {
+          for (const entry of entries) {
+            if (typeof entry.installPath === "string" && entry.installPath.startsWith(globalCachePrefix)) {
+              entry.installPath = localCachePrefix + entry.installPath.slice(globalCachePrefix.length);
+            }
+          }
+        }
+      }
+      await writeFile(installedPluginsPath, JSON.stringify(parsed, null, 2));
+    }
+  }
+
   // Copy ~/.claude.json with credentials stripped
   const hostClaudeJson = join(home, ".claude.json");
   const hasClaudeJson = await access(hostClaudeJson).then(() => true).catch(() => false);
