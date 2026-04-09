@@ -209,9 +209,6 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
     worktreePath = worktree.worktreePath;
     branch = worktree.branch;
 
-    await Bun.$`git -C ${worktreePath} config user.name "deer-agent"`.quiet();
-    await Bun.$`git -C ${worktreePath} config user.email "deer@noreply"`.quiet();
-
     ecosystemResult = await applyEcosystems(
       repoPath,
       worktreePath,
@@ -225,10 +222,6 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
     const worktree = await createWorktree(repoPath, taskId, baseBranch);
     worktreePath = worktree.worktreePath;
     branch = worktree.branch;
-
-    // Configure git in the worktree
-    await Bun.$`git -C ${worktreePath} config user.name "deer-agent"`.quiet();
-    await Bun.$`git -C ${worktreePath} config user.email "deer@noreply"`.quiet();
 
     ecosystemResult = await applyEcosystems(
       repoPath,
