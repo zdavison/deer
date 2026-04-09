@@ -68,7 +68,9 @@ export function resolveProxyUpstreams(
       }),
     });
 
-    sandboxEnv[cred.sandboxEnv.key] = cred.sandboxEnv.value;
+    if (cred.sandboxEnv) {
+      sandboxEnv[cred.sandboxEnv.key] = cred.sandboxEnv.value;
+    }
     placeholderEnv[cred.hostEnv.key] = "proxy-managed";
     claimedDomains.add(cred.domain);
   }
