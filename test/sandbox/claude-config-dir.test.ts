@@ -199,12 +199,13 @@ describe("setupClaudeConfigDir", () => {
     expect(exists).toBe(false);
   });
 
-  test("rewrites installPath in plugins/installed_plugins.json from ~/.claude to claudeConfigDir", async () => {
+  test("rewrites ~/.claude paths in all JSON files to claudeConfigDir", async () => {
     const home = await makeHome();
     const claudeDir = join(home, ".claude");
     const cacheDir = join(claudeDir, "plugins", "cache", "my-marketplace", "my-plugin", "1.0.0");
     await mkdir(cacheDir, { recursive: true });
 
+    // installed_plugins.json with installPath referencing ~/.claude
     const installedPlugins = {
       version: 2,
       plugins: {
@@ -222,19 +223,40 @@ describe("setupClaudeConfigDir", () => {
       JSON.stringify(installedPlugins),
     );
 
+    // known_marketplaces.json with installLocation referencing ~/.claude
+    await writeFile(
+      join(claudeDir, "plugins", "known_marketplaces.json"),
+      JSON.stringify({
+        "my-marketplace": {
+          installLocation: join(claudeDir, "plugins", "marketplaces", "my-marketplace"),
+          lastUpdated: "2026-01-01T00:00:00.000Z",
+        },
+      }),
+    );
+
     const taskDir = await makeTaskDir();
     const claudeConfigDir = join(taskDir, "claude-config");
     await setupClaudeConfigDir(claudeConfigDir, home);
 
-    const written = JSON.parse(
+    // installed_plugins.json paths should be rewritten
+    const installed = JSON.parse(
       await readFile(join(claudeConfigDir, "plugins", "installed_plugins.json"), "utf-8"),
     );
-    const entry = written.plugins["my-plugin@my-marketplace"][0];
-    const expectedPath = join(claudeConfigDir, "plugins", "cache", "my-marketplace", "my-plugin", "1.0.0");
-    expect(entry.installPath).toBe(expectedPath);
+    const entry = installed.plugins["my-plugin@my-marketplace"][0];
+    expect(entry.installPath).toBe(
+      join(claudeConfigDir, "plugins", "cache", "my-marketplace", "my-plugin", "1.0.0"),
+    );
+
+    // known_marketplaces.json paths should also be rewritten
+    const marketplaces = JSON.parse(
+      await readFile(join(claudeConfigDir, "plugins", "known_marketplaces.json"), "utf-8"),
+    );
+    expect(marketplaces["my-marketplace"].installLocation).toBe(
+      join(claudeConfigDir, "plugins", "marketplaces", "my-marketplace"),
+    );
   });
 
-  test("leaves installPath unchanged when it does not reference ~/.claude", async () => {
+  test("leaves paths unchanged in JSON files when they do not reference ~/.claude", async () => {
     const home = await makeHome();
     const claudeDir = join(home, ".claude");
     await mkdir(join(claudeDir, "plugins"), { recursive: true });
@@ -265,5 +287,31 @@ describe("setupClaudeConfigDir", () => {
     );
     const entry = written.plugins["external-plugin@marketplace"][0];
     expect(entry.installPath).toBe("/opt/plugins/external-plugin/2.0.0");
+  });
+
+  test("rewrites ~/.claude paths in nested JSON files", async () => {
+    const home = await makeHome();
+    const claudeDir = join(home, ".claude");
+    const nestedDir = join(claudeDir, "plugins", "marketplaces", "official", ".claude-plugin");
+    await mkdir(nestedDir, { recursive: true });
+
+    await writeFile(
+      join(nestedDir, "marketplace.json"),
+      JSON.stringify({
+        name: "official",
+        source: { repo: join(claudeDir, "plugins", "marketplaces", "official") },
+      }),
+    );
+
+    const taskDir = await makeTaskDir();
+    const claudeConfigDir = join(taskDir, "claude-config");
+    await setupClaudeConfigDir(claudeConfigDir, home);
+
+    const content = JSON.parse(
+      await readFile(join(claudeConfigDir, "plugins", "marketplaces", "official", ".claude-plugin", "marketplace.json"), "utf-8"),
+    );
+    expect(content.source.repo).toBe(
+      join(claudeConfigDir, "plugins", "marketplaces", "official"),
+    );
   });
 });

@@ -8,7 +8,7 @@
  */
 
 import { join, dirname, resolve } from "node:path";
-import { mkdir, cp, access, readFile, writeFile } from "node:fs/promises";
+import { mkdir, cp, access, readFile, writeFile, readdir } from "node:fs/promises";
 import { createWorktree, checkoutWorktree, removeWorktree, cleanupWorktree } from "./git/worktree";
 import { generateTaskId, dataDir, repoSlug } from "./task";
 import { loadConfig, type DeerConfig } from "./config";
@@ -118,6 +118,28 @@ const CLAUDE_DIR_ITEMS: Array<{ name: string; isDir: boolean }> = [
 ];
 
 /**
+ * Recursively walk a directory and rewrite all `.json` files, replacing
+ * occurrences of `oldPrefix` with `newPrefix` in their content.
+ * Non-JSON files and files that don't contain the old prefix are skipped.
+ */
+async function rewriteJsonFiles(dir: string, oldPrefix: string, newPrefix: string): Promise<void> {
+  let entries;
+  try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
+  for (const entry of entries) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      await rewriteJsonFiles(full, oldPrefix, newPrefix);
+    } else if (entry.name.endsWith(".json")) {
+      try {
+        const raw = await readFile(full, "utf-8");
+        if (!raw.includes(oldPrefix)) continue;
+        await writeFile(full, raw.replaceAll(oldPrefix, newPrefix));
+      } catch { /* unreadable or unwritable — skip */ }
+    }
+  }
+}
+
+/**
  * Create a per-task Claude config directory populated with a curated,
  * read-safe copy of ~/.claude content.
  *
@@ -143,33 +165,12 @@ export async function setupClaudeConfigDir(claudeConfigDir: string, home: string
     await cp(src, dst, { recursive: item.isDir });
   }
 
-  // Rewrite installPath in plugins/installed_plugins.json to point to the
-  // per-task config dir. The plugins/ directory is copied verbatim above,
-  // but installPath values still reference ~/.claude/plugins/cache/... which
-  // is blocked by the sandbox deny list. Replace the prefix so Claude Code
-  // can load plugins from the copied cache.
-  const installedPluginsPath = join(claudeConfigDir, "plugins", "installed_plugins.json");
-  const hasInstalledPlugins = await access(installedPluginsPath).then(() => true).catch(() => false);
-  if (hasInstalledPlugins) {
-    const raw = await readFile(installedPluginsPath, "utf-8");
-    let parsed: Record<string, unknown> | null = null;
-    try { parsed = JSON.parse(raw); } catch { /* unparseable — skip */ }
-    if (parsed !== null) {
-      const globalCachePrefix = join(home, ".claude", "plugins", "cache");
-      const localCachePrefix = join(claudeConfigDir, "plugins", "cache");
-      const plugins = parsed.plugins as Record<string, Array<Record<string, unknown>>> | undefined;
-      if (plugins) {
-        for (const entries of Object.values(plugins)) {
-          for (const entry of entries) {
-            if (typeof entry.installPath === "string" && entry.installPath.startsWith(globalCachePrefix)) {
-              entry.installPath = localCachePrefix + entry.installPath.slice(globalCachePrefix.length);
-            }
-          }
-        }
-      }
-      await writeFile(installedPluginsPath, JSON.stringify(parsed, null, 2));
-    }
-  }
+  // Rewrite all references to ~/.claude in copied JSON files so they point
+  // to the per-task config dir. This catches installPath, installLocation,
+  // and any other field that embeds the host config path — a blanket replace
+  // is more resilient than patching individual files.
+  const oldPrefix = join(home, ".claude");
+  await rewriteJsonFiles(claudeConfigDir, oldPrefix, claudeConfigDir);
 
   // Copy ~/.claude.json with credentials stripped
   const hostClaudeJson = join(home, ".claude.json");
