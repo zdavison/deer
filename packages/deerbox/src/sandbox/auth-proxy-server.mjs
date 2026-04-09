@@ -15,8 +15,11 @@ import { unlinkSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
-const httpsAgent = new HttpsAgent({ keepAlive: true, keepAliveMsecs: 60_000 });
-const httpAgent = new HttpAgent({ keepAlive: true, keepAliveMsecs: 60_000 });
+// Keep-alive disabled: after long idle periods, kept-alive sockets go stale
+// (server/NAT closes them) and reuse attempts fail with ECONNRESET → 502.
+// API calls are infrequent and long-running, so TLS handshake overhead is negligible.
+const httpsAgent = new HttpsAgent({ keepAlive: false });
+const httpAgent = new HttpAgent({ keepAlive: false });
 
 /**
  * Try each credential source in order, return the first OAuth token found.
