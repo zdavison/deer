@@ -335,8 +335,11 @@ export function createSrtRuntime(opts?: { home?: string }): SandboxRuntime {
       Object.assign(overlay, env ?? {});
 
       if (options.caCertPath) {
-        overlay.NODE_EXTRA_CA_CERTS = options.caCertPath;
-        overlay.GIT_SSL_CAINFO = options.caCertPath;
+        overlay.NODE_EXTRA_CA_CERTS = options.caCertPath; // Node.js
+        overlay.GIT_SSL_CAINFO = options.caCertPath;      // git
+        overlay.SSL_CERT_FILE = options.caCertPath;       // OpenSSL (curl, Python ssl, Go, etc.)
+        overlay.CURL_CA_BUNDLE = options.caCertPath;      // curl (explicit override)
+        overlay.REQUESTS_CA_BUNDLE = options.caCertPath;  // Python requests library
       }
 
       // Vars to explicitly remove from the sandbox environment.

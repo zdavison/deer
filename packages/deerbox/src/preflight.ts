@@ -21,6 +21,20 @@ async function checkCmd(cmd: string[], errorMsg: string): Promise<string | null>
   }
 }
 
+// JWTs are three base64url-encoded segments separated by dots. We only need
+// the middle (payload) segment which contains the `exp` claim (Unix timestamp).
+// Buffer.from(str, "base64url") handles the URL-safe alphabet and omitted padding.
+// Returns null for non-JWTs or tokens without an expiry claim.
+function tryDecodeJwtExpiry(token: string): Date | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf-8"));
+    if (typeof payload.exp === "number") return new Date(payload.exp * 1000);
+  } catch { /* not a JWT */ }
+  return null;
+}
+
 export async function runPreflight(): Promise<PreflightResult> {
   const errors: string[] = [];
 
@@ -69,6 +83,14 @@ export async function runPreflight(): Promise<PreflightResult> {
   const credentialType = await resolveCredentials();
   if (credentialType === "none") {
     errors.push("No credentials — set CLAUDE_CODE_OAUTH_TOKEN, create ~/.claude/agent-oauth-token, or set ANTHROPIC_API_KEY");
+  } else if (credentialType === "subscription") {
+    // Best-effort expiry check: if the token is a JWT with an `exp` claim and
+    // it's already past, surface a helpful error rather than failing later with
+    // an opaque 401 inside the sandbox.
+    const expiry = tryDecodeJwtExpiry(process.env.CLAUDE_CODE_OAUTH_TOKEN!);
+    if (expiry && expiry < new Date()) {
+      errors.push(`Claude OAuth token expired — run 'claude /login' to refresh`);
+    }
   }
 
   // Warn if ~/.claude.json contains OAuth credentials. The file is readable
