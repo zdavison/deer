@@ -18,6 +18,18 @@ async function stageChanges(worktreePath: string): Promise<void> {
 }
 
 /**
+ * Build a commit message from a PR title and body, appending any "Closes ..."
+ * lines found in the body so the closed issue is referenced in git history.
+ */
+function buildCommitMessage(title: string, body: string): string {
+  const closesLines = body
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => /^closes\s+\S+/i.test(l));
+  return closesLines.length > 0 ? `${title}\n\n${closesLines.join("\n")}` : title;
+}
+
+/**
  * Try a git commit, retrying with --no-verify if it fails.
  */
 async function commitWithFallback(
@@ -92,6 +104,12 @@ export interface CreatePROptions {
   baseBranch: string;
   /** The task prompt, or null if the session was started interactively without a prompt. */
   prompt: string | null;
+  /**
+   * Additional content to append to the system prompt used when Claude generates
+   * PR metadata. Used by --from strategies to influence the PR description
+   * (e.g. instructing Claude to include "Closes https://..." for issue strategies).
+   */
+  appendPRSystemPrompt?: string;
   /** Verbose log callback for diagnostics */
   onLog?: (message: string) => void;
 }
@@ -106,6 +124,12 @@ export interface UpdatePROptions {
   prompt: string | null;
   /** @example "https://github.com/org/repo/pull/42" */
   prUrl: string;
+  /**
+   * Additional content to append to the system prompt used when Claude generates
+   * PR metadata. Used by --from strategies to influence the PR description
+   * (e.g. instructing Claude to include "Closes https://..." for issue strategies).
+   */
+  appendPRSystemPrompt?: string;
   /** Verbose log callback for diagnostics */
   onLog?: (message: string) => void;
   /**
@@ -254,7 +278,7 @@ function extractFirstJsonObject(text: string): string | null {
  * Ask Claude to generate PR metadata (branch name, title, body) from the diff.
  * Falls back to a simple prompt-based title if Claude fails.
  */
-async function generatePRMetadata(worktreePath: string, baseBranch: string, prompt: string | null, prTemplate: string | null, onLog?: (msg: string) => void): Promise<PRMetadata> {
+async function generatePRMetadata(worktreePath: string, baseBranch: string, prompt: string | null, prTemplate: string | null, appendPRSystemPrompt?: string, onLog?: (msg: string) => void): Promise<PRMetadata> {
   // Fetch latest remote state so we compare against up-to-date origin
   await Bun.$`git -C ${worktreePath} fetch origin ${baseBranch}`.quiet().nothrow();
   const remoteBase = `origin/${baseBranch}`;
@@ -330,7 +354,8 @@ ${truncatedDiff}`;
     // directly to the real Anthropic API.
     const subprocessEnv = buildClaudeSubprocessEnv(process.env);
 
-    const proc = Bun.spawn(["claude", "-p", metadataPrompt, "--model", PR_METADATA_MODEL, "--output-format", "json", "--no-session-persistence"], {
+    const appendSysPromptArgs = appendPRSystemPrompt ? ["--append-system-prompt", appendPRSystemPrompt] : [];
+    const proc = Bun.spawn(["claude", "-p", metadataPrompt, "--model", PR_METADATA_MODEL, "--output-format", "json", "--no-session-persistence", ...appendSysPromptArgs], {
       stdout: "pipe",
       stderr: "pipe",
       timeout: 60_000,
@@ -390,7 +415,7 @@ ${truncatedDiff}`;
  * - Creates a PR via `gh pr create`
  */
 export async function createPullRequest(options: CreatePROptions): Promise<CreatePRResult> {
-  const { repoPath, worktreePath, branch, baseBranch, prompt, onLog } = options;
+  const { repoPath, worktreePath, branch, baseBranch, prompt, appendPRSystemPrompt, onLog } = options;
   const log = onLog ?? (() => {});
 
   // Stage and commit all changes first so they're visible in the diff used for
@@ -405,7 +430,7 @@ export async function createPullRequest(options: CreatePROptions): Promise<Creat
   log(`[pr] PR template: ${prTemplate ? "found" : "none"}`);
 
   log(`[pr] Generating PR metadata via Claude...`);
-  const metadata = await generatePRMetadata(worktreePath, baseBranch, prompt, prTemplate, onLog);
+  const metadata = await generatePRMetadata(worktreePath, baseBranch, prompt, prTemplate, appendPRSystemPrompt, onLog);
   log(`[pr] Metadata: branch=${metadata.branchName} title=${metadata.title}`);
 
   // Amend the placeholder commit with the real PR title. Also amend if HEAD
@@ -415,7 +440,7 @@ export async function createPullRequest(options: CreatePROptions): Promise<Creat
   const headMsg = headMsgResult.stdout.toString().trim();
   if (hadUncommitted || headMsg === PENDING_PR_METADATA_MSG) {
     log(`[pr] Updating commit message...`);
-    await commitWithFallback(worktreePath, ["--amend", "-m", metadata.title], onLog);
+    await commitWithFallback(worktreePath, ["--amend", "-m", buildCommitMessage(metadata.title, metadata.body)], onLog);
   }
 
   // Rename the branch if Claude provided a name
@@ -513,7 +538,7 @@ export async function isPRAuthor(prUrl: string, repoPath: string): Promise<boole
  * PR title and body from the latest diff.
  */
 export async function updatePullRequest(options: UpdatePROptions): Promise<void> {
-  const { repoPath, worktreePath, finalBranch, baseBranch, prompt, prUrl, onLog } = options;
+  const { repoPath, worktreePath, finalBranch, baseBranch, prompt, prUrl, appendPRSystemPrompt, onLog } = options;
   const log = onLog ?? (() => {});
 
   // Remove deer internal files before staging
@@ -529,7 +554,7 @@ export async function updatePullRequest(options: UpdatePROptions): Promise<void>
   log(`[pr] PR template: ${prTemplate ? "found" : "none"}`);
 
   log(`[pr] Generating PR metadata via Claude...`);
-  const metadata = await generatePRMetadata(worktreePath, baseBranch, prompt, prTemplate, onLog);
+  const metadata = await generatePRMetadata(worktreePath, baseBranch, prompt, prTemplate, appendPRSystemPrompt, onLog);
   log(`[pr] Metadata: title=${metadata.title}`);
 
   // Amend the placeholder commit with the real PR title. Also amend if HEAD
@@ -538,7 +563,7 @@ export async function updatePullRequest(options: UpdatePROptions): Promise<void>
   const headMsg = headMsgResult.stdout.toString().trim();
   if (hadUncommitted || headMsg === PENDING_PR_METADATA_MSG) {
     log(`[pr] Updating commit message...`);
-    await commitWithFallback(worktreePath, ["--amend", "-m", metadata.title], onLog);
+    await commitWithFallback(worktreePath, ["--amend", "-m", buildCommitMessage(metadata.title, metadata.body)], onLog);
   }
 
   log(`[pr] Pushing branch ${finalBranch}...`);
@@ -585,6 +610,12 @@ export interface MergeIntoLocalBranchOptions {
   baseBranch: string;
   targetBranch: string;
   prompt: string | null;
+  /**
+   * Additional content to append to the system prompt used when Claude generates
+   * PR metadata. Used by --from strategies to influence the commit message
+   * (e.g. instructing Claude to include "Closes https://..." for issue strategies).
+   */
+  appendPRSystemPrompt?: string;
   onLog?: (message: string) => void;
 }
 
@@ -596,7 +627,7 @@ export interface MergeIntoLocalBranchOptions {
  * into targetBranch with --no-ff.
  */
 export async function mergeIntoLocalBranch(options: MergeIntoLocalBranchOptions): Promise<void> {
-  const { repoPath, worktreePath, branch, baseBranch, targetBranch, prompt, onLog } = options;
+  const { repoPath, worktreePath, branch, baseBranch, targetBranch, prompt, appendPRSystemPrompt, onLog } = options;
   const log = onLog ?? (() => {});
 
   // Stage and commit all changes with a placeholder message (same as PR flow)
@@ -605,7 +636,7 @@ export async function mergeIntoLocalBranch(options: MergeIntoLocalBranchOptions)
 
   // Generate metadata via Claude for a proper commit message
   log(`[merge] Generating commit message via Claude...`);
-  const metadata = await generatePRMetadata(worktreePath, baseBranch, prompt, null, onLog);
+  const metadata = await generatePRMetadata(worktreePath, baseBranch, prompt, null, appendPRSystemPrompt, onLog);
   log(`[merge] Commit message: ${metadata.title}`);
 
   // Amend the placeholder commit with the real title
@@ -613,7 +644,7 @@ export async function mergeIntoLocalBranch(options: MergeIntoLocalBranchOptions)
   const headMsg = headMsgResult.stdout.toString().trim();
   if (hadUncommitted || headMsg === PENDING_PR_METADATA_MSG) {
     log(`[merge] Updating commit message...`);
-    await commitWithFallback(worktreePath, ["--amend", "-m", metadata.title], onLog);
+    await commitWithFallback(worktreePath, ["--amend", "-m", buildCommitMessage(metadata.title, metadata.body)], onLog);
   }
 
   // Checkout target branch and merge
