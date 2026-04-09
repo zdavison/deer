@@ -383,14 +383,8 @@ async function main() {
   // Auto-update only in interactive mode
   await checkAndUpdate({ name: "deerbox", version: VERSION });
 
-  // Prune dangling deer-created worktrees on startup — fire and forget, never force.
-  // Only touches deer/ branches and paths under ~/.local/share/deer/tasks/.
-  prune({ force: false, log: () => {} }).then((pruned) => {
-    if (pruned.tasksRemoved > 0) {
-      const w = pruned.worktreesRemoved;
-      process.stderr.write(`Pruned ${pruned.tasksRemoved} dangling task${pruned.tasksRemoved === 1 ? "" : "s"}${w > 0 ? ` (${w} worktree${w === 1 ? "" : "s"} removed)` : ""}\n`);
-    }
-  }).catch(() => {});
+  // Prune dangling deer-created worktrees on startup — silent, fire and forget.
+  prune({ force: false, log: () => {} }).catch(() => {});
 
   // Interactive mode: collect prompt from positional args
   const positional: string[] = [];

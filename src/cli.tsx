@@ -131,7 +131,7 @@ async function main() {
 
   await checkAndUpdateDeer();
 
-  // Prune dangling deer-created worktrees on startup (never force, only deer/ branches).
+  // Prune dangling deer-created worktrees on startup — silent.
   {
     const tasks = getAllTasks();
     for (const task of tasks) {
@@ -140,11 +140,7 @@ async function main() {
         !(await isTmuxSessionAlive(`deer-${task.task_id}`));
       if (isDangling) deleteTaskRow(task.task_id);
     }
-    const pruned = await prune({ force: false, log: () => {} });
-    if (pruned.tasksRemoved > 0) {
-      const w = pruned.worktreesRemoved;
-      console.error(`Pruned ${pruned.tasksRemoved} dangling task${pruned.tasksRemoved === 1 ? "" : "s"}${w > 0 ? ` (${w} worktree${w === 1 ? "" : "s"} removed)` : ""}`);
-    }
+    await prune({ force: false, log: () => {} });
   }
 
   const startDir = process.cwd();
