@@ -73,6 +73,8 @@ function refreshToken(upstream) {
 
 const socketPath = process.argv[2];
 const upstreams = JSON.parse(process.argv[3]);
+const caCertPath = process.argv[4] || null;
+const caKeyPath = process.argv[5] || null;
 
 let stdoutBroken = false;
 function log(message) {

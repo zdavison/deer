@@ -130,6 +130,7 @@ export async function startAuthProxy(
   upstreams: ProxyUpstream[],
   onLog?: (message: string) => void,
   daemonize = false,
+  caCert?: CACert,
 ): Promise<AuthProxy> {
   const serverScript = ensureServerScript();
   const pidFilePath = `${socketPath}.pid`;
@@ -140,7 +141,12 @@ export async function startAuthProxy(
     const errFile = `${socketPath}.err`;
     const errFd = openSync(errFile, "w");
     const devNull = openSync("/dev/null", "w");
-    const child = spawn("node", [serverScript, socketPath, JSON.stringify(upstreams)], {
+    const child = spawn("node", [
+      serverScript,
+      socketPath,
+      JSON.stringify(upstreams),
+      ...(caCert ? [caCert.certPath, caCert.keyPath] : []),
+    ], {
       stdio: ["ignore", devNull, errFd],
       detached: true,
     });
@@ -176,7 +182,12 @@ export async function startAuthProxy(
   }
 
   // Non-daemonized mode: use pipes for log forwarding
-  const child = spawn("node", [serverScript, socketPath, JSON.stringify(upstreams)], {
+  const child = spawn("node", [
+    serverScript,
+    socketPath,
+    JSON.stringify(upstreams),
+    ...(caCert ? [caCert.certPath, caCert.keyPath] : []),
+  ], {
     stdio: ["ignore", "pipe", "pipe"],
   });
 
