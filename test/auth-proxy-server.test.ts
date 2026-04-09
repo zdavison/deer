@@ -3,14 +3,18 @@ import { createServer, type Server, type IncomingMessage, type ServerResponse } 
 import { connect as netConnect, type Socket } from "node:net";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
-import { unlinkSync, existsSync, readFileSync, rmSync, statSync, mkdirSync } from "node:fs";
+import { unlinkSync, existsSync, readFileSync, rmSync, statSync, mkdirSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { spawn, type ChildProcess } from "node:child_process";
 import { connect as tlsConnect } from "node:tls";
 import { ensureCACert } from "../packages/deerbox/src/sandbox/auth-proxy";
 
-// Unix sockets require a path in the worktree (sandbox blocks /tmp sockets).
-// Use the test directory directly — macOS limits socket paths to 104 chars.
-const SOCK_BASE_DIR = import.meta.dir;
+// Use a short path under /tmp so Unix socket paths stay within macOS's 104-char limit.
+const SOCK_BASE_DIR = mkdtempSync(join(tmpdir(), "deer-proxy-"));
+
+afterAll(() => {
+  try { rmSync(SOCK_BASE_DIR, { recursive: true, force: true }); } catch {}
+});
 
 const AUTH_PROXY_SCRIPT = join(import.meta.dir, "..", "packages", "deerbox", "src", "sandbox", "auth-proxy-server.mjs");
 

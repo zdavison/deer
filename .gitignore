@@ -3,6 +3,10 @@ dist/
 *.tsbuildinfo
 .bun-install-cache/
 
+# Test artifacts
+test/tk-*
+.test-*
+
 # Jekyll build output
 _site/
 docs/.jekyll-cache/
