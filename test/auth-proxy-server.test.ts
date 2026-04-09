@@ -124,6 +124,9 @@ describe("auth-proxy-server", () => {
     for (const s of servers) s.close();
     for (const sock of sockets) {
       try { unlinkSync(sock); } catch {}
+      try { unlinkSync(sock + ".log"); } catch {}
+      try { unlinkSync(sock + ".pid"); } catch {}
+      try { unlinkSync(sock + ".err"); } catch {}
     }
     for (const d of tempDirs) { try { rmSync(d, { recursive: true, force: true }); } catch {} }
   });
@@ -588,6 +591,147 @@ describe("auth-proxy-server", () => {
     expect(parsed.auth).toBe("Bearer refreshed-tls-token");
 
     try { unlinkSync(tokenPath); } catch {}
+  });
+});
+
+describe("allowedPaths filtering", () => {
+  const procs: ChildProcess[] = [];
+  const servers: Server[] = [];
+  const sockets: string[] = [];
+
+  afterAll(() => {
+    for (const p of procs) p.kill("SIGTERM");
+    for (const s of servers) s.close();
+    for (const sock of sockets) {
+      try { unlinkSync(sock); } catch {}
+      try { unlinkSync(sock + ".log"); } catch {}
+      try { unlinkSync(sock + ".pid"); } catch {}
+      try { unlinkSync(sock + ".err"); } catch {}
+    }
+  });
+
+  test("allows requests matching allowedPaths patterns", async () => {
+    const { server, port } = await startMockUpstream((_req, res) => {
+      _req.resume();
+      _req.on("end", () => {
+        res.writeHead(200);
+        res.end("ok");
+      });
+    });
+    servers.push(server);
+
+    const socketPath = join(SOCK_BASE_DIR, `p-${randomBytes(4).toString("hex")}.sock`);
+    sockets.push(socketPath);
+
+    const upstreams = [
+      {
+        domain: "filtered.local",
+        target: `http://127.0.0.1:${port}`,
+        headers: { authorization: "Bearer tok" },
+        allowedPaths: ["^/repos/", "^/graphql$"],
+      },
+    ];
+
+    const { proc } = await startAuthProxy(socketPath, upstreams);
+    procs.push(proc);
+
+    // /repos/ path should be allowed
+    const reposResult = await proxyRequest(socketPath, {
+      method: "GET",
+      path: `http://filtered.local/repos/owner/repo/pulls`,
+    });
+    expect(reposResult.status).toBe(200);
+
+    // /graphql path should be allowed
+    const graphqlResult = await proxyRequest(socketPath, {
+      method: "POST",
+      path: `http://filtered.local/graphql`,
+      body: '{"query":"{ viewer { login } }"}',
+    });
+    expect(graphqlResult.status).toBe(200);
+  });
+
+  test("blocks requests not matching allowedPaths patterns", async () => {
+    const { server, port } = await startMockUpstream((_req, res) => {
+      _req.resume();
+      _req.on("end", () => {
+        res.writeHead(200);
+        res.end("ok");
+      });
+    });
+    servers.push(server);
+
+    const socketPath = join(SOCK_BASE_DIR, `p-${randomBytes(4).toString("hex")}.sock`);
+    sockets.push(socketPath);
+
+    const upstreams = [
+      {
+        domain: "filtered2.local",
+        target: `http://127.0.0.1:${port}`,
+        headers: { authorization: "Bearer tok" },
+        allowedPaths: ["^/repos/"],
+      },
+    ];
+
+    const { proc } = await startAuthProxy(socketPath, upstreams);
+    procs.push(proc);
+
+    // /graphql should be blocked when not in allowedPaths
+    const result = await proxyRequest(socketPath, {
+      method: "POST",
+      path: `http://filtered2.local/graphql`,
+      body: '{"query":"{ viewer { login } }"}',
+    });
+    expect(result.status).toBe(403);
+    expect(result.body).toContain("path not allowed");
+  });
+
+  test("allows git-upload-pack and git-receive-pack paths", async () => {
+    const { server, port } = await startMockUpstream((_req, res) => {
+      _req.resume();
+      _req.on("end", () => {
+        res.writeHead(200);
+        res.end("ok");
+      });
+    });
+    servers.push(server);
+
+    const socketPath = join(SOCK_BASE_DIR, `p-${randomBytes(4).toString("hex")}.sock`);
+    sockets.push(socketPath);
+
+    const upstreams = [
+      {
+        domain: "git.local",
+        target: `http://127.0.0.1:${port}`,
+        headers: { authorization: "Bearer tok" },
+        allowedPaths: ["\\.git/(info/refs|git-upload-pack|git-receive-pack)$"],
+      },
+    ];
+
+    const { proc } = await startAuthProxy(socketPath, upstreams);
+    procs.push(proc);
+
+    // git-upload-pack (fetch) should be allowed
+    const fetchResult = await proxyRequest(socketPath, {
+      method: "GET",
+      path: `http://git.local/owner/repo.git/info/refs?service=git-upload-pack`,
+    });
+    expect(fetchResult.status).toBe(200);
+
+    // git-receive-pack (push) should be allowed
+    const pushResult = await proxyRequest(socketPath, {
+      method: "POST",
+      path: `http://git.local/owner/repo.git/git-receive-pack`,
+      body: "pack-data",
+    });
+    expect(pushResult.status).toBe(200);
+
+    // Random path should be blocked
+    const blockedResult = await proxyRequest(socketPath, {
+      method: "GET",
+      path: `http://git.local/owner/repo/tree/main`,
+    });
+    expect(blockedResult.status).toBe(403);
   });
 });
 

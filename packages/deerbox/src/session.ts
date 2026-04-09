@@ -160,6 +160,7 @@ export async function setupClaudeConfigDir(claudeConfigDir: string, home: string
       await writeFile(join(claudeConfigDir, ".claude.json"), JSON.stringify(parsed, null, 2));
     }
   }
+
 }
 
 // ── Implementation ───────────────────────────────────────────────────
@@ -306,15 +307,15 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
       domain: "api.github.com",
       target: "https://api.github.com",
       headers: { authorization: `Bearer ${ghToken}` },
-      // Only allow PR-related REST API endpoints
-      allowedPaths: ["^/repos/"],
+      // Only allow PR-related REST + GraphQL API endpoints
+      allowedPaths: ["^/repos/", "^/graphql$"],
     });
     upstreams.push({
       domain: "github.com",
       target: "https://github.com",
       headers: { authorization: `Bearer ${ghToken}` },
-      // Only allow git smart HTTP push paths
-      allowedPaths: ["\\.git/(info/refs|git-receive-pack)$"],
+      // Allow git smart HTTP fetch and push paths
+      allowedPaths: ["\\.git/(info/refs|git-upload-pack|git-receive-pack)$"],
     });
   }
 

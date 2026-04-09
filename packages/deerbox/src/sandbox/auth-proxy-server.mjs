@@ -11,9 +11,11 @@
 import { createServer, request as httpRequest, Agent as HttpAgent } from "node:http";
 import { request as httpsRequest, Agent as HttpsAgent } from "node:https";
 import { TLSSocket } from "node:tls";
-import { unlinkSync, appendFileSync } from "node:fs";
+import { unlinkSync, appendFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 // Keep-alive disabled: after long idle periods, kept-alive sockets go stale
 // (server/NAT closes them) and reuse attempts fail with ECONNRESET → 502.
@@ -97,24 +99,38 @@ function getTlsCertForDomain(domain) {
     return null;
   }
 
+  // Use temp files instead of /dev/stdin piping — openssl's fopen("/dev/stdin")
+  // fails with ENXIO when spawned from Node.js execSync with { input }.
+  const tmpDir = mkdtempSync(join(tmpdir(), "deer-cert-"));
+  const keyPath = join(tmpDir, "key.pem");
+  const csrPath = join(tmpDir, "csr.pem");
+  const certPath = join(tmpDir, "cert.pem");
+  const extPath = join(tmpDir, "ext.cnf");
+
   try {
-    const key = execSync(
-      "openssl genrsa 2048 2>/dev/null",
-      { encoding: "utf-8" },
+    execSync(
+      `openssl genrsa -out ${JSON.stringify(keyPath)} 2048 2>/dev/null`,
     );
-    const cert = execSync(
-      `openssl req -new -key /dev/stdin -subj "/CN=${domain}" 2>/dev/null | ` +
-      `openssl x509 -req -CA ${JSON.stringify(caCertPath)} -CAkey ${JSON.stringify(caKeyPath)} ` +
+    writeFileSync(extPath, `subjectAltName=DNS:${domain}\n`);
+    execSync(
+      `openssl req -new -key ${JSON.stringify(keyPath)} -subj "/CN=${domain}" -out ${JSON.stringify(csrPath)} 2>/dev/null`,
+    );
+    execSync(
+      `openssl x509 -req -in ${JSON.stringify(csrPath)} ` +
+      `-CA ${JSON.stringify(caCertPath)} -CAkey ${JSON.stringify(caKeyPath)} ` +
       `-CAcreateserial -days 365 -sha256 ` +
-      `-extfile <(echo "subjectAltName=DNS:${domain}") 2>/dev/null`,
-      { input: key, encoding: "utf-8", shell: "/bin/bash" },
+      `-extfile ${JSON.stringify(extPath)} -out ${JSON.stringify(certPath)} 2>/dev/null`,
     );
+    const key = readFileSync(keyPath, "utf-8");
+    const cert = readFileSync(certPath, "utf-8");
     const entry = { cert, key };
     tlsCertCache.set(domain, entry);
     return entry;
   } catch (err) {
     log(`[proxy] failed to generate TLS cert for ${domain}: ${err.message}`);
     return null;
+  } finally {
+    try { rmSync(tmpDir, { recursive: true }); } catch { /* ignore */ }
   }
 }
 
