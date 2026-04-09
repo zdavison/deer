@@ -13,6 +13,14 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
+const srtAvailable = (() => {
+  try {
+    const runtime = createSrtRuntime();
+    const args = runtime.buildCommand({ worktreePath: "/tmp", allowlist: [] }, ["true"]);
+    return Bun.spawnSync(args, { stderr: "pipe" }).exitCode === 0;
+  } catch { return false; }
+})();
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 const tmpDirs: string[] = [];
@@ -44,7 +52,7 @@ async function srtRun(dir: string, cmd: string) {
 
 // ── Write isolation ──────────────────────────────────────────────────
 
-describe("srt: write isolation", () => {
+describe.skipIf(!srtAvailable)("srt: write isolation", () => {
   test("can write to worktree (intended writable path)", async () => {
     const dir = await makeTmpDir();
     const proc = await srtRun(
@@ -112,7 +120,7 @@ describe("srt: write isolation", () => {
 
 // ── HOME config files that must be readable ──────────────────────────
 
-describe("srt: required HOME config files not in denyRead", () => {
+describe.skipIf(!srtAvailable)("srt: required HOME config files not in denyRead", () => {
   test("~/.mcp.json is not in the sandbox denyRead list", async () => {
     const home = process.env.HOME!;
     const dir = await makeTmpDir();
@@ -133,7 +141,7 @@ describe("srt: required HOME config files not in denyRead", () => {
 
 // ── Sensitive file read protection ───────────────────────────────────
 
-describe("srt: sensitive file exfiltration prevention", () => {
+describe.skipIf(!srtAvailable)("srt: sensitive file exfiltration prevention", () => {
   test("cannot read SSH private keys", async () => {
     const home = process.env.HOME!;
     const sshDir = join(home, ".ssh");

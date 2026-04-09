@@ -11,6 +11,14 @@ import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
+const srtAvailable = (() => {
+  try {
+    const runtime = createSrtRuntime();
+    const args = runtime.buildCommand({ worktreePath: "/tmp", allowlist: [] }, ["true"]);
+    return Bun.spawnSync(args, { stderr: "pipe" }).exitCode === 0;
+  } catch { return false; }
+})();
+
 const tmpDirs: string[] = [];
 const cleanups: SandboxCleanup[] = [];
 
@@ -38,7 +46,7 @@ async function srtRun(dir: string, cmd: string, allowlist: string[] = ["example.
   return Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
 }
 
-describe("srt proxy-based network filtering", () => {
+describe.skipIf(!srtAvailable)("srt proxy-based network filtering", () => {
   test("allowlisted host is reachable through the proxy", async () => {
     const dir = await makeTmpDir();
     const proc = await srtRun(
@@ -79,7 +87,7 @@ describe("srt proxy-based network filtering", () => {
 
 // ── SSRF / Private IP protection ─────────────────────────────────────
 
-describe("srt: private IP / SSRF protection", () => {
+describe.skipIf(!srtAvailable)("srt: private IP / SSRF protection", () => {
   test("cannot reach localhost even if allowlisted", async () => {
     const dir = await makeTmpDir();
     const proc = await srtRun(
@@ -148,7 +156,7 @@ describe("srt: private IP / SSRF protection", () => {
 
 // ── Data exfiltration scenarios ──────────────────────────────────────
 
-describe("srt: data exfiltration prevention", () => {
+describe.skipIf(!srtAvailable)("srt: data exfiltration prevention", () => {
   test("cannot exfiltrate file contents to non-allowlisted host via curl", async () => {
     const dir = await makeTmpDir();
     await writeFile(join(dir, "secret.txt"), "TOP_SECRET_DATA");

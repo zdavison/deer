@@ -24,6 +24,7 @@ export function generateTaskId(): string {
  * @example "/home/user/.local/share/deer"
  */
 export function dataDir(): string {
+  if (process.env.DEER_DATA_DIR) return process.env.DEER_DATA_DIR;
   return `${HOME}/.local/share/deer`;
 }
 

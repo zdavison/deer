@@ -15,7 +15,7 @@
   "dependencies": {
     "@anthropic-ai/sandbox-runtime": "^0.0.40",
     "@deer/shared": "workspace:*",
-    "@iarna/toml": "^3.0.0"
+    "@iarna/toml": "^2.2.5"
   },
   "devDependencies": {
     "bun-types": "latest",

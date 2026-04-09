@@ -1,9 +1,20 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { test, expect, describe, beforeEach, afterEach, afterAll } from "bun:test";
 import { detectRepo, createWorktree, checkoutWorktree, removeWorktree, generateTaskId, dataDir, detectWorktreeContext } from "../../packages/deerbox/src/index";
 import { resolve } from "node:path";
 import { mkdtemp, rm, mkdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { mkdtempSync, rmSync, realpathSync } from "node:fs";
+
+// Use a writable temp dir so tests work in sandboxed environments.
+// Resolve symlinks so detectWorktreeContext's realpath calls match DEER_DATA_DIR.
+const testDataDir = realpathSync(mkdtempSync(join(tmpdir(), "deer-wt-data-")));
+process.env.DEER_DATA_DIR = testDataDir;
+
+afterAll(async () => {
+  delete process.env.DEER_DATA_DIR;
+  try { rmSync(testDataDir, { recursive: true, force: true }); } catch {}
+});
 
 /**
  * Create a bare-bones git repo with an initial commit and an origin remote

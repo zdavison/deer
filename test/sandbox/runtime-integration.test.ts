@@ -12,6 +12,18 @@ import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
+// Check if SRT sandbox is functional in this environment
+const srtAvailable = (() => {
+  try {
+    const runtime = createSrtRuntime();
+    const args = runtime.buildCommand({ worktreePath: "/tmp", allowlist: [] }, ["true"]);
+    const r = Bun.spawnSync(args, { stderr: "pipe" });
+    return r.exitCode === 0;
+  } catch {
+    return false;
+  }
+})();
+
 // ── Runtime registry ─────────────────────────────────────────────────
 // Add new runtimes here to automatically run all tests against them.
 
@@ -28,7 +40,7 @@ const CLEAN_ENV = {
 };
 
 for (const entry of runtimes) {
-  describe(entry.name, () => {
+  describe.skipIf(!srtAvailable)(entry.name, () => {
     const tmpDirs: string[] = [];
     const cleanups: SandboxCleanup[] = [];
     let runtime: SandboxRuntime;
