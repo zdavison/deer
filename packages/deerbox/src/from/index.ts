@@ -10,14 +10,16 @@ export { actionStrategy, parseActionUrl, formatActionLogs, fetchActionLogs } fro
 export type { ActionUrlParts, FetchActionLogsResult } from "./action";
 export { prStrategy } from "./pr";
 export { branchStrategy } from "./branch";
+export { issueStrategy } from "./issue";
 
 import { actionStrategy } from "./action";
 import { prStrategy } from "./pr";
+import { issueStrategy } from "./issue";
 import { branchStrategy } from "./branch";
 import type { FromStrategy, FromResolution } from "./types";
 
 /** Ordered list of strategies. First match wins; branch is the catch-all. */
-const FROM_STRATEGIES: FromStrategy[] = [actionStrategy, prStrategy, branchStrategy];
+const FROM_STRATEGIES: FromStrategy[] = [actionStrategy, prStrategy, issueStrategy, branchStrategy];
 
 /**
  * Resolve a --from value to a branch, optional PR URL, base branch,

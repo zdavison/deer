@@ -343,7 +343,7 @@ Usage:
 Interactive options:
   -m, --model <model>           Claude model (default: ${DEFAULT_MODEL})
   -b, --base-branch <branch>    Branch to base the worktree on
-  -f, --from <source>           Start from a branch, PR (URL/#), or GitHub Actions URL
+  -f, --from <source>           Start from a branch, PR (URL/#), GitHub issue URL, or GitHub Actions URL
   -k, --keep                    Keep worktree after Claude exits
 
 Prune options:
@@ -355,6 +355,7 @@ Examples:
   deerbox --model opus "refactor the auth module"
   deerbox --from feature/my-branch "add more tests"
   deerbox --from 42 "address review comments"
+  deerbox --from https://github.com/org/repo/issues/276 "implement the feature"
   deerbox --from https://github.com/org/repo/actions/runs/123/job/456 "fix the CI failure"
   deerbox prune
   deerbox prune --force`;

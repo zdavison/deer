@@ -9,8 +9,11 @@
 
 /** Result of resolving a --from value. */
 export interface FromResolution {
-  /** Branch name to check out in the worktree */
-  branch: string;
+  /**
+   * Branch name to check out in the worktree.
+   * Undefined when there is no existing branch (e.g. a GitHub issue).
+   */
+  branch?: string;
   /**
    * Associated PR URL, if any.
    * @example "https://github.com/acme/repo/pull/42"

@@ -24,6 +24,9 @@ const strings = {
     cli_fetching_action_logs: "Fetching CI job logs...",
     cli_fetched_action_logs: "Fetched {n} lines of failed job logs",
     cli_no_action_logs: "No failed job logs found",
+    cli_fetching_issue: "Fetching GitHub issue...",
+    cli_fetched_issue: "Fetched issue with {n} comment{s}",
+    cli_no_issue_comments: "No issue comments found",
   },
 
   ja: {
@@ -35,6 +38,9 @@ const strings = {
     cli_fetching_action_logs: "CIジョブログを取得中...",
     cli_fetched_action_logs: "失敗したジョブログ{n}行を取得",
     cli_no_action_logs: "失敗したジョブログが見つかりません",
+    cli_fetching_issue: "GitHubイシューを取得中...",
+    cli_fetched_issue: "{n}件のコメント付きイシューを取得",
+    cli_no_issue_comments: "イシューコメントが見つかりません",
   },
 
   zh: {
@@ -46,6 +52,9 @@ const strings = {
     cli_fetching_action_logs: "正在获取CI作业日志...",
     cli_fetched_action_logs: "已获取 {n} 行失败作业日志",
     cli_no_action_logs: "未找到失败的作业日志",
+    cli_fetching_issue: "正在获取GitHub Issue...",
+    cli_fetched_issue: "已获取包含 {n} 条评论的Issue",
+    cli_no_issue_comments: "未找到Issue评论",
   },
 
   ko: {
@@ -57,6 +66,9 @@ const strings = {
     cli_fetching_action_logs: "CI 작업 로그를 가져오는 중...",
     cli_fetched_action_logs: "실패한 작업 로그 {n}줄 가져옴",
     cli_no_action_logs: "실패한 작업 로그를 찾을 수 없음",
+    cli_fetching_issue: "GitHub 이슈를 가져오는 중...",
+    cli_fetched_issue: "{n}개의 댓글이 있는 이슈 가져옴",
+    cli_no_issue_comments: "이슈 댓글을 찾을 수 없음",
   },
 
   ru: {
@@ -68,6 +80,9 @@ const strings = {
     cli_fetching_action_logs: "Получение логов CI...",
     cli_fetched_action_logs: "Получено {n} строк логов неудавшихся задач",
     cli_no_action_logs: "Логи неудавшихся задач не найдены",
+    cli_fetching_issue: "Получение GitHub issue...",
+    cli_fetched_issue: "Получен issue с {n} комментарием(-ями)",
+    cli_no_issue_comments: "Комментарии к issue не найдены",
   },
 } as const;
 

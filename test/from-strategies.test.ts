@@ -4,6 +4,7 @@ import type { FromStrategy, FromResolution, GhRunner } from "deerbox";
 import { prStrategy } from "deerbox";
 import { branchStrategy } from "deerbox";
 import { actionStrategy } from "deerbox";
+import { issueStrategy } from "deerbox";
 
 // ── Strategy matching ────────────────────────────────────────────────
 
@@ -45,6 +46,22 @@ describe("strategy matching", () => {
     expect(branchStrategy.match("main")).toBe(true);
     expect(branchStrategy.match("anything")).toBe(true);
   });
+
+  test("issueStrategy matches GitHub issue URL", () => {
+    expect(issueStrategy.match("https://github.com/acme/repo/issues/276")).toBe(true);
+  });
+
+  test("issueStrategy does not match PR URL", () => {
+    expect(issueStrategy.match("https://github.com/acme/repo/pull/42")).toBe(false);
+  });
+
+  test("issueStrategy does not match action URL", () => {
+    expect(issueStrategy.match("https://github.com/acme/repo/actions/runs/123")).toBe(false);
+  });
+
+  test("issueStrategy does not match branch name", () => {
+    expect(issueStrategy.match("feature/my-branch")).toBe(false);
+  });
 });
 
 // ── resolveFrom dispatch ─────────────────────────────────────────────
@@ -62,6 +79,61 @@ describe("resolveFrom dispatch", () => {
     await expect(
       resolveFrom("https://github.com/acme/repo/actions/runs/123", "/tmp", "main"),
     ).rejects.toThrow();
+  });
+});
+
+// ── issueStrategy.resolve ────────────────────────────────────────────
+
+describe("issueStrategy.resolve", () => {
+  const mockRunner: GhRunner = async () => ({
+    stdout: JSON.stringify({
+      title: "Support dark mode",
+      body: "We need dark mode support.",
+      comments: [
+        { author: { login: "alice" }, body: "I agree!" },
+        { author: { login: "bob" }, body: "  " }, // blank — should be excluded
+      ],
+    }),
+    exitCode: 0,
+  });
+
+  test("returns undefined branch (no existing branch for issues)", async () => {
+    const result = await issueStrategy.resolve("https://github.com/acme/repo/issues/1", "/repo", "main", mockRunner);
+    expect(result.branch).toBeUndefined();
+  });
+
+  test("uses defaultBranch as baseBranch", async () => {
+    const result = await issueStrategy.resolve("https://github.com/acme/repo/issues/1", "/repo", "develop", mockRunner);
+    expect(result.baseBranch).toBe("develop");
+  });
+
+  test("prUrl is null", async () => {
+    const result = await issueStrategy.resolve("https://github.com/acme/repo/issues/1", "/repo", "main", mockRunner);
+    expect(result.prUrl).toBeNull();
+  });
+
+  test("injects issue title and body into appendSystemPrompt", async () => {
+    const result = await issueStrategy.resolve("https://github.com/acme/repo/issues/1", "/repo", "main", mockRunner);
+    expect(result.appendSystemPrompt).toContain("Support dark mode");
+    expect(result.appendSystemPrompt).toContain("We need dark mode support.");
+  });
+
+  test("injects non-blank comments into appendSystemPrompt", async () => {
+    const result = await issueStrategy.resolve("https://github.com/acme/repo/issues/1", "/repo", "main", mockRunner);
+    expect(result.appendSystemPrompt).toContain("@alice");
+    expect(result.appendSystemPrompt).toContain("I agree!");
+  });
+
+  test("excludes blank comments from appendSystemPrompt", async () => {
+    const result = await issueStrategy.resolve("https://github.com/acme/repo/issues/1", "/repo", "main", mockRunner);
+    expect(result.appendSystemPrompt).not.toContain("@bob");
+  });
+
+  test("throws when gh fails", async () => {
+    const failRunner: GhRunner = async () => ({ stdout: "", exitCode: 1 });
+    await expect(
+      issueStrategy.resolve("https://github.com/acme/repo/issues/1", "/repo", "main", failRunner),
+    ).rejects.toThrow("Could not fetch issue");
   });
 });
 
