@@ -484,6 +484,108 @@ describe("auth-proxy-server", () => {
     expect(receivedHeaders.authorization).toBe("Bearer secret-tls-token");
     expect(receivedBody).toBe('{"prompt":"hello via TLS"}');
   });
+
+  test("retries on 401 through CONNECT tunnel with refreshed token", async () => {
+    let requestCount = 0;
+
+    const { server, port } = await startMockUpstream((req, res) => {
+      req.resume();
+      req.on("end", () => {
+        requestCount++;
+        if (requestCount === 1) {
+          res.writeHead(401);
+          res.end("unauthorized");
+        } else {
+          res.writeHead(200);
+          res.end(JSON.stringify({ ok: true, auth: req.headers.authorization }));
+        }
+      });
+    });
+    servers.push(server);
+
+    const tokenPath = join(tmpdir(), `auth-proxy-test-token-${randomBytes(4).toString("hex")}`);
+    await Bun.write(tokenPath, "refreshed-tls-token");
+
+    const caDir = join(tmpdir(), `deer-ca-test-${randomBytes(4).toString("hex")}`);
+    tempDirs.push(caDir);
+    const ca = ensureCACert(caDir);
+
+    const socketPath = join(tmpdir(), `auth-proxy-test-${randomBytes(4).toString("hex")}.sock`);
+    sockets.push(socketPath);
+
+    const upstreams = [
+      {
+        domain: "tls-retry.local",
+        target: `http://127.0.0.1:${port}`,
+        headers: { authorization: "Bearer expired-token" },
+        oauthRefresh: {
+          sources: [{ type: "agent-token-file", path: tokenPath }],
+          headerName: "authorization",
+          headerTemplate: "Bearer ${token}",
+        },
+      },
+    ];
+
+    const { proc } = await startAuthProxy(socketPath, upstreams, ca);
+    procs.push(proc);
+
+    const result = await new Promise<{ status: number; body: string }>((resolve, reject) => {
+      const rawSocket: Socket = netConnect({ path: socketPath }, () => {
+        rawSocket.write(
+          "CONNECT tls-retry.local:443 HTTP/1.1\r\n" +
+          "Host: tls-retry.local:443\r\n" +
+          "\r\n",
+        );
+      });
+
+      let connectResponse = "";
+      const onData = (chunk: Buffer) => {
+        connectResponse += chunk.toString();
+        if (connectResponse.includes("\r\n\r\n")) {
+          rawSocket.removeListener("data", onData);
+          if (!connectResponse.includes("200")) {
+            reject(new Error(`CONNECT failed: ${connectResponse}`));
+            return;
+          }
+          const tlsSocket = tlsConnect({
+            socket: rawSocket,
+            ca: readFileSync(ca.certPath),
+            servername: "tls-retry.local",
+          });
+          tlsSocket.on("secureConnect", () => {
+            const body = '{"prompt":"retry test"}';
+            tlsSocket.write(
+              `POST /v1/messages HTTP/1.1\r\n` +
+              `Host: tls-retry.local\r\n` +
+              `Content-Length: ${Buffer.byteLength(body)}\r\n` +
+              `Connection: close\r\n` +
+              `\r\n` +
+              body,
+            );
+          });
+          let buf = "";
+          tlsSocket.on("data", (d: Buffer) => { buf += d.toString(); });
+          tlsSocket.on("end", () => {
+            const headerEnd = buf.indexOf("\r\n\r\n");
+            if (headerEnd === -1) { reject(new Error("malformed")); return; }
+            const statusLine = buf.slice(0, buf.indexOf("\r\n"));
+            const status = parseInt(statusLine.split(" ")[1], 10);
+            resolve({ status, body: buf.slice(headerEnd + 4) });
+          });
+          tlsSocket.on("error", reject);
+        }
+      };
+      rawSocket.on("data", onData);
+      rawSocket.on("error", reject);
+    });
+
+    expect(result.status).toBe(200);
+    expect(requestCount).toBe(2);
+    const parsed = JSON.parse(result.body);
+    expect(parsed.auth).toBe("Bearer refreshed-tls-token");
+
+    try { unlinkSync(tokenPath); } catch {}
+  });
 });
 
 describe("CA certificate", () => {
