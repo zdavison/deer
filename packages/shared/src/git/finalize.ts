@@ -18,6 +18,18 @@ async function stageChanges(worktreePath: string): Promise<void> {
 }
 
 /**
+ * Build a commit message from a PR title and body, appending any "Closes ..."
+ * lines found in the body so the closed issue is referenced in git history.
+ */
+function buildCommitMessage(title: string, body: string): string {
+  const closesLines = body
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => /^closes\s+\S+/i.test(l));
+  return closesLines.length > 0 ? `${title}\n\n${closesLines.join("\n")}` : title;
+}
+
+/**
  * Try a git commit, retrying with --no-verify if it fails.
  */
 async function commitWithFallback(
@@ -428,7 +440,7 @@ export async function createPullRequest(options: CreatePROptions): Promise<Creat
   const headMsg = headMsgResult.stdout.toString().trim();
   if (hadUncommitted || headMsg === PENDING_PR_METADATA_MSG) {
     log(`[pr] Updating commit message...`);
-    await commitWithFallback(worktreePath, ["--amend", "-m", metadata.title], onLog);
+    await commitWithFallback(worktreePath, ["--amend", "-m", buildCommitMessage(metadata.title, metadata.body)], onLog);
   }
 
   // Rename the branch if Claude provided a name
@@ -551,7 +563,7 @@ export async function updatePullRequest(options: UpdatePROptions): Promise<void>
   const headMsg = headMsgResult.stdout.toString().trim();
   if (hadUncommitted || headMsg === PENDING_PR_METADATA_MSG) {
     log(`[pr] Updating commit message...`);
-    await commitWithFallback(worktreePath, ["--amend", "-m", metadata.title], onLog);
+    await commitWithFallback(worktreePath, ["--amend", "-m", buildCommitMessage(metadata.title, metadata.body)], onLog);
   }
 
   log(`[pr] Pushing branch ${finalBranch}...`);
@@ -626,7 +638,7 @@ export async function mergeIntoLocalBranch(options: MergeIntoLocalBranchOptions)
   const headMsg = headMsgResult.stdout.toString().trim();
   if (hadUncommitted || headMsg === PENDING_PR_METADATA_MSG) {
     log(`[merge] Updating commit message...`);
-    await commitWithFallback(worktreePath, ["--amend", "-m", metadata.title], onLog);
+    await commitWithFallback(worktreePath, ["--amend", "-m", buildCommitMessage(metadata.title, metadata.body)], onLog);
   }
 
   // Checkout target branch and merge
