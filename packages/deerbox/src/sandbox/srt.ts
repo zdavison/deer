@@ -221,6 +221,7 @@ function buildSrtSettings(options: SandboxRuntimeOptions, srtBinDir: string | nu
     ...(process.env.PATH?.split(":").filter((p) => p.startsWith(home)) ?? []),
     ...(srtBinDir ? [srtBinDir] : []),
     ...(options.extraReadPaths ?? []),
+    ...(options.extraWritePaths ?? []),
     ...resolveSymlinkTargets(claudeConfigDir),
     ...(options.caCertPath ? [options.caCertPath] : []),
   ];

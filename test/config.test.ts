@@ -148,6 +148,53 @@ describe("DEFAULT_CONFIG", () => {
   });
 });
 
+describe("write_paths config", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "deer-config-test-"));
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  test("repo-local deer.toml can add extra write paths", async () => {
+    await Bun.write(
+      join(tmpDir, "deer.toml"),
+      `
+[sandbox]
+write_paths_extra = ["~/.tmux-claude-agent-tracker", "~/.aidb"]
+`
+    );
+
+    const config = await loadConfig(tmpDir);
+
+    expect(config.sandbox.writePaths).toContain("~/.tmux-claude-agent-tracker");
+    expect(config.sandbox.writePaths).toContain("~/.aidb");
+  });
+
+  test("global config can override the full write paths list", async () => {
+    const globalDir = join(tmpDir, ".config", "deer");
+    await Bun.write(
+      join(globalDir, "config.toml"),
+      `
+[sandbox]
+write_paths = ["~/.my-tool"]
+`
+    );
+
+    const config = await loadConfig(tmpDir, undefined, join(tmpDir, ".config", "deer", "config.toml"));
+
+    expect(config.sandbox.writePaths).toEqual(["~/.my-tool"]);
+  });
+
+  test("defaults to empty array", async () => {
+    const config = await loadConfig(tmpDir);
+    expect(config.sandbox.writePaths).toEqual([]);
+  });
+});
+
 describe("env_passthrough config", () => {
   let tmpDir: string;
 

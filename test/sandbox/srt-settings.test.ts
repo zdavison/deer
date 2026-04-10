@@ -93,6 +93,67 @@ describe("srt settings - git write permissions", () => {
   });
 });
 
+describe("srt settings - extra write paths", () => {
+  const tmpDirs: string[] = [];
+
+  afterEach(async () => {
+    for (const d of tmpDirs.splice(0)) {
+      await rm(d, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  async function makeTmpDir(): Promise<string> {
+    const d = await mkdtemp(join(tmpdir(), "deer-srt-writepaths-"));
+    tmpDirs.push(d);
+    return d;
+  }
+
+  test("extraWritePaths appear in allowWrite", async () => {
+    const worktreeDir = await makeTmpDir();
+    const extraPath = join(await makeTmpDir(), "my-tool-data");
+
+    const runtime = createSrtRuntime();
+    await runtime.prepare?.({
+      worktreePath: worktreeDir,
+      allowlist: [],
+      extraWritePaths: [extraPath],
+    });
+
+    const settingsPath = join(worktreeDir, "..", "srt-settings.json");
+    const settings = JSON.parse(await readFile(settingsPath, "utf-8"));
+    const allowWrite: string[] = settings.filesystem.allowWrite;
+
+    expect(allowWrite).toContain(extraPath);
+  });
+
+  test("extraWritePaths under $HOME are excluded from denyRead", async () => {
+    const home = await makeTmpDir();
+    const trackerDir = join(home, ".tmux-claude-agent-tracker");
+    await mkdir(trackerDir, { recursive: true });
+
+    const taskDir = await makeTmpDir();
+    const worktreeDir = join(taskDir, "worktree");
+    await mkdir(worktreeDir);
+
+    const runtime = createSrtRuntime({ home });
+    await runtime.prepare?.({
+      worktreePath: worktreeDir,
+      allowlist: [],
+      extraWritePaths: [trackerDir],
+    });
+
+    const settingsPath = join(taskDir, "srt-settings.json");
+    const settings = JSON.parse(await readFile(settingsPath, "utf-8"));
+    const denyRead: string[] = settings.filesystem.denyRead;
+    const allowWrite: string[] = settings.filesystem.allowWrite;
+
+    // Path must be writable
+    expect(allowWrite).toContain(trackerDir);
+    // Parent home entry must NOT be denied for reading
+    expect(denyRead).not.toContain(trackerDir);
+  });
+});
+
 describe("srt settings - cross-repo isolation", () => {
   const tmpDirs: string[] = [];
 

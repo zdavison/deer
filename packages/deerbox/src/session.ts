@@ -374,11 +374,17 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
   const envPolicy = loadEnvPolicy();
 
   // Build the full sandboxed command via the runtime
+  // Resolve ~ to HOME in user-configured write paths
+  const extraWritePaths = config.sandbox.writePaths.map((p) =>
+    p.startsWith("~/") ? join(HOME, p.slice(2)) : p
+  );
+
   const runtimeOpts = {
     worktreePath,
     repoGitDir: reuseWorktree?.repoGitDir ?? resolve(repoPath, ".git"),
     allowlist: config.network.allowlist,
     extraReadPaths: ecosystemResult.extraReadPaths,
+    extraWritePaths: extraWritePaths.length > 0 ? extraWritePaths : undefined,
     env: { ...ecosystemResult.env, ...sandboxEnvFinal },
     mitmProxy,
     claudeConfigDir,

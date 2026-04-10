@@ -16,6 +16,11 @@
 # [sandbox]
 # env_passthrough_extra = ["NODE_ENV", "CI"]
 
+# Grant additional write paths inside the sandbox (e.g. for Claude Code hooks).
+# Paths starting with ~ are resolved to $HOME.
+# [sandbox]
+# write_paths_extra = ["~/.tmux-claude-agent-tracker", "~/.aidb"]
+
 # Disable specific ecosystem plugins (uv, pnpm, npm, go).
 # [sandbox]
 # ecosystems_disabled = ["npm"]
