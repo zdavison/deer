@@ -1,5 +1,5 @@
 import { join, dirname, basename } from "node:path";
-import { readdirSync, readFileSync, realpathSync } from "node:fs";
+import { readdirSync, readFileSync, realpathSync, lstatSync } from "node:fs";
 import { createRequire } from "node:module";
 import type { SandboxRuntime, SandboxRuntimeOptions, SandboxCleanup } from "./runtime";
 import { HOME } from "@deer/shared";
@@ -63,7 +63,11 @@ function buildHomeDenyList(requiredPaths: string[], home: string): string[] {
   try {
     const entries = readdirSync(home);
     return entries
-      .filter((name) => name !== ".mcp.json" && !requiredRoots.has(name))
+      .filter((name) => {
+        if (name === ".mcp.json" || requiredRoots.has(name)) return false;
+        // bwrap cannot bind-mount over symlinks — skip them
+        try { return !lstatSync(join(home, name)).isSymbolicLink(); } catch { return false; }
+      })
       .map((name) => join(home, name));
   } catch {
     // Fallback to known sensitive paths if home is unreadable
