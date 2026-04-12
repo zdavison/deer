@@ -160,6 +160,8 @@ allowlist = [
 | `proxy_credentials` | ProxyCredential[] | See below | Credentials proxied via the host-side auth proxy. Replaces the built-in list when set in global config. |
 | `proxy_credentials_extra` | ProxyCredential[] | `[]` | *(repo-local only)* Additional proxy credentials to append to the list. |
 
+**Security note:** A sandboxed agent can modify `deer.toml` in its worktree. Config is loaded once at session start so this cannot escalate the current session, but a malicious `deer.toml` merged into the repo would affect future sessions. Always review `deer.toml` changes in agent PRs.
+
 **Built-in proxy credentials** handle `CLAUDE_CODE_OAUTH_TOKEN` and `ANTHROPIC_API_KEY` for `api.anthropic.com` automatically. You do not need to configure these.
 
 ---

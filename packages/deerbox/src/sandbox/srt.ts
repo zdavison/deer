@@ -65,7 +65,7 @@ function buildHomeDenyList(requiredPaths: string[], home: string): string[] {
     return entries
       .filter((name) => {
         if (name === ".mcp.json" || requiredRoots.has(name)) return false;
-        // bwrap cannot bind-mount over symlinks — skip them
+        // bwrap cannot bind-mount over symlinks -- skip them
         try { return !lstatSync(join(home, name)).isSymbolicLink(); } catch { return false; }
       })
       .map((name) => join(home, name));
