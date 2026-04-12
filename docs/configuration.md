@@ -155,6 +155,8 @@ allowlist = [
 | `runtime` | string | `"srt"` | Sandbox runtime for process isolation. `"srt"` (Anthropic Sandbox Runtime) is the only supported value. Uses `bwrap` on Linux and `seatbelt` on macOS. |
 | `env_passthrough` | string[] | `[]` | Host environment variable names to forward into the sandbox. Only listed vars (plus `PATH`, `HOME`, `TERM`) reach the sandboxed process. |
 | `env_passthrough_extra` | string[] | `[]` | *(repo-local only)* Additional env vars to forward. Appended to `env_passthrough`. |
+| `write_paths` | string[] | `[]` | Host paths to grant read-write access inside the sandbox. Useful for Claude Code hooks that write outside the worktree. Paths starting with `~` are resolved to `$HOME`. |
+| `write_paths_extra` | string[] | `[]` | *(repo-local only)* Additional write paths to append. |
 | `proxy_credentials` | ProxyCredential[] | See below | Credentials proxied via the host-side auth proxy. Replaces the built-in list when set in global config. |
 | `proxy_credentials_extra` | ProxyCredential[] | `[]` | *(repo-local only)* Additional proxy credentials to append to the list. |
 

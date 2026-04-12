@@ -178,6 +178,7 @@ allowlist = [
 [sandbox]
 runtime = "srt"            # ths is the only runtime for now
 env_passthrough = []       # host env vars to forward into the sandbox
+write_paths = []           # host paths to grant write access (for hooks)
 ```
 
 ### Repo-local config (`deer.toml`)
@@ -200,6 +201,9 @@ allowlist_extra = ["npm.pkg.github.com"]
 # Forward additional host env vars into the sandbox
 [sandbox]
 env_passthrough_extra = ["NODE_ENV", "MY_VAR"]
+
+# Grant extra write paths inside the sandbox (e.g. for hooks)
+# write_paths_extra = ["~/.my-hook-data"]
 
 # Inject extra credentials via the host-side auth proxy.
 # The sandbox never sees the real token — the proxy injects it as an auth header.

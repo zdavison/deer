@@ -193,6 +193,29 @@ write_paths = ["~/.my-tool"]
     const config = await loadConfig(tmpDir);
     expect(config.sandbox.writePaths).toEqual([]);
   });
+
+  test("global write_paths merged with repo-local write_paths_extra", async () => {
+    const globalDir = join(tmpDir, ".config", "deer");
+    await Bun.write(
+      join(globalDir, "config.toml"),
+      `
+[sandbox]
+write_paths = ["~/.global-tool"]
+`
+    );
+
+    await Bun.write(
+      join(tmpDir, "deer.toml"),
+      `
+[sandbox]
+write_paths_extra = ["~/.repo-tool"]
+`
+    );
+
+    const config = await loadConfig(tmpDir, undefined, join(tmpDir, ".config", "deer", "config.toml"));
+
+    expect(config.sandbox.writePaths).toEqual(["~/.global-tool", "~/.repo-tool"]);
+  });
 });
 
 describe("env_passthrough config", () => {
