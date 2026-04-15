@@ -16,7 +16,8 @@ export type Strategy =
   | { type: "readonly-cache"; hostPath: string }
   | { type: "prepopulate"; source: string; lockfile: string }
   | { type: "env"; vars: Record<string, string> }
-  | { type: "git-exclude"; patterns: string[] };
+  | { type: "git-exclude"; patterns: string[] }
+  | { type: "extra-write-path"; path: string };
 
 export interface EcosystemPlugin {
   name: string;
@@ -26,6 +27,7 @@ export interface EcosystemPlugin {
 
 export interface EcosystemResult {
   extraReadPaths: string[];
+  extraWritePaths: string[];
   env: Record<string, string>;
 }
 
@@ -47,7 +49,8 @@ const uvPlugin: EcosystemPlugin = {
   detect: async (repoPath) => pathExists(join(repoPath, "uv.lock")),
   strategies: [
     { type: "readonly-cache", hostPath: "~/.cache/uv" },
-    { type: "env", vars: { UV_CACHE_DIR: ".uv-cache" } },
+    { type: "env", vars: { UV_CACHE_DIR: "../uv-cache" } },
+    { type: "extra-write-path", path: "../uv-cache" },
     { type: "prepopulate", source: ".venv", lockfile: "uv.lock" },
   ],
 };
@@ -58,7 +61,8 @@ const pnpmPlugin: EcosystemPlugin = {
   strategies: [
     { type: "readonly-cache", hostPath: "~/.pnpm-store" },
     { type: "prepopulate", source: "node_modules", lockfile: "pnpm-lock.yaml" },
-    { type: "env", vars: { PNPM_HOME: ".pnpm-store" } },
+    { type: "env", vars: { PNPM_HOME: "../pnpm-store" } },
+    { type: "extra-write-path", path: "../pnpm-store" },
   ],
 };
 
@@ -84,7 +88,8 @@ const goPlugin: EcosystemPlugin = {
   detect: async (repoPath) => pathExists(join(repoPath, "go.mod")),
   strategies: [
     { type: "readonly-cache", hostPath: "~/go/pkg/mod" },
-    { type: "env", vars: { GOMODCACHE: ".gomodcache" } },
+    { type: "env", vars: { GOMODCACHE: "../gomodcache" } },
+    { type: "extra-write-path", path: "../gomodcache" },
   ],
 };
 
@@ -98,11 +103,11 @@ const bunPlugin: EcosystemPlugin = {
     return hasLockb || hasLock;
   },
   strategies: [
-    // Redirect bun's package cache to a writable dir inside the worktree.
-    // The default ~/.bun/install/cache is read-only in the sandbox.
-    { type: "env", vars: { BUN_INSTALL_CACHE_DIR: ".bun-install-cache" } },
-    // Prevent the cache dir from being committed.
-    { type: "git-exclude", patterns: [".bun-install-cache"] },
+    // Redirect bun's package cache to the task directory (sibling of the
+    // worktree), so it's writable in the sandbox but never inside the git
+    // working tree where it could be accidentally committed.
+    { type: "env", vars: { BUN_INSTALL_CACHE_DIR: "../bun-install-cache" } },
+    { type: "extra-write-path", path: "../bun-install-cache" },
     // Prepopulate node_modules from the host repo to avoid network installs.
     { type: "prepopulate", source: "node_modules", lockfile: "bun.lockb" },
     { type: "prepopulate", source: "node_modules", lockfile: "bun.lock" },
@@ -148,6 +153,7 @@ export async function applyEcosystems(
   }
 
   const extraReadPathsSet = new Set<string>();
+  const extraWritePathsSet = new Set<string>();
   const env: Record<string, string> = {};
 
   for (const plugin of activePlugins) {
@@ -181,6 +187,12 @@ export async function applyEcosystems(
         } catch (err) {
           process.stderr.write(`[deer] ecosystems: git-exclude: ${err}\n`);
         }
+      } else if (strategy.type === "extra-write-path") {
+        const resolved =
+          strategy.path.startsWith("/") || strategy.path.startsWith("~")
+            ? strategy.path
+            : join(worktreePath, strategy.path);
+        extraWritePathsSet.add(resolved);
       } else if (strategy.type === "prepopulate") {
         try {
           const repoLockfile = join(repoPath, strategy.lockfile);
@@ -220,6 +232,7 @@ export async function applyEcosystems(
 
   return {
     extraReadPaths: [...extraReadPathsSet],
+    extraWritePaths: [...extraWritePathsSet],
     env,
   };
 }
