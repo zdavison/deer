@@ -128,7 +128,14 @@ export function ensureCACert(dir: string): CACert {
  * real binary, then cache the result to disk so we only pay the cost once.
  */
 let cachedNodePath: string | null = null;
-function isRealBinary(path: string): boolean {
+/**
+ * Check whether `path` points to a real executable (Mach-O or ELF) rather
+ * than a shell-script shim. Reads the first 4 bytes and matches against
+ * known executable magic numbers. Returns false on any I/O error.
+ *
+ * Exported for testing.
+ */
+export function isRealBinary(path: string): boolean {
   try {
     const fd = openSync(path, "r");
     const buf = Buffer.alloc(4);
