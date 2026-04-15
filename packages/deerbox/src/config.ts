@@ -72,6 +72,18 @@ export interface DeerConfig {
      */
     proxyCredentials: ProxyCredential[];
     /**
+     * Host paths to grant read-write access inside the sandbox.
+     * Paths starting with `~/` are resolved to $HOME at session start.
+     * Useful for Claude Code hooks that write outside the worktree.
+     */
+    writePaths: string[];
+    /**
+     * Host paths to grant read access inside the sandbox.
+     * Paths starting with `~/` are resolved to $HOME at session start.
+     * Useful for accessing documentation or config files from the host.
+     */
+    readPaths: string[];
+    /**
      * Ecosystem plugin configuration.
      */
     ecosystems?: {
@@ -104,6 +116,8 @@ export const DEFAULT_CONFIG: DeerConfig = {
   sandbox: {
     runtime: "srt",
     envPassthrough: [],
+    writePaths: [],
+    readPaths: [],
     proxyCredentials: [
       {
         // No sandboxEnv — Claude Code uses https://api.anthropic.com directly.
@@ -212,6 +226,18 @@ function applyRepoLocal(config: DeerConfig, repoLocal: Record<string, unknown>):
       ...(sandbox.env_passthrough_extra as string[]),
     ];
   }
+  if (sandbox?.write_paths_extra && Array.isArray(sandbox.write_paths_extra)) {
+    result.sandbox.writePaths = [
+      ...result.sandbox.writePaths,
+      ...(sandbox.write_paths_extra as string[]),
+    ];
+  }
+  if (sandbox?.read_paths_extra && Array.isArray(sandbox.read_paths_extra)) {
+    result.sandbox.readPaths = [
+      ...result.sandbox.readPaths,
+      ...(sandbox.read_paths_extra as string[]),
+    ];
+  }
   if (sandbox?.proxy_credentials_extra && Array.isArray(sandbox.proxy_credentials_extra)) {
     result.sandbox.proxyCredentials = [
       ...result.sandbox.proxyCredentials,
@@ -301,6 +327,8 @@ function tomlToConfig(toml: Record<string, unknown>): Partial<DeerConfig> {
     result.sandbox = {
       ...(sandbox.runtime !== undefined && { runtime: sandbox.runtime }),
       ...(sandbox.env_passthrough !== undefined && { envPassthrough: sandbox.env_passthrough }),
+      ...(sandbox.write_paths !== undefined && { writePaths: sandbox.write_paths }),
+      ...(sandbox.read_paths !== undefined && { readPaths: sandbox.read_paths }),
       ...(sandbox.proxy_credentials !== undefined && { proxyCredentials: sandbox.proxy_credentials }),
       ...(sandbox.ecosystems_disabled !== undefined && {
         ecosystems: { disabled: sandbox.ecosystems_disabled as string[] },

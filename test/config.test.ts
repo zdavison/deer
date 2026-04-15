@@ -190,3 +190,97 @@ env_passthrough = ["ONLY_THIS_VAR"]
     expect(config.sandbox.envPassthrough).toEqual(["ONLY_THIS_VAR"]);
   });
 });
+
+describe("write_paths config", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "deer-config-test-"));
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  test("repo-local deer.toml can add extra write paths", async () => {
+    await Bun.write(
+      join(tmpDir, "deer.toml"),
+      `
+[sandbox]
+write_paths_extra = ["~/.my-hook-data", "~/.tmux-tracker"]
+`
+    );
+
+    const config = await loadConfig(tmpDir);
+
+    expect(config.sandbox.writePaths).toContain("~/.my-hook-data");
+    expect(config.sandbox.writePaths).toContain("~/.tmux-tracker");
+  });
+
+  test("global config can override the full write paths list", async () => {
+    const globalDir = join(tmpDir, ".config", "deer");
+    await Bun.write(
+      join(globalDir, "config.toml"),
+      `
+[sandbox]
+write_paths = ["~/.always-writable"]
+`
+    );
+
+    const config = await loadConfig(tmpDir, undefined, join(tmpDir, ".config", "deer", "config.toml"));
+
+    expect(config.sandbox.writePaths).toEqual(["~/.always-writable"]);
+  });
+
+  test("defaults to empty array", () => {
+    expect(DEFAULT_CONFIG.sandbox.writePaths).toBeArray();
+    expect(DEFAULT_CONFIG.sandbox.writePaths).toHaveLength(0);
+  });
+});
+
+describe("read_paths config", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "deer-config-test-"));
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  test("repo-local deer.toml can add extra read paths", async () => {
+    await Bun.write(
+      join(tmpDir, "deer.toml"),
+      `
+[sandbox]
+read_paths_extra = ["~/.my-docs", "~/.config/my-tool"]
+`
+    );
+
+    const config = await loadConfig(tmpDir);
+
+    expect(config.sandbox.readPaths).toContain("~/.my-docs");
+    expect(config.sandbox.readPaths).toContain("~/.config/my-tool");
+  });
+
+  test("global config can override the full read paths list", async () => {
+    const globalDir = join(tmpDir, ".config", "deer");
+    await Bun.write(
+      join(globalDir, "config.toml"),
+      `
+[sandbox]
+read_paths = ["~/.shared-docs"]
+`
+    );
+
+    const config = await loadConfig(tmpDir, undefined, join(tmpDir, ".config", "deer", "config.toml"));
+
+    expect(config.sandbox.readPaths).toEqual(["~/.shared-docs"]);
+  });
+
+  test("defaults to empty array", () => {
+    expect(DEFAULT_CONFIG.sandbox.readPaths).toBeArray();
+    expect(DEFAULT_CONFIG.sandbox.readPaths).toHaveLength(0);
+  });
+});

@@ -16,6 +16,15 @@
 # [sandbox]
 # env_passthrough_extra = ["NODE_ENV", "CI"]
 
+# Grant extra write paths inside the sandbox (e.g. for hooks that write outside the worktree).
+# Paths starting with ~ are resolved to $HOME.
+# [sandbox]
+# write_paths_extra = ["~/.my-hook-data"]
+
+# Grant extra read paths inside the sandbox (e.g. for accessing host docs or config).
+# [sandbox]
+# read_paths_extra = ["~/.my-docs"]
+
 # Disable specific ecosystem plugins (uv, pnpm, npm, go).
 # [sandbox]
 # ecosystems_disabled = ["npm"]

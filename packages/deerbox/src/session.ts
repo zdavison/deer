@@ -373,13 +373,18 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
   // Load the user's env policy to block any vars they've denied
   const envPolicy = loadEnvPolicy();
 
+  // Resolve ~ to HOME in user-configured paths
+  const resolveHome = (p: string) => p.startsWith("~/") ? join(HOME, p.slice(2)) : p;
+  const configWritePaths = config.sandbox.writePaths.map(resolveHome);
+  const configReadPaths = config.sandbox.readPaths.map(resolveHome);
+
   // Build the full sandboxed command via the runtime
   const runtimeOpts = {
     worktreePath,
     repoGitDir: reuseWorktree?.repoGitDir ?? resolve(repoPath, ".git"),
     allowlist: config.network.allowlist,
-    extraReadPaths: ecosystemResult.extraReadPaths,
-    extraWritePaths: ecosystemResult.extraWritePaths,
+    extraReadPaths: [...ecosystemResult.extraReadPaths, ...configReadPaths],
+    extraWritePaths: [...ecosystemResult.extraWritePaths, ...configWritePaths],
     env: { ...ecosystemResult.env, ...sandboxEnvFinal },
     mitmProxy,
     claudeConfigDir,
