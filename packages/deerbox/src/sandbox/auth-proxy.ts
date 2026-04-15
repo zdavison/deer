@@ -11,7 +11,7 @@
 
 import { spawn, execSync } from "node:child_process";
 import { join } from "node:path";
-import { mkdirSync, writeFileSync, existsSync, openSync, unlinkSync, readFileSync, chmodSync, renameSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync, openSync, closeSync, readSync, unlinkSync, readFileSync, chmodSync, renameSync } from "node:fs";
 import { createInterface } from "node:readline";
 
 import authProxySource from "./auth-proxy-server.mjs" with { type: "text" };
@@ -119,6 +119,77 @@ export function ensureCACert(dir: string): CACert {
 }
 
 /**
+ * Resolve the node binary path. If `node` on PATH is a shell shim
+ * (e.g. nodenv, asdf), spawning it via child_process.spawn from Bun fails
+ * because the shim relies on shell environment setup Bun doesn't provide.
+ *
+ * Fast path: if `which node` returns a real binary, use it directly.
+ * Shim path: run `node -e 'console.log(process.execPath)'` to resolve the
+ * real binary, then cache the result to disk so we only pay the cost once.
+ */
+let cachedNodePath: string | null = null;
+/**
+ * Check whether `path` points to a real executable (Mach-O or ELF) rather
+ * than a shell-script shim. Reads the first 4 bytes and matches against
+ * known executable magic numbers. Returns false on any I/O error.
+ *
+ * Exported for testing.
+ */
+export function isRealBinary(path: string): boolean {
+  try {
+    const fd = openSync(path, "r");
+    const buf = Buffer.alloc(4);
+    readSync(fd, buf, 0, 4, 0);
+    closeSync(fd);
+    // Mach-O (macOS): CFFAEDFE, CEFAEDFE, CAFEBABE. ELF (Linux): 7F454C46.
+    return buf[0] === 0xcf || buf[0] === 0xce || buf[0] === 0xca || buf[0] === 0x7f;
+  } catch { return false; }
+}
+
+function resolveNodePath(): string {
+  if (cachedNodePath) return cachedNodePath;
+
+  // Load cached real-binary path from disk (avoids re-resolving every run).
+  const cacheDir = process.env.DEER_DATA_DIR ?? join(process.env.HOME ?? "/root", ".local", "share", "deer");
+  const cacheFile = join(cacheDir, "node-path");
+  try {
+    const cached = readFileSync(cacheFile, "utf-8").trim();
+    if (cached && isRealBinary(cached)) {
+      cachedNodePath = cached;
+      return cached;
+    }
+  } catch { /* no cache */ }
+
+  // Find node on PATH. If it's already a real binary, use it directly.
+  let candidate = "";
+  try {
+    candidate = execSync("command -v node", { encoding: "utf-8", shell: "/bin/sh" }).trim();
+  } catch { /* not found */ }
+
+  if (candidate && isRealBinary(candidate)) {
+    cachedNodePath = candidate;
+    try { mkdirSync(cacheDir, { recursive: true }); writeFileSync(cacheFile, candidate); } catch { /* ignore */ }
+    return candidate;
+  }
+
+  // It's a shim. Resolve through it (slow cold start on nodenv/asdf).
+  try {
+    const resolved = execSync(`node -e 'console.log(process.execPath)'`, {
+      encoding: "utf-8",
+      shell: "/bin/sh",
+    }).trim();
+    if (resolved && isRealBinary(resolved)) {
+      cachedNodePath = resolved;
+      try { mkdirSync(cacheDir, { recursive: true }); writeFileSync(cacheFile, resolved); } catch { /* ignore */ }
+      return resolved;
+    }
+  } catch { /* fall through */ }
+
+  cachedNodePath = "node";
+  return "node";
+}
+
+/**
  * Start the authenticating MITM proxy as a Node.js subprocess.
  *
  * @param daemonize - If true, detach the process so it survives parent exit.
@@ -134,14 +205,15 @@ export async function startAuthProxy(
 ): Promise<AuthProxy> {
   const serverScript = ensureServerScript();
   const pidFilePath = `${socketPath}.pid`;
+  const nodePath = resolveNodePath();
 
   if (daemonize) {
-    // Daemonized mode: no pipes — poll for the socket file to appear.
+    // Daemonized mode: no pipes. Poll for the socket file to appear.
     // Stderr goes to a temp file so we can report errors if the child crashes.
     const errFile = `${socketPath}.err`;
     const errFd = openSync(errFile, "w");
     const devNull = openSync("/dev/null", "w");
-    const child = spawn("node", [
+    const child = spawn(nodePath, [
       serverScript,
       socketPath,
       JSON.stringify(upstreams),
@@ -182,7 +254,7 @@ export async function startAuthProxy(
   }
 
   // Non-daemonized mode: use pipes for log forwarding
-  const child = spawn("node", [
+  const child = spawn(nodePath, [
     serverScript,
     socketPath,
     JSON.stringify(upstreams),
@@ -195,37 +267,39 @@ export async function startAuthProxy(
   // that this task is still alive (interactive deerbox has no tmux session).
   writeFileSync(pidFilePath, String(child.pid));
 
+  // Attach log readers. Stdout JSON lines are forwarded as logs. We poll the
+  // socket file for readiness rather than waiting for a "ready" JSON line,
+  // because pipes between Bun and Node ESM subprocesses aren't always reliable.
+  const rl = createInterface({ input: child.stdout! });
+  rl.on("line", (line: string) => {
+    try {
+      const msg = JSON.parse(line);
+      if (msg.log) onLog?.(msg.log);
+    } catch { /* ignore malformed */ }
+  });
   child.stderr?.on("data", (data: Buffer) => {
     onLog?.(`[proxy:stderr] ${data.toString().trim()}`);
   });
 
-  // Wait for the "ready" signal from the subprocess
+  // Wait for the socket file to appear (the server creates it when listening).
   await new Promise<void>((resolve, reject) => {
     const onExit = (code: number | null) => {
       reject(new Error(`auth-proxy subprocess exited with code ${code} before ready`));
     };
     child.once("exit", onExit);
 
-    const rl = createInterface({ input: child.stdout! });
-    rl.on("line", (line: string) => {
-      try {
-        const msg = JSON.parse(line);
-        if (msg.ready) {
-          child.removeListener("exit", onExit);
-          rl.on("line", (logLine: string) => {
-            try {
-              const logMsg = JSON.parse(logLine);
-              if (logMsg.log) onLog?.(logMsg.log);
-            } catch { /* ignore malformed */ }
-          });
-          resolve();
-        } else if (msg.log) {
-          onLog?.(msg.log);
-        }
-      } catch { /* ignore malformed */ }
-    });
-
-    setTimeout(() => reject(new Error("auth-proxy subprocess did not become ready in 10s")), 10000);
+    const start = Date.now();
+    const poll = setInterval(() => {
+      if (existsSync(socketPath)) {
+        clearInterval(poll);
+        child.removeListener("exit", onExit);
+        resolve();
+      } else if (Date.now() - start > 10000) {
+        clearInterval(poll);
+        child.removeListener("exit", onExit);
+        reject(new Error("auth-proxy subprocess did not become ready in 10s"));
+      }
+    }, 100);
   });
 
   return {
