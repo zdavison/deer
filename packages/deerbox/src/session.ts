@@ -315,7 +315,12 @@ export async function prepare(options: PrepareOptions): Promise<PreparedSession>
   );
 
   const claudeConfigDir = join(dataDir(), "tasks", repoSlug(repoPath), taskId, "claude-config");
-  await setupClaudeConfigDir(claudeConfigDir, HOME);
+  // On resume, the config dir already exists with read-only git pack files from
+  // the plugin cache. Re-copying would fail with EACCES trying to overwrite them.
+  const claudeConfigExists = await access(claudeConfigDir).then(() => true).catch(() => false);
+  if (!claudeConfigExists) {
+    await setupClaudeConfigDir(claudeConfigDir, HOME);
+  }
 
   onStatus?.("Starting sandbox...");
 
