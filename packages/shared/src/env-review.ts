@@ -107,17 +107,23 @@ export async function runEnvReview(
   return new Promise((resolve) => {
     process.stdin.setRawMode(true);
     process.stdin.resume();
-    process.stdin.setEncoding("utf8");
 
     const cleanup = () => {
       process.stdin.setRawMode(false);
-      process.stdin.pause();
       process.stdin.removeListener("data", onData);
+      // Switch to paused mode so read() drains the internal buffer, then resume
+      // so Ink finds stdin in the expected flowing state. The drain discards any
+      // bytes VSCode's shell integration injects during the raw→cooked transition.
+      process.stdin.pause();
+      let chunk: unknown;
+      while ((chunk = process.stdin.read()) !== null) { /* drain buffered bytes */ }
+      process.stdin.resume();
       out.write(SHOW_CURSOR);
       out.write("\n");
     };
 
-    const onData = (key: string) => {
+    const onData = (data: Buffer | string) => {
+      const key = typeof data === "string" ? data : data.toString();
       if (key === "\r" || key === "\n") {
         // Confirm
         cleanup();
