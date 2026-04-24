@@ -11,15 +11,17 @@ export type { ActionUrlParts, FetchActionLogsResult } from "./action";
 export { prStrategy } from "./pr";
 export { branchStrategy } from "./branch";
 export { issueStrategy } from "./issue";
+export { worktreeStrategy } from "./worktree";
 
 import { actionStrategy } from "./action";
 import { prStrategy } from "./pr";
 import { issueStrategy } from "./issue";
 import { branchStrategy } from "./branch";
+import { worktreeStrategy } from "./worktree";
 import type { FromStrategy, FromResolution } from "./types";
 
 /** Ordered list of strategies. First match wins; branch is the catch-all. */
-const FROM_STRATEGIES: FromStrategy[] = [actionStrategy, prStrategy, issueStrategy, branchStrategy];
+const FROM_STRATEGIES: FromStrategy[] = [actionStrategy, prStrategy, issueStrategy, worktreeStrategy, branchStrategy];
 
 /**
  * Resolve a --from value to a branch, optional PR URL, base branch,
@@ -28,6 +30,7 @@ const FROM_STRATEGIES: FromStrategy[] = [actionStrategy, prStrategy, issueStrate
  * Accepts:
  * - A GitHub Actions URL (run or job)
  * - A GitHub PR URL or PR number
+ * - An absolute or relative path to a git worktree directory (e.g. ./path/to/worktree)
  * - A branch name
  */
 export async function resolveFrom(
