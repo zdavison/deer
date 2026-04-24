@@ -387,7 +387,7 @@ Interactive options:
   -c, --continue                Resume the most recent session for this repository
   -m, --model <model>           Claude model (default: ${DEFAULT_MODEL})
   -b, --base-branch <branch>    Branch to base the worktree on
-  -f, --from <source>           Start from a branch, PR (URL/#), GitHub issue URL, or GitHub Actions URL
+  -f, --from <source>           Start from a branch, PR (URL/#), GitHub issue URL, GitHub Actions URL, or worktree path
   -k, --keep                    Keep worktree after Claude exits
 
 Prune options:
@@ -401,6 +401,8 @@ Examples:
   deerbox --from 42 "address review comments"
   deerbox --from https://github.com/org/repo/issues/276 "implement the feature"
   deerbox --from https://github.com/org/repo/actions/runs/123/job/456 "fix the CI failure"
+  deerbox --from ./path/to/worktree "continue work on that branch"
+  deerbox --from /absolute/path/to/worktree "continue work on that branch"
   deerbox prune
   deerbox prune --force`;
 
