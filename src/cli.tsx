@@ -158,6 +158,7 @@ async function main() {
   // deerbox (when invoked as a subprocess by deer) skips its own review because it
   // runs non-interactive subcommands (prepare/preflight/etc.) that never show UI.
   await runEnvPreflight();
+  if (process.stdin.isTTY) process.stdin.resume();
 
   // Enter alternate screen buffer
   process.stdout.write("\x1b[?1049h");
