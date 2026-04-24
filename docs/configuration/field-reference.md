@@ -44,6 +44,10 @@ api.github.com
 | `runtime` | string | `"srt"` | global | Sandbox runtime. Only `"srt"` is supported. |
 | `env_passthrough` | string[] | `[]` | global | Host env vars forwarded to the sandbox. |
 | `env_passthrough_extra` | string[] | `[]` | repo-local | Additional env vars to forward. |
+| `write_paths` | string[] | `[]` | global | Host paths to grant write access inside the sandbox. Paths starting with `~/` are resolved to `$HOME`. |
+| `write_paths_extra` | string[] | `[]` | repo-local | Additional write paths to append. |
+| `read_paths` | string[] | `[]` | global | Host paths to grant read access inside the sandbox. Paths starting with `~/` are resolved to `$HOME`. |
+| `read_paths_extra` | string[] | `[]` | repo-local | Additional read paths to append. |
 | `proxy_credentials` | ProxyCredential[] | (built-in) | global | Credentials for the MITM auth proxy. Replaces the built-in list when set. |
 | `proxy_credentials_extra` | ProxyCredential[] | `[]` | repo-local | Additional proxy credentials to append. |
 | `ecosystems_disabled` | string[] | `[]` | repo-local | Ecosystem plugins to disable (e.g. `["npm", "go"]`). |
