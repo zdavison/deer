@@ -19,7 +19,22 @@ export interface PruneOptions {
   log?: (msg: string) => void;
 }
 
+const PRUNE_MIN_AGE_MS = 8 * 60 * 60 * 1000; // 8 hours
+
 // ── Helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Extract the creation timestamp from a task ID.
+ * Format: deer_<base36-ms-timestamp><8-char-random-suffix>
+ */
+function taskCreatedAt(taskId: string): Date | null {
+  const withoutPrefix = taskId.slice("deer_".length);
+  if (withoutPrefix.length <= 8) return null;
+  const timestampPart = withoutPrefix.slice(0, -8);
+  const ms = parseInt(timestampPart, 36);
+  if (isNaN(ms) || ms <= 0) return null;
+  return new Date(ms);
+}
 
 function emit(msg: string, opts: PruneOptions): void {
   opts.log?.(msg);
@@ -197,6 +212,9 @@ export async function prune(opts: PruneOptions = {}): Promise<PruneResult> {
       // interactively (no tmux), the proxy PID file is the only signal
       // that the task is still in use.
       if (isProxyAlive(taskDir)) continue;
+
+      const createdAt = taskCreatedAt(taskId);
+      if (createdAt && Date.now() - createdAt.getTime() < PRUNE_MIN_AGE_MS) continue;
 
       emit(`Pruning dangling task: ${taskId}`, opts);
 
