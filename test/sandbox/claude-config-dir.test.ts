@@ -289,6 +289,47 @@ describe("setupClaudeConfigDir", () => {
     expect(entry.installPath).toBe("/opt/plugins/external-plugin/2.0.0");
   });
 
+  test("rewrites $HOME/.claude, ${HOME}/.claude, and ~/.claude shell-expression prefixes in JSON files", async () => {
+    const home = await makeHome();
+    const claudeDir = join(home, ".claude");
+    await mkdir(claudeDir, { recursive: true });
+
+    // settings.json references the hook via $HOME — a shell variable that
+    // expands back to the real home at runtime, bypassing a plain
+    // literal-prefix rewrite and causing the sandbox to deny the path.
+    await writeFile(
+      join(claudeDir, "settings.json"),
+      JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            {
+              matcher: "Bash",
+              hooks: [
+                { type: "command", command: "$HOME/.claude/hooks/dollar.sh" },
+                { type: "command", command: "${HOME}/.claude/hooks/braced.sh" },
+                { type: "command", command: "~/.claude/hooks/tilde.sh" },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    const taskDir = await makeTaskDir();
+    const claudeConfigDir = join(taskDir, "claude-config");
+    await setupClaudeConfigDir(claudeConfigDir, home);
+
+    const settings = JSON.parse(
+      await readFile(join(claudeConfigDir, "settings.json"), "utf-8"),
+    );
+    const commands = settings.hooks.PreToolUse[0].hooks.map((h: { command: string }) => h.command);
+    expect(commands).toEqual([
+      join(claudeConfigDir, "hooks", "dollar.sh"),
+      join(claudeConfigDir, "hooks", "braced.sh"),
+      join(claudeConfigDir, "hooks", "tilde.sh"),
+    ]);
+  });
+
   test("rewrites ~/.claude paths in nested JSON files", async () => {
     const home = await makeHome();
     const claudeDir = join(home, ".claude");

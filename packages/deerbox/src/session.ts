@@ -119,21 +119,22 @@ const CLAUDE_DIR_ITEMS: Array<{ name: string; isDir: boolean }> = [
 
 /**
  * Recursively walk a directory and rewrite all `.json` files, replacing
- * occurrences of `oldPrefix` with `newPrefix` in their content.
- * Non-JSON files and files that don't contain the old prefix are skipped.
+ * occurrences of any `oldPrefixes` entry with `newPrefix` in their content.
+ * Non-JSON files and files that don't contain any old prefix are skipped.
  */
-async function rewriteJsonFiles(dir: string, oldPrefix: string, newPrefix: string): Promise<void> {
+async function rewriteJsonFiles(dir: string, oldPrefixes: string[], newPrefix: string): Promise<void> {
   let entries;
   try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
   for (const entry of entries) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
-      await rewriteJsonFiles(full, oldPrefix, newPrefix);
+      await rewriteJsonFiles(full, oldPrefixes, newPrefix);
     } else if (entry.name.endsWith(".json")) {
       try {
         const raw = await readFile(full, "utf-8");
-        if (!raw.includes(oldPrefix)) continue;
-        await writeFile(full, raw.replaceAll(oldPrefix, newPrefix));
+        let next = raw;
+        for (const p of oldPrefixes) next = next.replaceAll(p, newPrefix);
+        if (next !== raw) await writeFile(full, next);
       } catch { /* unreadable or unwritable — skip */ }
     }
   }
@@ -166,11 +167,17 @@ export async function setupClaudeConfigDir(claudeConfigDir: string, home: string
   }
 
   // Rewrite all references to ~/.claude in copied JSON files so they point
-  // to the per-task config dir. This catches installPath, installLocation,
-  // and any other field that embeds the host config path — a blanket replace
-  // is more resilient than patching individual files.
-  const oldPrefix = join(home, ".claude");
-  await rewriteJsonFiles(claudeConfigDir, oldPrefix, claudeConfigDir);
+  // to the per-task config dir. Covers the literal expanded path plus the
+  // shell-expression forms users commonly write in settings.json (e.g.
+  // hook commands like `$HOME/.claude/hooks/foo.sh`) — at runtime `$HOME`
+  // expands back to the real home, and the sandbox correctly denies that
+  // path. Rewriting the shell forms keeps hooks pointing at the copy in
+  // claudeConfigDir, which the sandbox grants read/exec on.
+  await rewriteJsonFiles(
+    claudeConfigDir,
+    [join(home, ".claude"), "$HOME/.claude", "${HOME}/.claude", "~/.claude"],
+    claudeConfigDir,
+  );
 
   // Copy ~/.claude.json with credentials stripped
   const hostClaudeJson = join(home, ".claude.json");
