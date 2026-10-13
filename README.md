@@ -1,8 +1,8 @@
 # 🦌 deer / deerbox
 
-⚠️ `deer` is no longer maintained. Since `auto` mode was added, and agent-as-judge became the norm, I found there was no longer so much need for the isolation that `deerbox` provided.\
+⚠️ `deer` is no longer maintained. Since `auto` mode was added, and agent-as-judge became the norm, I found there was no longer so much need for the isolation that `deerbox` provided.
 
-Personally, I now switched to Zed and `claude` CLI natively, and don't really need bespoke tooling much anymore.
+Personally, I now switched to Zed and `claude` CLI natively, and don't really need bespoke orchestration tooling much anymore.
 
 ---
 
